@@ -12,7 +12,7 @@ import (
 // The committed sample reads: every repository pinned to a full commit,
 // every edge labelled, and every wrong one saying why.
 func TestMarkdownSampleLoads(t *testing.T) {
-	for file, want := range map[string][2]int{"markdown-sample.pxf": {10, 1}, "markdown-bareword-sample.pxf": {4, 1}} {
+	for file, want := range map[string][2]int{"markdown-sample.pxf": {58, 4}, "markdown-bareword-sample.pxf": {40, 8}} {
 		edges, wrong := checkSample(t, file)
 		if edges != want[0] || wrong != want[1] {
 			t.Errorf("%s: %d edges, %d wrong; want %d and %d", file, edges, wrong, want[0], want[1])
