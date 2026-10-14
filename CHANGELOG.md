@@ -1,10 +1,17 @@
 # Changelog
 
-Up to and including v0.12.0, entries cite issue and pull request numbers
-(#281, #206) from the tracker alidade had before it was published, which
-is not public.
+Entries up to v0.11.0 cite issue and pull request numbers (#281, #206)
+from the tracker alidade had before it was published, which is not
+public. v0.12.0 is the first public release, and its entries cite both:
+#2 and #7 are this repository's issues, every other number the earlier
+tracker's. From v0.13.0 on, every number is this repository's.
 
 ## Unreleased
+
+## v0.12.0 — 2026-10-14
+
+The first public release. alidade is MIT-licensed, builds with stock Go,
+and is developed in the open from here.
 
 - **Changed: docs link to declarations written as a call, a package
   path's end, or a command's name** (#7; ADR 001 amended). A span that
