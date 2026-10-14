@@ -35,7 +35,7 @@ jobs:
     steps:
       # The workflow's own commit, for the script: the ref is resolved
       # through GitHub, and an older tag's tree has no copy of the gate.
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       - name: Require a main commit whose CI passed
         id: gate
@@ -62,7 +62,7 @@ jobs:
 
       # The commit the gate passed, not the ref again: a tag moved after
       # the gate would otherwise build what was never checked.
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           ref: ${{ needs.gate.outputs.sha }}
           # typescript-go is a submodule the binary builds from (#215).
@@ -145,7 +145,7 @@ jobs:
       - name: Attach to the release
         # Pinned by commit, not tag: this job can write releases, and a
         # moved tag would run someone else's code with that right (#101).
-        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:
           tag_name: ${{ github.event.inputs.tag || github.ref_name }}
           files: dist/*
