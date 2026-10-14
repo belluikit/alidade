@@ -93,10 +93,15 @@ jobs:
           go build ./...
           CGO_LDFLAGS= CGO_CXXFLAGS=-nostdinc++ go build -tags v8,python ./...
 
+      # Without -race, unlike macOS: on Linux, V8 and the race runtime in
+      # one process crash about one run in a thousand while V8 starts, in
+      # V8 or in the race runtime's own state, and never without -race
+      # (0 of 48,179 runs; #1, cause open in #14). macOS still runs the
+      # whole suite with it.
       - name: test
         run: |
           go test ./...
-          CGO_LDFLAGS= CGO_CXXFLAGS=-nostdinc++ go test -race -tags v8,python ./...
+          CGO_LDFLAGS= CGO_CXXFLAGS=-nostdinc++ go test -tags v8,python ./...
 
   lint:
     name: golangci-lint

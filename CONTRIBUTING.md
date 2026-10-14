@@ -34,7 +34,7 @@ CI runs these, on macOS and Linux:
 ```
 gofmt -l ./internal ./cmd                 # prints nothing
 go vet ./... && go test ./...
-CGO_LDFLAGS= CGO_CXXFLAGS=-nostdinc++ go test -race -tags v8,python ./...
+CGO_LDFLAGS= CGO_CXXFLAGS=-nostdinc++ go test -race -tags v8,python ./...  # Linux: without -race (#1)
 golangci-lint run --build-tags v8,python  # v2.14.0
 scripts/complexity.sh                     # cyclomatic complexity per domain
 go run scripts/notices.go -check          # after a dependency changes

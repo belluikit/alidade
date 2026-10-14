@@ -29,7 +29,10 @@ layer of [ADR 007](adr/007-frontend-layer.md) are in.
 `scripts/complexity.sh`. CI runs both, with `go vet` and golangci-lint, on
 GitHub-hosted runners (`macos-26` and `ubuntu-24.04`): the whole suite on
 macOS arm64 and on Linux amd64, with and without the `v8` and `python`
-tags.
+tags. The tagged suite runs with the race detector on macOS only. On
+Linux, V8 and the race runtime in one process crash about one run in a
+thousand, and never without it
+([#1](https://github.com/trendvidia/alidade/issues/1)).
 
 Both gates fail when they measured nothing, so that silence is never read
 as a pass. The complexity gate exits 2 when a domain path is missing, a
