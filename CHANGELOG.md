@@ -8,6 +8,13 @@ tracker's. From v0.13.0 on, every number is this repository's.
 
 ## Unreleased
 
+- **Fixed: a release binary reports its release.** v0.12.0's binaries
+  call themselves `v0.0.0-20261014064831-56503fac9adf`. Stock Go stamps
+  a binary with a tag's version only when the tag is in the checkout, and
+  the release job's checkout fetches no tags. It now fetches the release
+  tag, refuses it unless it names the commit the gate passed, and fails
+  when the darwin/arm64 binary does not report it (#11).
+
 ## v0.12.0 — 2026-10-14
 
 The first public release. alidade is MIT-licensed, builds with stock Go,
