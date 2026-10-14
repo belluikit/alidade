@@ -4,9 +4,11 @@ Entries up to v0.11.0 cite issue and pull request numbers (#281, #206)
 from the tracker alidade had before it was published, which is not
 public. v0.12.0 is the first public release, and its entries cite both:
 #2 and #7 are this repository's issues, every other number the earlier
-tracker's. From v0.13.0 on, every number is this repository's.
+tracker's. From v0.12.1 on, every number is this repository's.
 
 ## Unreleased
+
+## v0.12.1 — 2026-10-14
 
 - **Fixed: a release binary reports its release.** v0.12.0's binaries
   call themselves `v0.0.0-20261014064831-56503fac9adf`. Stock Go stamps
