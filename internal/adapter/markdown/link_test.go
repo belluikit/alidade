@@ -612,3 +612,95 @@ func TestFrontendDeclarationsAnswerLast(t *testing.T) {
 		}
 	}
 }
+
+// TestLinkSpanForms: the forms the redrawn recall sample found unanswered
+// (#7) — a call or a signature, a method reached through a value or a
+// receiver, a package by the end of its import path, a command by its
+// name — and a proto message with the Go type generated from it, which
+// is one answer, the message. Each guard is pinned too: a call form is
+// read only when the span answers nothing whole, a one-segment path is
+// no package ending, a single word is no command, and a Go type with no
+// generates edge from the message is still a second answer.
+func TestLinkSpanForms(t *testing.T) {
+	b := graph.NewBuilder("")
+	m := b.Minter()
+	goNode := func(pkg, decl string, kind graph.Kind, name string) graph.ID {
+		t.Helper()
+		id, err := m.GoID(pkg, decl)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := b.AddNode(graph.Node{ID: id, Kind: kind, Name: name}); err != nil {
+			t.Fatal(err)
+		}
+		return id
+	}
+	failed := goNode("example.com/m/analysis", "Engine.Failed", graph.KindMethod, "Failed")
+	goNode("example.com/m/analysis", "Engine", graph.KindType, "Engine")
+	validate := goNode("example.com/m/validate", "Validate", graph.KindFunc, "Validate")
+	unmarshal := goNode("example.com/m/pxf", "UnmarshalOptions.Unmarshal", graph.KindMethod, "Unmarshal")
+	resolve := goNode("example.com/m/resolver", "Resolver.Resolve", graph.KindMethod, "Resolve")
+	sops := goNode("example.com/m/sops", "", graph.KindPackage, "sops")
+	plugin := goNode("example.com/m/cmd/protoc-gen-thing-go", "", graph.KindPackage, "main")
+	goNode("example.com/m/cmd/thing", "", graph.KindPackage, "main")
+	goNode("example.com/m/run", "Start", graph.KindFunc, "Start")
+	// Started answers whole; its call form must not be read.
+	goNode("example.com/m/run", "Started", graph.KindFunc, "Started")
+	msg := graph.ID("proto://m.v1.Manifest")
+	if err := b.AddNode(graph.Node{ID: msg, Kind: graph.KindMessage, Name: "Manifest"}); err != nil {
+		t.Fatal(err)
+	}
+	gen := goNode("example.com/m/gen/v1", "Manifest", graph.KindType, "Manifest")
+	if err := b.AddEdge(graph.Edge{From: msg, To: gen, Kind: graph.KindGenerates, Derivation: graph.Declared}); err != nil {
+		t.Fatal(err)
+	}
+	// Report is a Go type and a message with no generates edge between them.
+	goNode("example.com/m/report", "Report", graph.KindType, "Report")
+	if err := b.AddNode(graph.Node{ID: "proto://m.v1.Report", Kind: graph.KindMessage, Name: "Report"}); err != nil {
+		t.Fatal(err)
+	}
+	sec, _ := m.MarkdownID("docs/a.md", "Uses")
+	if err := b.AddNode(graph.Node{ID: sec, Kind: graph.KindSection, Name: "Uses"}); err != nil {
+		t.Fatal(err)
+	}
+	rep := &Report{Words: map[graph.ID]map[string]bool{}}
+	for _, text := range []string{
+		"Engine.Failed()", "Validate(msg, present) error", "UnmarshalOptions{SkipValidate: true}.Unmarshal",
+		"(*Resolver[T]).Resolve(ctx, req)", "m/sops", "protoc-gen-thing-go", "Manifest",
+		"sops/", "thing", "Report", "Started()",
+	} {
+		rep.Mentions = append(rep.Mentions, Mention{Section: sec, Text: text})
+	}
+	Link(b, b.Build(), rep)
+	got := map[graph.ID]string{}
+	for _, e := range b.Build().Out(sec) {
+		got[e.To] = e.Attrs["mention"]
+	}
+	want := map[graph.ID]string{
+		failed: "Engine.Failed()", validate: "Validate(msg, present) error",
+		unmarshal: "UnmarshalOptions{SkipValidate: true}.Unmarshal", resolve: "(*Resolver[T]).Resolve(ctx, req)",
+		sops: "m/sops", plugin: "protoc-gen-thing-go", msg: "Manifest",
+		"go://example.com/m/run#Started": "Started()",
+	}
+	if !maps.Equal(got, want) {
+		t.Errorf("linked %v\nwant %v", got, want)
+	}
+}
+
+func TestCalleeOf(t *testing.T) {
+	for text, want := range map[string]string{
+		"Engine.Failed()":                  "Engine.Failed",
+		"Validate(msg, present) error":     "Validate",
+		"New[T proto.Message](sample T)":   "New",
+		"UnmarshalOptions{A: 1}.Unmarshal": "UnmarshalOptions.Unmarshal",
+		"(*Resolver[T]).Resolve(ctx)":      "Resolver.Resolve",
+		"(Options).Expand(spec)":           "Options.Expand",
+		"Engine.Failed":                    "",
+		"go test ./...":                    "",
+		"if err != nil { return err }":     "",
+	} {
+		if got := calleeOf(text); got != want {
+			t.Errorf("calleeOf(%q) = %q, want %q", text, got, want)
+		}
+	}
+}

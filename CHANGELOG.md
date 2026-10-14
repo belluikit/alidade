@@ -6,6 +6,21 @@ is not public.
 
 ## Unreleased
 
+- **Changed: docs link to declarations written as a call, a package
+  path's end, or a command's name** (#7; ADR 001 amended). A span that
+  answers nothing whole is read as the name it calls: `Engine.Failed()`,
+  `Validate(msg, present) error`, `Options{...}.Apply`, `(*T).M(x)`. A Go
+  package answers the end of its import path (`chameleon/sops`), and a
+  main package the name of its command when the name has a hyphen
+  (`protoc-gen-chameleon-go`). A proto message and the Go type generated
+  from it are one answer, the message. On nine public repositories this
+  adds 243 links and loses none; 71 of 72 sampled were right. The recall
+  sample's linked declarations go from 12 of 24 to 18; the precision
+  samples do not change. Left unlinked on purpose: a name several
+  declarations share that only the prose can settle (`Outside`, `Chain`,
+  `source`), and a function against methods of its name, where
+  preferring the function made 36 links of which 5 were wrong.
+
 - **Changed: the Markdown layer's hand-labelled samples are drawn from
   public repositories** (#2). The samples that measured `documents` edges
   came mostly from private repositories and could not be published. They

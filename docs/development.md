@@ -101,7 +101,7 @@ and pinned to their commits:
 |---|---|---|
 | `markdown-sample.pxf` | the `documents` edges | 54 of 58 right (0.931) |
 | `markdown-bareword-sample.pxf` | the edges whose mention is a bare lowercase word naming a nested declaration | 32 of 40 right (0.80) |
-| `markdown-recall-sample.pxf` | the code spans of the docs | 12 of the 24 spans that name a declaration are linked (0.50) |
+| `markdown-recall-sample.pxf` | the code spans of the docs | 18 of the 24 spans that name a declaration are linked (0.75) |
 
 `TestDrawSamples` (`internal/oracle`) draws the items by rule, in order of
 a SHA-256, so nobody picks them. A reader then labels each one.
