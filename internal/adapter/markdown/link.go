@@ -64,7 +64,16 @@ func Link(b *graph.Builder, g *graph.Graph, rep *Report) {
 				ids = idx.sqlExpression(m.Text)
 			}
 		}
-		if len(ids) == 1 && !parentNamed(g, m.Text, ids[0], rep.Words[m.Section]) {
+		name := m.Text
+		if len(ids) == 0 && !m.Fence {
+			// A span written as a call or a signature, only when nothing
+			// answers it whole (#7): the name it calls answers it.
+			if callee := calleeOf(m.Text); callee != "" {
+				name = callee
+				ids = schemaOf(g, production(g, idx.lookup(callee)))
+			}
+		}
+		if len(ids) == 1 && !parentNamed(g, name, ids[0], rep.Words[m.Section]) {
 			rep.Unparented++
 			continue
 		}
@@ -123,13 +132,18 @@ type index struct {
 	// that resolved before ambiguous (steward's `behavioral`, the proto
 	// field, met a TypeScript interface's), so they answer last.
 	byFrontend map[string][]graph.ID
+	// byPathSuffix holds Go packages by every ending of their import path
+	// of two segments or more, each with a leading "/"; byCommand holds a
+	// main package by its directory's name, as its command is called
+	// (#7). Both answer only when nothing else does.
+	byPathSuffix, byCommand map[string][]graph.ID
 }
 
 func newIndex() *index {
 	return &index{byName: map[string][]graph.ID{}, byDotted: map[string][]graph.ID{}, byPath: map[string][]graph.ID{},
 		byBase: map[string][]graph.ID{}, byProcedure: map[string][]graph.ID{},
 		byPkgMethod: map[string][]graph.ID{}, byPackagePath: map[string][]graph.ID{}, byField: map[string][]graph.ID{},
-		byFrontend: map[string][]graph.ID{}}
+		byFrontend: map[string][]graph.ID{}, byPathSuffix: map[string][]graph.ID{}, byCommand: map[string][]graph.ID{}}
 }
 
 func (ix *index) put(m map[string][]graph.ID, key string, id graph.ID) {
@@ -186,6 +200,7 @@ func (ix *index) addGo(n graph.Node, body string) {
 	if !hasDecl {
 		if n.Kind == graph.KindPackage {
 			ix.put(ix.byPackagePath, pkg, n.ID)
+			ix.addPackageForms(n, pkg)
 		}
 		return
 	}
@@ -198,6 +213,18 @@ func (ix *index) addGo(n graph.Node, body string) {
 	}
 	if n.Pos.File != "" {
 		ix.putOnce(ix.byPackagePath, path.Dir(n.Pos.File), graph.ID("go://"+pkg))
+	}
+}
+
+// addPackageForms records a package under the endings of its import path
+// and, for a main package, the name of its command (#7).
+func (ix *index) addPackageForms(n graph.Node, pkg string) {
+	segs := strings.Split(pkg, "/")
+	for i := 1; i < len(segs)-1; i++ {
+		ix.put(ix.byPathSuffix, "/"+strings.Join(segs[i:], "/"), n.ID)
+	}
+	if n.Name == "main" && len(segs) > 1 {
+		ix.put(ix.byCommand, segs[len(segs)-1], n.ID)
 	}
 }
 
@@ -330,8 +357,19 @@ func (ix *index) dotted(text string) []graph.ID {
 // one lowercase word (timeout, main) is the word the docs use for a
 // value, not the declaration (#193).
 func (ix *index) bare(text string) []graph.ID {
-	if ids := ix.byName[text]; len(ids) > 0 || lowerWordRE.MatchString(text) {
+	if ids := ix.byName[text]; len(ids) > 0 {
 		return ids
+	}
+	if strings.Contains(text, "-") {
+		// A command's name, protoc-gen-chameleon-go (#7): only one joined
+		// by hyphens, since a single word is as often the project's or
+		// the tool's own name as its main package.
+		if ids := ix.byCommand[text]; len(ids) > 0 {
+			return ids
+		}
+	}
+	if lowerWordRE.MatchString(text) {
+		return nil
 	}
 	if ids := ix.byField[text]; len(ids) > 0 {
 		return ids
@@ -356,7 +394,46 @@ func (ix *index) pathLookup(text string) []graph.ID {
 	if ids := ix.byBase[text]; len(ids) > 0 {
 		return ids
 	}
-	return ix.byPackagePath[strings.TrimSuffix(rel, "/")]
+	rel = strings.TrimSuffix(rel, "/")
+	if ids := ix.byPackagePath[rel]; len(ids) > 0 {
+		return ids
+	}
+	return ix.packageSuffix(rel)
+}
+
+// packageSuffix answers a Go package written as the end of its import
+// path, two segments or more — chameleon/sops for
+// github.com/trendvidia/chameleon/sops (#7) — when no file, directory or
+// whole import path does.
+func (ix *index) packageSuffix(rel string) []graph.ID {
+	if !strings.Contains(rel, "/") || strings.ContainsAny(rel, " .") {
+		return nil
+	}
+	return ix.byPathSuffix["/"+rel]
+}
+
+// callRE is a span written as a call or a signature: a name, perhaps
+// dotted, perhaps with type arguments, then "(" — Engine.Failed(),
+// Validate(msg, present) error. methodValueRE is a method reached through
+// a value or a receiver: UnmarshalOptions{SkipValidate: true}.Unmarshal,
+// (*Resolver[T]).Resolve(ctx, req).
+var (
+	callRE        = regexp.MustCompile(`^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)(?:\[[^\]]*\])?\(`)
+	methodValueRE = regexp.MustCompile(`^(?:\(\*?([A-Za-z_][A-Za-z0-9_.]*)(?:\[[^\]]*\])?\)|([A-Za-z_][A-Za-z0-9_.]*)\{[^{}]*\})\.([A-Za-z_][A-Za-z0-9_]*)(?:$|\()`)
+)
+
+// calleeOf is the name a span written as a call, a signature or a method
+// value names (#7), or "": Engine.Failed for Engine.Failed(),
+// UnmarshalOptions.Unmarshal for UnmarshalOptions{SkipValidate: true}.Unmarshal.
+func calleeOf(text string) string {
+	text = strings.TrimSpace(text)
+	if m := methodValueRE.FindStringSubmatch(text); m != nil {
+		return m[1] + m[2] + "." + m[3]
+	}
+	if m := callRE.FindStringSubmatch(text); m != nil {
+		return m[1]
+	}
+	return ""
 }
 
 // qualifiedRE is a dotted name inside a longer span.
@@ -500,8 +577,9 @@ func parentName(n graph.Node) string {
 	return ""
 }
 
-// schemaOf drops, from several candidates, the .pxf entries that set one
-// of the others — a field of a document set against a proto field that
+// schemaOf drops, from several candidates, the generated nodes generated
+// from one of the others (#7), and the .pxf entries that set one of the
+// others — a field of a document set against a proto field that
 // the mention also names (#190, the owner's decision): such a mention
 // names the schema, and its instances answer the same name only because
 // they set it. blocked_module_globs is the proto field, not the six
@@ -516,11 +594,24 @@ func schemaOf(g *graph.Graph, ids []graph.ID) []graph.ID {
 	}
 	var out []graph.ID
 	for _, id := range ids {
-		if !setsOneOf(g, id, in) {
+		if !setsOneOf(g, id, in) && !generatedFromOneOf(g, id, in) {
 			out = append(out, id)
 		}
 	}
 	return out
+}
+
+// generatedFromOneOf reports whether a generated node is generated from
+// another candidate: a proto message and the Go type protoc-gen-go made
+// from it are one answer, the schema (#7), as a proto field and the .pxf
+// entries that set it are (#190).
+func generatedFromOneOf(g *graph.Graph, id graph.ID, ids map[graph.ID]bool) bool {
+	for _, e := range g.In(id) {
+		if e.Kind == graph.KindGenerates && ids[e.From] && e.From != id {
+			return true
+		}
+	}
+	return false
 }
 
 // setsOneOf reports whether a .pxf entry has a references edge to a

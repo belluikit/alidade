@@ -84,6 +84,15 @@ another, are still two answers and no edge. Measured: on the corpus, 1,434
 entries linked; protowire-go's decoder, against protoc's descriptors,
 confirms 826 of 826 distinct fields across 23 documents and none extra.
 
+*Amended 2026-10-14 (#7, the owner's decision):* generated code is one
+answer with its schema too. A proto message and the Go type protoc-gen-go
+made from it, joined by a `generates` edge, answer a mention as the
+message, as a field and the entries that set it answer as the field. The
+rule reads only the declared edge: a Go type and a message that share a
+name with no `generates` edge between them are still two answers.
+Measured on nine public repositories, it adds 59 links, and 14 of 14
+sampled were right.
+
 ### The MCP surface is a consumer, not a component
 
 The traversal tools sit outside the core and depend on it, not the reverse. A
