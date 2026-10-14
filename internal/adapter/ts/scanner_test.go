@@ -8,7 +8,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/trendvidia/alidade/internal/graph"
+	"github.com/belluikit/alidade/internal/graph"
 )
 
 func specs(cs []importClause) []string {

@@ -6,7 +6,7 @@ package golang
 import (
 	"testing"
 
-	"github.com/trendvidia/alidade/internal/graph"
+	"github.com/belluikit/alidade/internal/graph"
 )
 
 // TestFunctionValueCallsAreTheValuesThatReachThem pins #94 (the owner's

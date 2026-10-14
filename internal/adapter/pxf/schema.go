@@ -6,7 +6,7 @@ package pxf
 import (
 	"strings"
 
-	"github.com/trendvidia/alidade/internal/graph"
+	"github.com/belluikit/alidade/internal/graph"
 )
 
 // LinkSchema joins each .pxf field and block to the .proto field it sets

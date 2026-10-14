@@ -7,7 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/trendvidia/alidade/internal/scope"
+	"github.com/belluikit/alidade/internal/scope"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -19,7 +19,7 @@ import (
 	"github.com/trendvidia/protocompile/reporter"
 	"google.golang.org/protobuf/reflect/protoreflect"
 
-	"github.com/trendvidia/alidade/internal/graph"
+	"github.com/belluikit/alidade/internal/graph"
 )
 
 // Options controls the .proto layer.

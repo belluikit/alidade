@@ -3,7 +3,7 @@
 ## Reporting a vulnerability
 
 Report it privately through GitHub: **Security → Report a vulnerability**
-on this repository, or <https://github.com/trendvidia/alidade/security/advisories/new>.
+on this repository, or <https://github.com/belluikit/alidade/security/advisories/new>.
 Please don't open a public issue for it. Include what you observed, how to
 reproduce it, and the release (`alidade version` prints it) or commit.
 

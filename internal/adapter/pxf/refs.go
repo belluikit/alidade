@@ -9,7 +9,7 @@ import (
 
 	"github.com/trendvidia/protowire-go/encoding/pxf"
 
-	"github.com/trendvidia/alidade/internal/graph"
+	"github.com/belluikit/alidade/internal/graph"
 )
 
 // refRE matches a "${path}" interpolation in a string value.

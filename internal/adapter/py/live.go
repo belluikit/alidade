@@ -18,8 +18,8 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/trendvidia/alidade/internal/graph"
-	"github.com/trendvidia/alidade/internal/python"
+	"github.com/belluikit/alidade/internal/graph"
+	"github.com/belluikit/alidade/internal/python"
 )
 
 // A Live is jedi reading a tree in the background while the layer answers

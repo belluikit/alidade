@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/trendvidia/alidade/internal/adapter/ts/svelte"
-	"github.com/trendvidia/alidade/internal/python"
+	"github.com/belluikit/alidade/internal/adapter/ts/svelte"
+	"github.com/belluikit/alidade/internal/python"
 )
 
 // TestEmbeddedRuntimes runs each runtime the build links, in one process:

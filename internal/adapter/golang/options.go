@@ -3,7 +3,7 @@
 
 package golang
 
-import "github.com/trendvidia/alidade/internal/scope"
+import "github.com/belluikit/alidade/internal/scope"
 
 // Options controls what the Go adapter loads and emits. Both inclusion
 // flags are explicit here because caliper's own defaults would decide them

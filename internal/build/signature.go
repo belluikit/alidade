@@ -6,7 +6,7 @@ package build
 import (
 	"crypto/sha256"
 	"encoding/hex"
-	"github.com/trendvidia/alidade/internal/scope"
+	"github.com/belluikit/alidade/internal/scope"
 	"io"
 	"io/fs"
 	"os"
@@ -14,13 +14,13 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/trendvidia/alidade/internal/adapter/goasm"
-	"github.com/trendvidia/alidade/internal/adapter/markdown"
-	"github.com/trendvidia/alidade/internal/adapter/proto"
-	"github.com/trendvidia/alidade/internal/adapter/pxf"
-	"github.com/trendvidia/alidade/internal/adapter/py"
-	"github.com/trendvidia/alidade/internal/adapter/sql"
-	"github.com/trendvidia/alidade/internal/adapter/ts"
+	"github.com/belluikit/alidade/internal/adapter/goasm"
+	"github.com/belluikit/alidade/internal/adapter/markdown"
+	"github.com/belluikit/alidade/internal/adapter/proto"
+	"github.com/belluikit/alidade/internal/adapter/pxf"
+	"github.com/belluikit/alidade/internal/adapter/py"
+	"github.com/belluikit/alidade/internal/adapter/sql"
+	"github.com/belluikit/alidade/internal/adapter/ts"
 )
 
 // A layer's signature is a hash over the sorted paths and contents of

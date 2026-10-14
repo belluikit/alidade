@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/trendvidia/alidade/internal/graph"
+	"github.com/belluikit/alidade/internal/graph"
 )
 
 // linked builds a graph of every layer's node shapes, feeds it the given

@@ -9,7 +9,7 @@ CPython.
 You need Go 1.27.2 or newer and git.
 
 ```
-git clone --recurse-submodules https://github.com/trendvidia/alidade
+git clone --recurse-submodules https://github.com/belluikit/alidade
 cd alidade
 CGO_LDFLAGS= CGO_CXXFLAGS=-nostdinc++ go build -tags v8,python -o alidade ./cmd/alidade
 ```

@@ -7,7 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/trendvidia/alidade/internal/adapter/ts/svelte"
+	"github.com/belluikit/alidade/internal/adapter/ts/svelte"
 	"os"
 	"strings"
 	"sync"
@@ -16,9 +16,9 @@ import (
 	mcpsdk "github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 
-	"github.com/trendvidia/alidade/internal/graph"
-	"github.com/trendvidia/alidade/internal/python"
-	"github.com/trendvidia/alidade/internal/version"
+	"github.com/belluikit/alidade/internal/graph"
+	"github.com/belluikit/alidade/internal/python"
+	"github.com/belluikit/alidade/internal/version"
 )
 
 // Version is reported to MCP clients at initialization: the binary's

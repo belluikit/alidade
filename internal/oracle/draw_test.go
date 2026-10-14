@@ -15,8 +15,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/trendvidia/alidade/internal/build"
-	"github.com/trendvidia/alidade/internal/graph"
+	"github.com/belluikit/alidade/internal/build"
+	"github.com/belluikit/alidade/internal/graph"
 )
 
 // A candidate is one item a sample can draw: a documents edge, or a code

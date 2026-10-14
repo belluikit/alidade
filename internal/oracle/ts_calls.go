@@ -7,14 +7,14 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
-	"github.com/trendvidia/alidade/internal/adapter/ts/svelte"
+	"github.com/belluikit/alidade/internal/adapter/ts/svelte"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
 
-	"github.com/trendvidia/alidade/internal/graph"
+	"github.com/belluikit/alidade/internal/graph"
 )
 
 // The frontend calls oracle (#215): the repository's own typescript

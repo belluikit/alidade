@@ -10,7 +10,7 @@ import (
 
 	"github.com/trendvidia/protowire-go/encoding/pxf"
 
-	"github.com/trendvidia/alidade/internal/graph"
+	"github.com/belluikit/alidade/internal/graph"
 )
 
 // The Markdown oracle is a hand-labelled sample (testdata/markdown-sample.pxf):

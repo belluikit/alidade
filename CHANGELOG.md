@@ -8,6 +8,14 @@ tracker's. From v0.12.1 on, every number is this repository's.
 
 ## Unreleased
 
+- **Changed: alidade lives at `github.com/belluikit/alidade`.** The
+  repository moved from `trendvidia`, and the module path moved with it,
+  so `go install` and imports use the new path. Issue and pull request
+  numbers are unchanged. The old URL redirects to the new one for the
+  repository, git, release downloads and pull requests, but not for links
+  to single issues. The modules alidade builds on (caliper, chameleon,
+  goasm, protocompile, protowire-go, pylib) stay in `trendvidia` (#16).
+
 ## v0.12.1 — 2026-10-14
 
 - **Fixed: a release binary reports its release.** v0.12.0's binaries

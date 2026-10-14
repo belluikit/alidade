@@ -5,7 +5,7 @@ package pxf
 
 import (
 	"fmt"
-	"github.com/trendvidia/alidade/internal/scope"
+	"github.com/belluikit/alidade/internal/scope"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -16,7 +16,7 @@ import (
 
 	"github.com/trendvidia/protowire-go/encoding/pxf"
 
-	"github.com/trendvidia/alidade/internal/graph"
+	"github.com/belluikit/alidade/internal/graph"
 )
 
 // Options controls the .pxf layer.

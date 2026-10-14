@@ -6,7 +6,7 @@ package mcp
 import (
 	"slices"
 
-	"github.com/trendvidia/alidade/internal/graph"
+	"github.com/belluikit/alidade/internal/graph"
 )
 
 // A step is one edge a traversal followed and the node at its far end.

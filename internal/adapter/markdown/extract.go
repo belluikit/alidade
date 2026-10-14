@@ -6,7 +6,7 @@ package markdown
 import (
 	"bytes"
 	"fmt"
-	"github.com/trendvidia/alidade/internal/scope"
+	"github.com/belluikit/alidade/internal/scope"
 	"io/fs"
 	"net/url"
 	"os"
@@ -25,8 +25,8 @@ import (
 	"golang.org/x/mod/modfile"
 	"gopkg.in/yaml.v3"
 
-	"github.com/trendvidia/alidade/internal/adapter/ts"
-	"github.com/trendvidia/alidade/internal/graph"
+	"github.com/belluikit/alidade/internal/adapter/ts"
+	"github.com/belluikit/alidade/internal/graph"
 )
 
 // Options controls the Markdown layer.

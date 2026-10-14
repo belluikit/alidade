@@ -5,7 +5,7 @@ package ts
 
 import (
 	"fmt"
-	"github.com/trendvidia/alidade/internal/scope"
+	"github.com/belluikit/alidade/internal/scope"
 	"os"
 	"path/filepath"
 	"strings"
@@ -13,7 +13,7 @@ import (
 
 	"github.com/evanw/esbuild/pkg/api"
 
-	"github.com/trendvidia/alidade/internal/graph"
+	"github.com/belluikit/alidade/internal/graph"
 )
 
 // Options controls the frontend layer.

@@ -116,7 +116,7 @@ brew install trendvidia/tap/alidade
 ```
 
 Or download a binary for macOS or Linux, arm64 or amd64, from the
-[releases](https://github.com/trendvidia/alidade/releases).
+[releases](https://github.com/belluikit/alidade/releases).
 
 To build from source, see [Building alidade](docs/building.md).
 
@@ -166,7 +166,7 @@ the edges mean.
 asked three times of the same model. Nobody picked the questions: a rule
 draws them from the Go type checker's calls, and from the calls recorded
 while a Python test suite ran
-([#3](https://github.com/trendvidia/alidade/issues/3)).
+([#3](https://github.com/belluikit/alidade/issues/3)).
 
 | an agent with | correct | cost per correct answer | median time |
 |---|---|---|---|
@@ -213,7 +213,7 @@ The question sets are in `internal/bench/testdata/gen-*.pxf`, and
 
 Early. The architecture is settled and recorded in the decisions below, and
 every layer in the table above is in. Open work is in the
-[issues](https://github.com/trendvidia/alidade/issues).
+[issues](https://github.com/belluikit/alidade/issues).
 
 A number such as #206 in the code, the ADRs or the changelog, written
 before v0.12.0, refers to the tracker alidade had before it was published.

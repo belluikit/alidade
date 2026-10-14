@@ -7,7 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
-	"github.com/trendvidia/alidade/internal/scope"
+	"github.com/belluikit/alidade/internal/scope"
 	"io/fs"
 	"path/filepath"
 	"sort"

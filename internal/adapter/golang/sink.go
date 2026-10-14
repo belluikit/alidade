@@ -3,7 +3,7 @@
 
 package golang
 
-import "github.com/trendvidia/alidade/internal/graph"
+import "github.com/belluikit/alidade/internal/graph"
 
 // A sink is where an extractor's nodes and edges go. The host
 // configuration's pass writes to the builder and records what it wrote;

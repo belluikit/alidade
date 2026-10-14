@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/trendvidia/alidade/internal/python"
+	"github.com/belluikit/alidade/internal/python"
 )
 
 // TestSessionBackground is #269: with the Python layer in the

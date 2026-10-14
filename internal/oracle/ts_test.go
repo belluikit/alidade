@@ -13,8 +13,8 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/descriptorpb"
 
-	"github.com/trendvidia/alidade/internal/build"
-	"github.com/trendvidia/alidade/internal/graph"
+	"github.com/belluikit/alidade/internal/build"
+	"github.com/belluikit/alidade/internal/graph"
 )
 
 // A _pb.ts's exports map to the declarations its embedded descriptor

@@ -11,8 +11,8 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/trendvidia/alidade/internal/graph"
-	"github.com/trendvidia/alidade/internal/python"
+	"github.com/belluikit/alidade/internal/graph"
+	"github.com/belluikit/alidade/internal/python"
 )
 
 // all lists a graph's nodes and edges, derivation included, to compare two

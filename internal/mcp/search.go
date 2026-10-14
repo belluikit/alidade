@@ -8,7 +8,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/trendvidia/alidade/internal/graph"
+	"github.com/belluikit/alidade/internal/graph"
 )
 
 // A match is a node with how well it answered a query.

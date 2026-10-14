@@ -17,7 +17,7 @@ package oracle
 
 import (
 	"fmt"
-	"github.com/trendvidia/alidade/internal/scope"
+	"github.com/belluikit/alidade/internal/scope"
 	"go/ast"
 	"go/token"
 	"go/types"
@@ -27,8 +27,8 @@ import (
 
 	"golang.org/x/tools/go/packages"
 
-	"github.com/trendvidia/alidade/internal/adapter/golang"
-	"github.com/trendvidia/alidade/internal/graph"
+	"github.com/belluikit/alidade/internal/adapter/golang"
+	"github.com/belluikit/alidade/internal/graph"
 )
 
 // A CallKind is how the type checker resolves a call expression.

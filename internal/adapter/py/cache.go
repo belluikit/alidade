@@ -18,7 +18,7 @@ import (
 
 	"github.com/trendvidia/protowire-go/encoding/pxf"
 
-	"github.com/trendvidia/alidade/internal/python"
+	"github.com/belluikit/alidade/internal/python"
 )
 
 // The cache keeps jedi's answers for a tree between sessions (#279): what

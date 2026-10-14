@@ -5,7 +5,7 @@ package ts
 
 import (
 	"bufio"
-	"github.com/trendvidia/alidade/internal/scope"
+	"github.com/belluikit/alidade/internal/scope"
 	"io/fs"
 	"os"
 	"path/filepath"

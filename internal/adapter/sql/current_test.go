@@ -6,7 +6,7 @@ package sql
 import (
 	"testing"
 
-	"github.com/trendvidia/alidade/internal/graph"
+	"github.com/belluikit/alidade/internal/graph"
 )
 
 // TestRenamedColumnHasItsCurrentName pins #119 on a case found in-house: a

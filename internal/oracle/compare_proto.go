@@ -8,7 +8,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/trendvidia/alidade/internal/graph"
+	"github.com/belluikit/alidade/internal/graph"
 )
 
 // ProtoResult compares the graph's proto layer with protoc and the

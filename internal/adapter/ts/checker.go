@@ -12,7 +12,7 @@ import (
 
 	tsgo "github.com/microsoft/typescript-go/shim"
 
-	"github.com/trendvidia/alidade/internal/graph"
+	"github.com/belluikit/alidade/internal/graph"
 )
 
 // The type-checked half of the layer (#215, ADR 007 amended): TypeScript

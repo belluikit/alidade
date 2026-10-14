@@ -24,7 +24,7 @@ import (
 	"golang.org/x/tools/go/packages"
 	"golang.org/x/tools/go/ssa"
 
-	"github.com/trendvidia/alidade/internal/graph"
+	"github.com/belluikit/alidade/internal/graph"
 )
 
 // A Report says what Extract found, for the caller's accounting. Counts

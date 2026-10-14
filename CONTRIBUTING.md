@@ -13,7 +13,7 @@ You need Go 1.27.2 or newer (stock Go, from go.dev), git with the
 submodule, and for the full build a C++ toolchain:
 
 ```
-git clone --recurse-submodules https://github.com/trendvidia/alidade
+git clone --recurse-submodules https://github.com/belluikit/alidade
 cd alidade
 go build ./...                                                    # no cgo
 CGO_LDFLAGS= CGO_CXXFLAGS=-nostdinc++ go build -tags v8,python ./...
@@ -62,7 +62,7 @@ be one from go.dev (Homebrew's leaves the file out).
 
 ## Reporting
 
-Bugs and ideas go to [issues](https://github.com/trendvidia/alidade/issues).
+Bugs and ideas go to [issues](https://github.com/belluikit/alidade/issues).
 
 Comments, ADRs and changelog entries written before v0.12.0 cite issues by
 number (#206). Those numbers refer to the tracker alidade had before it was

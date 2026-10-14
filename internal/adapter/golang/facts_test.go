@@ -14,7 +14,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/trendvidia/alidade/internal/graph"
+	"github.com/belluikit/alidade/internal/graph"
 )
 
 // module writes a module of the given files under a temporary root and

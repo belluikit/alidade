@@ -8,8 +8,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/trendvidia/alidade/internal/build"
-	"github.com/trendvidia/alidade/internal/graph"
+	"github.com/belluikit/alidade/internal/build"
+	"github.com/belluikit/alidade/internal/graph"
 )
 
 // sqlFixture is a sqlc configuration with two migrations, the second

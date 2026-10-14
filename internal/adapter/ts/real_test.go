@@ -7,7 +7,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/trendvidia/alidade/internal/graph"
+	"github.com/belluikit/alidade/internal/graph"
 )
 
 // TestRealRepository runs the layer alone over the repository ALIDADE_REPO

@@ -11,7 +11,7 @@ import (
 
 	"golang.org/x/tools/go/packages"
 
-	"github.com/trendvidia/alidade/internal/graph"
+	"github.com/belluikit/alidade/internal/graph"
 )
 
 // The uses oracle (#180): the type checker's Uses of every identifier in a

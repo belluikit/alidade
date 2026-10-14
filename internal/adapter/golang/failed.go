@@ -16,7 +16,7 @@ import (
 	"github.com/trendvidia/caliper/pkg/analysis"
 	"golang.org/x/tools/go/packages"
 
-	"github.com/trendvidia/alidade/internal/graph"
+	"github.com/belluikit/alidade/internal/graph"
 )
 
 // failedPackages emits the packages of the module the load dropped for

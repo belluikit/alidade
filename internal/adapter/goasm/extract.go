@@ -6,7 +6,7 @@ package goasm
 import (
 	"bufio"
 	"fmt"
-	"github.com/trendvidia/alidade/internal/scope"
+	"github.com/belluikit/alidade/internal/scope"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -19,7 +19,7 @@ import (
 	"github.com/trendvidia/goasm/gen"
 	"github.com/trendvidia/goasm/template"
 
-	"github.com/trendvidia/alidade/internal/graph"
+	"github.com/belluikit/alidade/internal/graph"
 )
 
 // Options controls the goasm layer.

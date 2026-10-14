@@ -4,7 +4,7 @@
 package sql
 
 import (
-	dirs "github.com/trendvidia/alidade/internal/scope"
+	dirs "github.com/belluikit/alidade/internal/scope"
 	"io/fs"
 	"os"
 	"path/filepath"

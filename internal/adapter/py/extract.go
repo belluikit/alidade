@@ -20,9 +20,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/trendvidia/alidade/internal/graph"
-	"github.com/trendvidia/alidade/internal/python"
-	"github.com/trendvidia/alidade/internal/scope"
+	"github.com/belluikit/alidade/internal/graph"
+	"github.com/belluikit/alidade/internal/python"
+	"github.com/belluikit/alidade/internal/scope"
 )
 
 // Options controls the Python layer.

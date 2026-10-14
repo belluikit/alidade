@@ -18,7 +18,7 @@ import (
 	"google.golang.org/protobuf/types/descriptorpb"
 	"gopkg.in/yaml.v3"
 
-	"github.com/trendvidia/alidade/internal/graph"
+	"github.com/belluikit/alidade/internal/graph"
 )
 
 // The proto oracle is protoc, Google's C++ compiler, which shares no code

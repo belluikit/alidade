@@ -8,7 +8,7 @@ import (
 	"path"
 	"strings"
 
-	"github.com/trendvidia/alidade/internal/graph"
+	"github.com/belluikit/alidade/internal/graph"
 )
 
 // TSResult compares the frontend layer with TypeScript's resolution and

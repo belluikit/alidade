@@ -13,7 +13,7 @@ import (
 	"github.com/trendvidia/chameleon/chain"
 	chameleonv1 "github.com/trendvidia/chameleon/proto/chameleon/v1"
 
-	"github.com/trendvidia/alidade/internal/graph"
+	"github.com/belluikit/alidade/internal/graph"
 )
 
 // chainType is the @type of a chameleon chain specification.

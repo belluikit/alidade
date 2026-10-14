@@ -9,7 +9,7 @@ import (
 
 	"google.golang.org/protobuf/reflect/protoreflect"
 
-	"github.com/trendvidia/alidade/internal/graph"
+	"github.com/belluikit/alidade/internal/graph"
 )
 
 // A walker emits the declarations of one compiled file.

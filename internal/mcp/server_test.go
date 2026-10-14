@@ -17,7 +17,7 @@ import (
 	"github.com/mark3labs/mcp-go/client"
 	mcpsdk "github.com/mark3labs/mcp-go/mcp"
 
-	"github.com/trendvidia/alidade/internal/graph"
+	"github.com/belluikit/alidade/internal/graph"
 )
 
 // fixture is a hand-built graph spanning three layers, joined the way the

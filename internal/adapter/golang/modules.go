@@ -6,7 +6,7 @@ package golang
 import (
 	"errors"
 	"fmt"
-	"github.com/trendvidia/alidade/internal/scope"
+	"github.com/belluikit/alidade/internal/scope"
 	"io/fs"
 	"os"
 	"path"
@@ -18,7 +18,7 @@ import (
 
 	"golang.org/x/mod/modfile"
 
-	"github.com/trendvidia/alidade/internal/graph"
+	"github.com/belluikit/alidade/internal/graph"
 )
 
 // A Module is one go.mod under a root: the directory it sits in, absolute,

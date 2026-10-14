@@ -18,13 +18,13 @@ import (
 
 	"github.com/trendvidia/protowire-go/encoding/pxf"
 
-	"github.com/trendvidia/alidade/internal/adapter/golang"
-	"github.com/trendvidia/alidade/internal/adapter/ts/svelte"
-	"github.com/trendvidia/alidade/internal/build"
-	"github.com/trendvidia/alidade/internal/graph"
-	"github.com/trendvidia/alidade/internal/mcp"
-	"github.com/trendvidia/alidade/internal/python"
-	"github.com/trendvidia/alidade/internal/version"
+	"github.com/belluikit/alidade/internal/adapter/golang"
+	"github.com/belluikit/alidade/internal/adapter/ts/svelte"
+	"github.com/belluikit/alidade/internal/build"
+	"github.com/belluikit/alidade/internal/graph"
+	"github.com/belluikit/alidade/internal/mcp"
+	"github.com/belluikit/alidade/internal/python"
+	"github.com/belluikit/alidade/internal/version"
 )
 
 const usage = `usage: alidade <command> [flags]

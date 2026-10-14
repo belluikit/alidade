@@ -32,7 +32,7 @@ macOS arm64 and on Linux amd64, with and without the `v8` and `python`
 tags. The tagged suite runs with the race detector on macOS only. On
 Linux, V8 and the race runtime in one process crash about one run in a
 thousand, and never without it
-([#1](https://github.com/trendvidia/alidade/issues/1)).
+([#1](https://github.com/belluikit/alidade/issues/1)).
 
 Both gates fail when they measured nothing, so that silence is never read
 as a pass. The complexity gate exits 2 when a domain path is missing, a
@@ -154,7 +154,7 @@ runs only when asked.
   and kind of question, with cost per correct answer and response time.
 
 The comparison in the README is
-[#3](https://github.com/trendvidia/alidade/issues/3), which says how each
+[#3](https://github.com/belluikit/alidade/issues/3), which says how each
 arm was set up.
 
 ## Releases

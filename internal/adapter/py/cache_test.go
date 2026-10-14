@@ -15,8 +15,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/trendvidia/alidade/internal/graph"
-	"github.com/trendvidia/alidade/internal/python"
+	"github.com/belluikit/alidade/internal/graph"
+	"github.com/belluikit/alidade/internal/python"
 )
 
 // cacheText is l written as a cache.
