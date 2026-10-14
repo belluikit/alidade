@@ -282,6 +282,10 @@ func TestGraphifyArm(t *testing.T) {
 func TestArmNamesReadBack(t *testing.T) {
 	arms := Arms("alidade", "/r")
 	maps.Copy(arms, Graphify("graphify-mcp", "/g/graph.json"))
+	arms["graphify_installed"] = GraphifyInstalled("/v/bin/graphify", "/copy", "rules")
+	if a := arms["graphify_installed"]; a.allowed() != "Bash(graphify:*)" || a.Path != "/v/bin" || a.Dir != "/copy" {
+		t.Errorf("graphify_installed: %+v", a)
+	}
 	for name := range arms {
 		path := filepath.Join(t.TempDir(), "r.pxf")
 		var buf bytes.Buffer
@@ -295,5 +299,34 @@ func TestArmNamesReadBack(t *testing.T) {
 		if err != nil || len(runs) != 1 || runs[0].Arm != name {
 			t.Errorf("arm %q: read back %+v, %v", name, runs, err)
 		}
+	}
+}
+
+// The generated sets (#284) load, and no two questions of testdata share
+// an id: TestReport reads shapes by id across every set.
+func TestGeneratedSetsLoad(t *testing.T) {
+	paths, _ := filepath.Glob("testdata/*.pxf")
+	ids := map[string]string{}
+	gen := 0
+	for _, p := range paths {
+		s, err := Load(p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.HasPrefix(filepath.Base(p), "gen-") {
+			gen++
+		}
+		for _, q := range s.Questions {
+			if was, ok := ids[q.ID]; ok {
+				t.Errorf("question %q in %s and %s", q.ID, was, p)
+			}
+			ids[q.ID] = p
+			if !answerable(q) {
+				t.Errorf("%s: %s: a want is in the question's text", p, q.ID)
+			}
+		}
+	}
+	if gen != 4 {
+		t.Errorf("%d generated sets, want 4", gen)
 	}
 }

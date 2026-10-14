@@ -1,0 +1,105 @@
+# Questions over chameleon drawn by rule, not picked (#284): bench.Generate over the
+# type checker's static calls (internal/oracle), without tests, at the commit
+# below. Strata: unique (callers of a name no other declaration shares),
+# shared (callers of a method name five or more declarations share), chain
+# (the functions between two declarations three calls apart). Candidates are
+# taken in order of the SHA-256 of "repo|stratum|id".
+
+repo = "chameleon"
+commit = "4fdf31cce23295a4362f398d11555fc83ac4ec12"
+
+question {
+  id = "chameleon-unique-1"
+  shape = unique
+  text = "In chameleon, which functions and methods call the function bundle.openZipBytes directly?"
+  want = ["Open", "OpenBase64"]
+  note = "go://github.com/trendvidia/chameleon/bundle#openZipBytes. 1 declarations in the calls are named openZipBytes. The type checker's static callers: go://github.com/trendvidia/chameleon/bundle#Open, go://github.com/trendvidia/chameleon/bundle#OpenBase64."
+}
+
+question {
+  id = "chameleon-unique-2"
+  shape = unique
+  text = "In chameleon, which functions and methods call the function chameleon.splitPath directly?"
+  want = ["apply"]
+  note = "go://github.com/trendvidia/chameleon/cmd/chameleon#splitPath. 1 declarations in the calls are named splitPath. The type checker's static callers: go://github.com/trendvidia/chameleon/cmd/chameleon#addField.apply, go://github.com/trendvidia/chameleon/cmd/chameleon#deleteField.apply, go://github.com/trendvidia/chameleon/cmd/chameleon#renameField.apply."
+}
+
+question {
+  id = "chameleon-unique-3"
+  shape = unique
+  text = "In chameleon, which functions and methods call the function v1.file_chameleon_v1_bundle_manifest_proto_rawDescGZIP directly?"
+  want = ["Descriptor", "EnumDescriptor"]
+  note = "go://github.com/trendvidia/chameleon/proto/chameleon/v1#file_chameleon_v1_bundle_manifest_proto_rawDescGZIP. 1 declarations in the calls are named file_chameleon_v1_bundle_manifest_proto_rawDescGZIP. The type checker's static callers: go://github.com/trendvidia/chameleon/proto/chameleon/v1#BundleManifest.Descriptor, go://github.com/trendvidia/chameleon/proto/chameleon/v1#BundleManifest_Module.Descriptor, go://github.com/trendvidia/chameleon/proto/chameleon/v1#BundleManifest_Policy.EnumDescriptor, go://github.com/trendvidia/chameleon/proto/chameleon/v1#BundleManifest_RecipientSet.Descriptor."
+}
+
+question {
+  id = "chameleon-unique-4"
+  shape = unique
+  text = "In chameleon, which functions and methods call the function secret.NewMap directly?"
+  want = ["MoveWithOptions", "Resolve"]
+  note = "go://github.com/trendvidia/chameleon/secret#NewMap. 1 declarations in the calls are named NewMap. The type checker's static callers: go://github.com/trendvidia/chameleon/parse#MoveWithOptions, go://github.com/trendvidia/chameleon/resolver#Resolver.Resolve."
+}
+
+question {
+  id = "chameleon-unique-5"
+  shape = unique
+  text = "In chameleon, which functions and methods call the function chameleon.loadUserConfig directly?"
+  want = ["bundleBuildCmd", "explainCmd", "getCmd", "revealCmd", "verifyCmd"]
+  note = "go://github.com/trendvidia/chameleon/cmd/chameleon#loadUserConfig. 1 declarations in the calls are named loadUserConfig. The type checker's static callers: go://github.com/trendvidia/chameleon/cmd/chameleon#bundleBuildCmd, go://github.com/trendvidia/chameleon/cmd/chameleon#explainCmd, go://github.com/trendvidia/chameleon/cmd/chameleon#getCmd, go://github.com/trendvidia/chameleon/cmd/chameleon#revealCmd, go://github.com/trendvidia/chameleon/cmd/chameleon#verifyCmd."
+}
+
+question {
+  id = "chameleon-shared-1"
+  shape = shared
+  text = "In chameleon, which functions and methods call the Destroy method of resolver.Resolution directly?"
+  want = ["explainCmd", "getCmd", "revealCmd", "run"]
+  note = "go://github.com/trendvidia/chameleon/resolver#Resolution.Destroy. 5 declarations in the calls are named Destroy. The type checker's static callers: go://github.com/trendvidia/chameleon/cmd/chameleon#explainCmd, go://github.com/trendvidia/chameleon/cmd/chameleon#getCmd, go://github.com/trendvidia/chameleon/cmd/chameleon#revealCmd, go://github.com/trendvidia/chameleon/examples/buf#run."
+}
+
+question {
+  id = "chameleon-shared-2"
+  shape = shared
+  text = "In chameleon, which functions and methods call the Destroy method of secret.OpenedBuffer directly?"
+  want = ["revealCmd", "run"]
+  note = "go://github.com/trendvidia/chameleon/secret#OpenedBuffer.Destroy. 5 declarations in the calls are named Destroy. The type checker's static callers: go://github.com/trendvidia/chameleon/cmd/chameleon#revealCmd, go://github.com/trendvidia/chameleon/examples/buf#run."
+}
+
+question {
+  id = "chameleon-chain-1"
+  shape = chain
+  text = "In chameleon, how does buf.main end up calling resolver.Resolver.Resolve? Name each function or method in the chain between them."
+  want = ["Load", "run"]
+  note = "go://github.com/trendvidia/chameleon/examples/buf#main -> go://github.com/trendvidia/chameleon/examples/buf#run -> go://github.com/trendvidia/chameleon#Load -> go://github.com/trendvidia/chameleon/resolver#Resolver.Resolve, the one shortest chain of static calls by the type checker."
+}
+
+question {
+  id = "chameleon-chain-2"
+  shape = chain
+  text = "In chameleon, how does bundler.processLayer end up calling bundler.narrowScalarMessageField? Name each function or method in the chain between them."
+  want = ["Narrow", "narrowMessage"]
+  note = "go://github.com/trendvidia/chameleon/internal/bundler#processLayer -> go://github.com/trendvidia/chameleon/internal/bundler#Narrow -> go://github.com/trendvidia/chameleon/internal/bundler#narrowMessage -> go://github.com/trendvidia/chameleon/internal/bundler#narrowScalarMessageField, the one shortest chain of static calls by the type checker."
+}
+
+question {
+  id = "chameleon-chain-3"
+  shape = chain
+  text = "In chameleon, how does chameleon.main end up calling chain.EffectiveKeyName? Name each function or method in the chain between them."
+  want = ["migrateCmd", "migrateOne"]
+  note = "go://github.com/trendvidia/chameleon/cmd/chameleon#main -> go://github.com/trendvidia/chameleon/cmd/chameleon#migrateCmd -> go://github.com/trendvidia/chameleon/cmd/chameleon#migrateOne -> go://github.com/trendvidia/chameleon/chain#EffectiveKeyName, the one shortest chain of static calls by the type checker."
+}
+
+question {
+  id = "chameleon-chain-4"
+  shape = chain
+  text = "In chameleon, how does chameleon.bundleCmd end up calling chameleon.compileSchemaFiles? Name each function or method in the chain between them."
+  want = ["bundleBuildCmd", "compileSchema"]
+  note = "go://github.com/trendvidia/chameleon/cmd/chameleon#bundleCmd -> go://github.com/trendvidia/chameleon/cmd/chameleon#bundleBuildCmd -> go://github.com/trendvidia/chameleon/cmd/chameleon#compileSchema -> go://github.com/trendvidia/chameleon/cmd/chameleon#compileSchemaFiles, the one shortest chain of static calls by the type checker."
+}
+
+question {
+  id = "chameleon-chain-5"
+  shape = chain
+  text = "In chameleon, how does chameleon.bundleCmd end up calling chameleon.resolveAppPath? Name each function or method in the chain between them."
+  want = ["applyAppDefaults", "bundleBuildCmd"]
+  note = "go://github.com/trendvidia/chameleon/cmd/chameleon#bundleCmd -> go://github.com/trendvidia/chameleon/cmd/chameleon#bundleBuildCmd -> go://github.com/trendvidia/chameleon/cmd/chameleon#applyAppDefaults -> go://github.com/trendvidia/chameleon/cmd/chameleon#resolveAppPath, the one shortest chain of static calls by the type checker."
+}

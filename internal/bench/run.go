@@ -28,6 +28,16 @@ type Arm struct {
 	Servers map[string]any
 	Tools   string
 	System  string
+	// Dir is where the arm's sessions run, when not the runner's
+	// repository: a copy of it holding what the arm's tool keeps there.
+	Dir string
+	// Allow are permission rules beyond the arm's MCP servers, such as
+	// "Bash(graphify:*)"; Settings is a Claude Code settings object the
+	// sessions get (its hooks run even in restricted mode); Path is a
+	// directory put first on the sessions' PATH.
+	Allow    []string
+	Settings map[string]any
+	Path     string
 }
 
 // Files are the built-in tools every arm has: reading and searching
@@ -68,9 +78,8 @@ func Arms(bin, root string) map[string]Arm {
 // beforehand:
 //
 //   - graphify: the server and Read, no Grep: what only is for alidade.
-//   - graphify_grep: the server with Read, Grep and Glob, as graphify is
-//     run beside an agent's own search. graphify has no text search of
-//     its own, where alidade has search_text.
+//   - graphify_grep: the server with Read, Grep and Glob. graphify has no
+//     text search of its own, where alidade has search_text.
 //
 // The graph is built outside the session, so its build time is not in a
 // run's duration, where alidade's first build is.
@@ -82,9 +91,27 @@ func Graphify(server, graph string) map[string]Arm {
 	}
 }
 
+// GraphifyInstalled is graphify as its installer sets it up for Claude
+// Code (graphify 0.9.51, `graphify install`), in dir, a copy of the
+// repository holding graphify-out: instructions is the section it writes
+// to CLAUDE.md, given as system prompt; its two PreToolUse hooks, which
+// tell the model to query the graph before it searches or reads; and
+// its command-line tool through Bash, the session's only Bash use. It
+// registers no MCP server. exe is the graphify binary.
+func GraphifyInstalled(exe, dir, instructions string) Arm {
+	hook := func(matcher, kind string) map[string]any {
+		return map[string]any{"matcher": matcher, "hooks": []any{map[string]any{"type": "command", "command": exe + " hook-guard " + kind}}}
+	}
+	return Arm{Name: "graphify_installed", Servers: map[string]any{}, Tools: Files + ",Bash", System: instructions,
+		Dir: dir, Allow: []string{"Bash(graphify:*)"}, Path: filepath.Dir(exe),
+		Settings: map[string]any{"hooks": map[string]any{"PreToolUse": []any{hook("Bash|Grep", "search"), hook("Read|Glob", "read")}}}}
+}
+
 // A Runner runs sessions in Repo with Claude (the claude binary) on
 // Model, each capped at Budget dollars.
 type Runner struct {
+	// Language is the question set's, for the prompt.
+	Language            string
 	Repo, Claude, Model string
 	Budget              float64
 	// Scratch holds each arm's MCP configuration.
@@ -136,7 +163,7 @@ func (r *Runner) Ask(ctx context.Context, arm Arm, q Question, n int) (*Run, err
 	if err != nil {
 		return nil, err
 	}
-	cmd := exec.CommandContext(ctx, r.Claude, "-p", Prompt(q),
+	cmd := exec.CommandContext(ctx, r.Claude, "-p", Prompt(r.Language, q),
 		"--output-format", "stream-json", "--verbose",
 		"--model", r.Model,
 		"--restricted", "--tools", arm.Tools,
@@ -150,12 +177,25 @@ func (r *Runner) Ask(ctx context.Context, arm Arm, q Question, n int) (*Run, err
 	if arm.System != "" {
 		cmd.Args = append(cmd.Args, "--append-system-prompt", arm.System)
 	}
+	if arm.Settings != nil {
+		b, err := json.Marshal(arm.Settings)
+		if err != nil {
+			return nil, err
+		}
+		cmd.Args = append(cmd.Args, "--settings", string(b))
+	}
 	cmd.Dir = r.Repo
+	if arm.Dir != "" {
+		cmd.Dir = arm.Dir
+	}
 	// --restricted already ignores the user's settings files, CLAUDE.md
 	// and auto-memory (measured: the same context with and without
 	// these); they are set as well so a change to that default cannot
 	// leak a person's notes about the repository into one arm's context.
 	cmd.Env = append(os.Environ(), "CLAUDE_CODE_DISABLE_AUTO_MEMORY=1", "CLAUDE_CODE_DISABLE_CLAUDE_MDS=1")
+	if arm.Path != "" {
+		cmd.Env = append(cmd.Env, "PATH="+arm.Path+string(os.PathListSeparator)+os.Getenv("PATH"))
+	}
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	start := time.Now()
@@ -169,9 +209,10 @@ func (r *Runner) Ask(ctx context.Context, arm Arm, q Question, n int) (*Run, err
 	return run, nil
 }
 
-// allowed names the arm's MCP servers, each as the prefix of its tools.
+// allowed is what the arm's sessions may use without asking: its own
+// rules, and its MCP servers, each as the prefix of its tools.
 func (a Arm) allowed() string {
-	var out []string
+	out := slices.Clone(a.Allow)
 	for _, name := range slices.Sorted(maps.Keys(a.Servers)) {
 		out = append(out, "mcp__"+name)
 	}

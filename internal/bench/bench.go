@@ -25,7 +25,9 @@ import (
 // were written against, and the questions.
 type Set struct {
 	Repo, Commit string
-	Questions    []Question
+	// Language is the repository's, "go" when unset: it words the prompt.
+	Language  string
+	Questions []Question
 }
 
 // A Question is one question with its reference: the names a correct
@@ -74,6 +76,8 @@ func (s *Set) set(a *pxf.Assignment) {
 		s.Repo = str(a.Value)
 	case "commit":
 		s.Commit = str(a.Value)
+	case "language":
+		s.Language = str(a.Value)
 	}
 }
 
@@ -137,13 +141,17 @@ func found(answer, want string) bool {
 	return false
 }
 
-// Prompt is what both arms are asked: the question, with the same
+// Prompt is what every arm is asked: the question, with the same
 // instructions about scope and naming, and nothing about which tools to
-// use.
-func Prompt(q Question) string {
-	return "Answer this question about the Go repository in the current directory. " +
-		"Consider production code only: ignore _test.go files.\n\n" +
+// use. language words the scope: "python", or Go for anything else.
+func Prompt(language string, q Question) string {
+	repo, tests, name := "Go", "ignore _test.go files", "function, method or type in your answer by its Go name"
+	if language == "python" {
+		repo, tests, name = "Python", "ignore test files (tests directories, test_*.py, conftest.py)", "function, method or class in your answer by its Python name"
+	}
+	return "Answer this question about the " + repo + " repository in the current directory. " +
+		"Consider production code only: " + tests + ".\n\n" +
 		"Question: " + q.Text + "\n\n" +
-		"Name every function, method or type in your answer by its Go name, with the file it is declared in. " +
+		"Name every " + name + ", with the file it is declared in. " +
 		"Be complete: list every one that qualifies."
 }

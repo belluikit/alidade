@@ -1,0 +1,129 @@
+# Questions over protocompile drawn by rule, not picked (#284): bench.Generate over the
+# type checker's static calls (internal/oracle), without tests, at the commit
+# below. Strata: unique (callers of a name no other declaration shares),
+# shared (callers of a method name five or more declarations share), chain
+# (the functions between two declarations three calls apart). Candidates are
+# taken in order of the SHA-256 of "repo|stratum|id".
+
+repo = "protocompile"
+commit = "1dbe2800cfc9295ef0a88ff0e6e06face7ecc6b6"
+
+question {
+  id = "protocompile-unique-1"
+  shape = unique
+  text = "In protocompile, which functions and methods call the pendingHasComments method of printer.printer directly?"
+  want = ["printBody", "printFile"]
+  note = "go://github.com/trendvidia/protocompile/ast/printer#printer.pendingHasComments. 1 declarations in the calls are named pendingHasComments. The type checker's static callers: go://github.com/trendvidia/protocompile/ast/printer#printer.printBody, go://github.com/trendvidia/protocompile/ast/printer#printer.printFile."
+}
+
+question {
+  id = "protocompile-unique-2"
+  shape = unique
+  text = "In protocompile, which functions and methods call the function iterx.Map2to1 directly?"
+  want = ["EveryFunc", "Left", "Right"]
+  note = "go://github.com/trendvidia/protocompile/internal/ext/iterx#Map2to1. 1 declarations in the calls are named Map2to1. The type checker's static callers: go://github.com/trendvidia/protocompile/internal/ext/iterx#Left, go://github.com/trendvidia/protocompile/internal/ext/iterx#Right, go://github.com/trendvidia/protocompile/internal/ext/stringsx#EveryFunc."
+}
+
+question {
+  id = "protocompile-unique-3"
+  shape = unique
+  text = "In protocompile, which functions and methods call the rangeSourceCodeInfo method of fdp.generator directly?"
+  want = ["enum", "message"]
+  note = "go://github.com/trendvidia/protocompile/fdp#generator.rangeSourceCodeInfo. 1 declarations in the calls are named rangeSourceCodeInfo. The type checker's static callers: go://github.com/trendvidia/protocompile/fdp#generator.enum, go://github.com/trendvidia/protocompile/fdp#generator.message."
+}
+
+question {
+  id = "protocompile-unique-4"
+  shape = unique
+  text = "In protocompile, which functions and methods call the EntryFields method of ir.Type directly?"
+  want = ["CarrierScalar", "PxfNumber", "validateUTF8"]
+  note = "go://github.com/trendvidia/protocompile/ir#Type.EntryFields. 1 declarations in the calls are named EntryFields. The type checker's static callers: go://github.com/trendvidia/protocompile/ir#Type.CarrierScalar, go://github.com/trendvidia/protocompile/ir#Type.PxfNumber, go://github.com/trendvidia/protocompile/ir#validateUTF8."
+}
+
+question {
+  id = "protocompile-unique-5"
+  shape = unique
+  text = "In protocompile, which functions and methods call the function descsrc.renderFieldValue directly?"
+  want = ["collectOptions", "renderMessageValue"]
+  note = "go://github.com/trendvidia/protocompile/internal/descsrc#renderFieldValue. 1 declarations in the calls are named renderFieldValue. The type checker's static callers: go://github.com/trendvidia/protocompile/internal/descsrc#collectOptions, go://github.com/trendvidia/protocompile/internal/descsrc#renderMessageValue."
+}
+
+question {
+  id = "protocompile-shared-1"
+  shape = shared
+  text = "In protocompile, which functions and methods call the Annotations method of ir.File directly?"
+  want = ["allAnnotationUses", "buildLocalSymbols", "emitFileAnnotationDecls", "emitSourceMap", "resolveAnnotationParamTypes", "resolveAnnotationUses", "resolveBareAnnotation", "validateAnnotationParamDefaults"]
+  note = "go://github.com/trendvidia/protocompile/ir#File.Annotations. 13 declarations in the calls are named Annotations. The type checker's static callers: go://github.com/trendvidia/protocompile/fdp#emitFileAnnotationDecls, go://github.com/trendvidia/protocompile/fdp#emitSourceMap, go://github.com/trendvidia/protocompile/ir#allAnnotationUses, go://github.com/trendvidia/protocompile/ir#buildLocalSymbols, go://github.com/trendvidia/protocompile/ir#resolveAnnotationParamTypes, go://github.com/trendvidia/protocompile/ir#resolveAnnotationUses, go://github.com/trendvidia/protocompile/ir#resolveBareAnnotation, go://github.com/trendvidia/protocompile/ir#validateAnnotationParamDefaults."
+}
+
+question {
+  id = "protocompile-shared-2"
+  shape = shared
+  text = "In protocompile, which functions and methods call the Name method of ast.DeclAnnotationUse directly?"
+  want = ["Span", "annotations", "decl", "lowerAnnotationUse", "printDeclAnnotationUse"]
+  note = "go://github.com/trendvidia/protocompile/ast#DeclAnnotationUse.Name. 24 declarations in the calls are named Name. The type checker's static callers: go://github.com/trendvidia/protocompile/ast#DeclAnnotationUse.Span, go://github.com/trendvidia/protocompile/ast/printer#printer.printDeclAnnotationUse, go://github.com/trendvidia/protocompile/internal/astx#protoEncoder.annotations, go://github.com/trendvidia/protocompile/internal/astx#protoEncoder.decl, go://github.com/trendvidia/protocompile/ir#lowerAnnotationUse."
+}
+
+question {
+  id = "protocompile-shared-3"
+  shape = shared
+  text = "In protocompile, which functions and methods call the Keyword method of ast.ExprRange directly?"
+  want = ["Span", "expr", "printExprRange"]
+  note = "go://github.com/trendvidia/protocompile/ast#ExprRange.Keyword. 12 declarations in the calls are named Keyword. The type checker's static callers: go://github.com/trendvidia/protocompile/ast#ExprRange.Span, go://github.com/trendvidia/protocompile/ast/printer#printer.printExprRange, go://github.com/trendvidia/protocompile/internal/astx#protoEncoder.expr."
+}
+
+question {
+  id = "protocompile-shared-4"
+  shape = shared
+  text = "In protocompile, which functions and methods call the FullName method of ir.Method directly?"
+  want = ["Name", "emitSourceMap"]
+  note = "go://github.com/trendvidia/protocompile/ir#Method.FullName. 9 declarations in the calls are named FullName. The type checker's static callers: go://github.com/trendvidia/protocompile/fdp#emitSourceMap, go://github.com/trendvidia/protocompile/ir#Method.Name."
+}
+
+question {
+  id = "protocompile-shared-5"
+  shape = shared
+  text = "In protocompile, which functions and methods call the Semicolon method of ast.DeclAnnotation directly?"
+  want = ["Span", "decl", "printDeclAnnotation"]
+  note = "go://github.com/trendvidia/protocompile/ast#DeclAnnotation.Semicolon. 9 declarations in the calls are named Semicolon. The type checker's static callers: go://github.com/trendvidia/protocompile/ast#DeclAnnotation.Span, go://github.com/trendvidia/protocompile/ast/printer#printer.printDeclAnnotation, go://github.com/trendvidia/protocompile/internal/astx#protoEncoder.decl."
+}
+
+question {
+  id = "protocompile-chain-1"
+  shape = chain
+  text = "In protocompile, how does ir.validateFeatures end up calling ir.Type.IsMessage? Name each function or method in the chain between them."
+  want = ["AsMessage"]
+  note = "go://github.com/trendvidia/protocompile/ir#validateFeatures -> go://github.com/trendvidia/protocompile/ir#Value.AsMessage -> go://github.com/trendvidia/protocompile/ir#Element.AsMessage -> go://github.com/trendvidia/protocompile/ir#Type.IsMessage, the one shortest chain of static calls by the type checker."
+}
+
+question {
+  id = "protocompile-chain-2"
+  shape = chain
+  text = "In protocompile, how does experimentalcompile.Compile end up calling ir.imports.Directs? Name each function or method in the chain between them."
+  want = ["Imports", "LinkChecks"]
+  note = "go://github.com/trendvidia/protocompile/experimentalcompile#Compile -> go://github.com/trendvidia/protocompile/incremental/queries#LinkChecks -> go://github.com/trendvidia/protocompile/ir#File.Imports -> go://github.com/trendvidia/protocompile/ir#imports.Directs, the one shortest chain of static calls by the type checker."
+}
+
+question {
+  id = "protocompile-chain-3"
+  shape = chain
+  text = "In protocompile, how does token.Cursor.NextSkippable end up calling unsafex.Add? Name each function or method in the chain between them."
+  want = ["Get", "PeekSkippable"]
+  note = "go://github.com/trendvidia/protocompile/token#Cursor.NextSkippable -> go://github.com/trendvidia/protocompile/token#Cursor.PeekSkippable -> go://github.com/trendvidia/protocompile/internal/ext/slicesx#Get -> go://github.com/trendvidia/protocompile/internal/ext/unsafex#Add, the one shortest chain of static calls by the type checker."
+}
+
+question {
+  id = "protocompile-chain-4"
+  shape = chain
+  text = "In protocompile, how does ir.buildImports end up calling token.StringToken.Quotes? Name each function or method in the chain between them."
+  want = ["RawContent", "Text"]
+  note = "go://github.com/trendvidia/protocompile/ir#buildImports -> go://github.com/trendvidia/protocompile/token#StringToken.Text -> go://github.com/trendvidia/protocompile/token#StringToken.RawContent -> go://github.com/trendvidia/protocompile/token#StringToken.Quotes, the one shortest chain of static calls by the type checker."
+}
+
+question {
+  id = "protocompile-chain-5"
+  shape = chain
+  text = "In protocompile, how does parser.delimited.appendTo end up calling source.Span.Text? Name each function or method in the chain between them."
+  want = ["SuggestEdits", "iter"]
+  note = "go://github.com/trendvidia/protocompile/parser#delimited.appendTo -> go://github.com/trendvidia/protocompile/parser#delimited.iter -> go://github.com/trendvidia/protocompile/report#SuggestEdits -> go://github.com/trendvidia/protocompile/source#Span.Text, the one shortest chain of static calls by the type checker."
+}

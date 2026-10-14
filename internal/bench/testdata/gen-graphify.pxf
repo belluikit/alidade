@@ -1,0 +1,89 @@
+# Questions over graphify drawn by rule, not picked (#284): scripts/pybenchgen.py
+# over the calls its test suite made (scripts/pytrace.sh), at the commit
+# below. Strata: unique (callers of a name no other def shares), shared
+# (callers of a name three or more defs share). Candidates are taken in
+# order of the SHA-256 of "repo|stratum|file:name". 15621 traced calls read.
+
+repo = "graphify"
+commit = "281ccaa4ff38aaef3f19e823fb7645e19b28f591"
+language = "python"
+
+question {
+  id = "graphify-unique-1"
+  shape = unique
+  text = "In graphify, which functions and methods call the function to_float (declared in graphify/callflow_html.py) directly?"
+  want = ["edge_score", "normalize_edge", "should_include_edge"]
+  note = "graphify/callflow_html.py:to_float. 1 defs in production code are named to_float. Callers the test suite's traces recorded: graphify/callflow_html.py:edge_score, graphify/callflow_html.py:normalize_edge, graphify/callflow_html.py:should_include_edge."
+}
+
+question {
+  id = "graphify-unique-2"
+  shape = unique
+  text = "In graphify, which functions and methods call the function to_json (declared in graphify/export.py) directly?"
+  want = ["_rebuild_code", "dispatch_command"]
+  note = "graphify/export.py:to_json. 1 defs in production code are named to_json. Callers the test suite's traces recorded: graphify/cli.py:dispatch_command, graphify/watch.py:_rebuild_code."
+}
+
+question {
+  id = "graphify-unique-3"
+  shape = unique
+  text = "In graphify, which functions and methods call the function section_edge_summary (declared in graphify/callflow_html.py) directly?"
+  want = ["derive_flow_chain", "generate_overview_graph"]
+  note = "graphify/callflow_html.py:section_edge_summary. 1 defs in production code are named section_edge_summary. Callers the test suite's traces recorded: graphify/callflow_html.py:derive_flow_chain, graphify/callflow_html.py:generate_overview_graph."
+}
+
+question {
+  id = "graphify-unique-4"
+  shape = unique
+  text = "In graphify, which functions and methods call the function _ruby_const_full_name (declared in graphify/extractors/engine.py) directly?"
+  want = ["walk", "walk_calls"]
+  note = "graphify/extractors/engine.py:_ruby_const_full_name. 1 defs in production code are named _ruby_const_full_name. Callers the test suite's traces recorded: graphify/extractors/engine.py:_extract_generic.walk, graphify/extractors/engine.py:_extract_generic.walk_calls."
+}
+
+question {
+  id = "graphify-unique-5"
+  shape = unique
+  text = "In graphify, which functions and methods call the function _atomic_replace (declared in graphify/paths.py) directly?"
+  want = ["write_json_atomic", "write_text_atomic"]
+  note = "graphify/paths.py:_atomic_replace. 1 defs in production code are named _atomic_replace. Callers the test suite's traces recorded: graphify/paths.py:write_json_atomic, graphify/paths.py:write_text_atomic."
+}
+
+question {
+  id = "graphify-shared-1"
+  shape = shared
+  text = "In graphify, which functions and methods call the nested function extract_fortran.add_edge (declared in graphify/extractors/fortran.py) directly?"
+  want = ["emit_signature_refs", "walk", "walk_calls"]
+  note = "graphify/extractors/fortran.py:extract_fortran.add_edge. 25 defs in production code are named add_edge. Callers the test suite's traces recorded: graphify/extractors/fortran.py:extract_fortran.emit_signature_refs, graphify/extractors/fortran.py:extract_fortran.walk, graphify/extractors/fortran.py:extract_fortran.walk_calls."
+}
+
+question {
+  id = "graphify-shared-2"
+  shape = shared
+  text = "In graphify, which functions and methods call the nested function _extract_generic.ensure_named_node (declared in graphify/extractors/engine.py) directly?"
+  want = ["_emit_java_parent_type", "_swift_extra_walk", "emit", "walk", "walk_calls"]
+  note = "graphify/extractors/engine.py:_extract_generic.ensure_named_node. 7 defs in production code are named ensure_named_node. Callers the test suite's traces recorded: graphify/extractors/engine.py:_extract_generic.walk, graphify/extractors/engine.py:_extract_generic.walk._emit_java_parent_type, graphify/extractors/engine.py:_extract_generic.walk_calls, graphify/extractors/engine.py:_swift_extra_walk, graphify/extractors/engine.py:_ts_emit_decorator_edges.emit."
+}
+
+question {
+  id = "graphify-shared-3"
+  shape = shared
+  text = "In graphify, which functions and methods call the function _node_community_map (declared in graphify/analyze.py) directly?"
+  want = ["_cross_community_surprises", "_cross_file_surprises", "suggest_questions", "to_graphml", "to_html", "to_json", "to_obsidian"]
+  note = "graphify/analyze.py:_node_community_map. 3 defs in production code are named _node_community_map. Callers the test suite's traces recorded: graphify/analyze.py:_cross_community_surprises, graphify/analyze.py:_cross_file_surprises, graphify/analyze.py:suggest_questions, graphify/export.py:to_graphml, graphify/export.py:to_json, graphify/export.py:to_obsidian, graphify/exporters/html.py:to_html."
+}
+
+question {
+  id = "graphify-shared-4"
+  shape = shared
+  text = "In graphify, which functions and methods call the nested function extract_objc._read (declared in graphify/extractors/objc.py) directly?"
+  want = ["_field_decl_entry", "walk", "walk_calls"]
+  note = "graphify/extractors/objc.py:extract_objc._read. 4 defs in production code are named _read. Callers the test suite's traces recorded: graphify/extractors/objc.py:extract_objc._field_decl_entry, graphify/extractors/objc.py:extract_objc.walk, graphify/extractors/objc.py:extract_objc.walk_calls."
+}
+
+question {
+  id = "graphify-shared-5"
+  shape = shared
+  text = "In graphify, which functions and methods call the function _node_community_map (declared in graphify/watch.py) directly?"
+  want = ["_rebuild_code", "_reconcile_graph_html"]
+  note = "graphify/watch.py:_node_community_map. 3 defs in production code are named _node_community_map. Callers the test suite's traces recorded: graphify/watch.py:_rebuild_code, graphify/watch.py:_reconcile_graph_html."
+}
