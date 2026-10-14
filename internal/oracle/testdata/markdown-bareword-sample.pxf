@@ -1,32 +1,91 @@
-# A second hand-labelled sample of Markdown documents edges (#167): the
-# class #167 is about, a bare lowercase word naming a nested declaration
-# (a field, an rpc, a method, a .pxf block). 40 were drawn from the 281
-# such edges on the 16 repositories beside alidade on 2026-10-08, in
-# order of the SHA-256 of "repo|from|to", and judged by reading the
-# sentence; one could not be judged and is left out. 17 of the 39 are
-# right: 44%, against 0.914 for documents edges overall
-# (markdown-sample.pxf).
+# A second hand-labelled sample of Markdown documents edges (#2): a bare
+# lowercase word naming a nested declaration (a field, an rpc, a method,
+# a .pxf block, an enum value, a column), the class where a word is most
+# likely to be an ordinary word. 40 were drawn from the 77 such edges of
+# the nine public repositories of markdown-sample.pxf on 2026-10-14, by
+# TestDrawSamples, in the same way, and judged by reading the sentence.
+# 32 of the 40 are right: 0.80, against 0.931 for documents edges overall.
 #
-# #167's rule — the section must name the declaration's parent — keeps 11
-# of the 17 right and 1 of the 22 wrong. The 6 right ones it drops are
-# reported as gone by the oracle: that is the rule's measured cost, kept
-# visible for a better rule to recover.
-#
-# Published here: the 4 of the 39 edges that are of public repositories
-# (chameleon). The others were labelled on in-house
-# repositories and are not in this file; every figure above is of the
-# whole sample.
+# These are the edges the linker keeps: it already drops a bare word
+# whose section does not name the declaration's parent. The sample this
+# replaces was drawn on 2026-10-08, before that rule, from 281 edges of
+# 16 repositories: 17 of 39 were right (0.44), and the rule kept 11 of
+# the 17 and 1 of the 22 wrong. What the rule costs in right edges is not
+# measured by this sample.
+
+repo {
+  name = "alidade"
+  commit = "5b8255e026cb3ef8bae48addbe022f28ebee0a2e"
+  edge {
+    from = "md://CHANGELOG.md#changelog.unreleased"
+    to = "go://github.com/trendvidia/alidade/internal/bench#Run.list"
+    mention = "list"
+    label = wrong
+    why = "Python's list type, not this method"
+  }
+  edge {
+    from = "md://docs/adr/001-core-architecture.md#adr-001-core-architecture-one-binary-layer-adapters-over-a-shared-graph.decision.construction-is-a-pipeline-not-a-service"
+    to = "pxf://.steward/governance.pxf#manifesto.blocked_module_globs"
+    mention = "blocked_module_globs"
+    label = wrong
+    why = "an example in prose about the linker; the schema field it means is in another repository"
+  }
+  edge {
+    from = "md://docs/adr/008-python-engine.md#adr-008-python-cpython-embedded-jedi-as-the-engine-for-calls.the-layer-decided-2026-10-09-the-owner-s-four-calls-on-237"
+    to = "go://github.com/trendvidia/alidade/internal/bench#Run.list"
+    mention = "list"
+    label = wrong
+    why = "Python's list type, not this method"
+  }
+  edge {
+    from = "md://docs/adr/005-on-demand-construction.md#adr-005-graph-construction-on-demand-not-persisted.decision"
+    to = "go://github.com/trendvidia/alidade/internal/mcp#Server.rebuild"
+    mention = "rebuild"
+    label = wrong
+    why = "the MCP tool of that name, not the server's internal method"
+  }
+  edge {
+    from = "md://CHANGELOG.md#changelog.v0-9-0-2026-10-08"
+    to = "go://github.com/trendvidia/alidade/internal/mcp#Server.rebuild"
+    mention = "rebuild"
+    label = wrong
+    why = "the MCP tool of that name, not the server's internal method"
+  }
+  edge {
+    from = "md://docs/adr/001-core-architecture.md#adr-001-core-architecture-one-binary-layer-adapters-over-a-shared-graph.decision.construction-is-a-pipeline-not-a-service"
+    to = "go://github.com/trendvidia/alidade/internal/adapter/markdown#document.link"
+    mention = "link"
+    label = wrong
+    why = "the pipeline's link step, not this method of a document"
+  }
+}
+
+repo {
+  name = "caliper"
+  commit = "b5619f651fb7cfec7b7c514a47382c9ca0a60888"
+  edge {
+    from = "md://CHANGELOG.md#changelog.v1-1-0-2026-07-29.analyzer-behavior"
+    to = "proto://caliper.v1.Infallible.functions"
+    mention = "functions"
+    label = right
+  }
+  edge {
+    from = "md://CHANGELOG.md#changelog.v1-1-0-2026-07-29.analyzer-behavior"
+    to = "proto://caliper.v1.Infallible.methods"
+    mention = "methods"
+    label = right
+  }
+  edge {
+    from = "md://README.md#caliper.llm-effective-usage.what-s-better-left-to-humans"
+    to = "proto://caliper.v1.Rule.contains"
+    mention = "contains"
+    label = right
+  }
+}
 
 repo {
   name = "chameleon"
-  commit = "92b5cc452ca9c22fb4c8286f253f8fd24e3009c6"
-  edge {
-    from = "md://CHANGELOG.md#changelog.0-23-0-2026-08-10.changed"
-    to = "pxf://examples/simple/chain.pxf#environments.prod"
-    mention = "prod"
-    label = wrong
-    why = "a generic environment name"
-  }
+  commit = "4fdf31cce23295a4362f398d11555fc83ac4ec12"
   edge {
     from = "md://CHANGELOG.md#changelog.0-4-0-2026-05-11.added"
     to = "proto://chameleon.v1.LayerHeader.environment"
@@ -43,6 +102,186 @@ repo {
     from = "md://CHANGELOG.md#changelog.0-4-0-2026-05-11.added"
     to = "proto://chameleon.v1.LayerHeader.notes"
     mention = "notes"
+    label = right
+  }
+  edge {
+    from = "md://CHANGELOG.md#changelog.0-20-0-2026-05-26.added"
+    to = "proto://chameleon.v1.Environment.extends"
+    mention = "extends"
+    label = right
+  }
+  edge {
+    from = "md://CHANGELOG.md#changelog.0-4-0-2026-05-11.added"
+    to = "proto://chameleon.v1.LayerHeader.content_sha256"
+    mention = "content_sha256"
+    label = right
+  }
+  edge {
+    from = "md://CHANGELOG.md#changelog.0-4-0-2026-05-11"
+    to = "proto://chameleon.v1.LayerHeader.content_sha256"
+    mention = "content_sha256"
+    label = right
+  }
+  edge {
+    from = "md://docs/proposals/0001-env-source.md#proposal-0001-kind-env-source.design-points-need-decisions.2-type-coercion"
+    to = "proto://pxf.Secret.value"
+    mention = "value"
+    label = right
+  }
+  edge {
+    from = "md://CHANGELOG.md#changelog.0-14-4-2026-05-14.added"
+    to = "proto://pxf.Secret.hint"
+    mention = "hint"
+    label = right
+  }
+  edge {
+    from = "md://CHANGELOG.md#changelog.0-6-0-2026-05-11.added"
+    to = "proto://pxf.Secret.hint"
+    mention = "hint"
+    label = right
+  }
+  edge {
+    from = "md://README.md#chameleon.concepts.chain-spec"
+    to = "proto://chameleon.v1.ContextKey.allowed_values"
+    mention = "allowed_values"
+    label = right
+  }
+  edge {
+    from = "md://README.md#chameleon.concepts.chain-spec"
+    to = "proto://chameleon.v1.ChainSpec.sources"
+    mention = "sources"
+    label = right
+  }
+  edge {
+    from = "md://CHANGELOG.md#changelog.0-20-0-2026-05-26"
+    to = "proto://chameleon.v1.BundleManifest.Module.attribute_deny"
+    mention = "attribute_deny"
+    label = right
+  }
+  edge {
+    from = "md://README.md#chameleon.concepts.chain-spec"
+    to = "proto://chameleon.v1.ChainSpec.context_keys"
+    mention = "context_keys"
+    label = right
+  }
+  edge {
+    from = "md://README.md#chameleon.distribution-bundles.what-gets-narrowed"
+    to = "proto://chameleon.v1.BundleManifest.Module.allow"
+    mention = "allow"
+    label = right
+  }
+  edge {
+    from = "md://CHANGELOG.md#changelog.0-20-0-2026-05-26.added"
+    to = "proto://chameleon.v1.Environment.key_name"
+    mention = "key_name"
+    label = right
+  }
+  edge {
+    from = "md://CHANGELOG.md#changelog.0-20-0-2026-05-26"
+    to = "proto://chameleon.v1.BundleManifest.Module.attribute_default"
+    mention = "attribute_default"
+    label = right
+  }
+  edge {
+    from = "md://CHANGELOG.md#changelog.0-10-0-2026-05-12.changed"
+    to = "proto://pxf.Secret.value"
+    mention = "value"
+    label = wrong
+    why = "a closure's parameter named value, not the Secret field"
+  }
+  edge {
+    from = "md://README.md#chameleon.working-with-secrets.encrypting-layers.naming-the-encryption-key-per-environment"
+    to = "proto://chameleon.v1.Environment.extends"
+    mention = "extends"
+    label = right
+  }
+  edge {
+    from = "md://README.md#chameleon.distribution-bundles.what-gets-narrowed"
+    to = "proto://chameleon.v1.BundleManifest.Module.attribute_default"
+    mention = "attribute_default"
+    label = right
+  }
+  edge {
+    from = "md://README.md#chameleon.concepts.chain-spec"
+    to = "proto://chameleon.v1.ChainSpec.environments"
+    mention = "environments"
+    label = right
+  }
+  edge {
+    from = "md://README.md#chameleon.distribution-bundles.what-gets-narrowed"
+    to = "proto://chameleon.v1.BundleManifest.Module.recipients_by_env"
+    mention = "recipients_by_env"
+    label = right
+  }
+  edge {
+    from = "md://CHANGELOG.md#changelog.0-21-0-2026-06-01.changed"
+    to = "proto://chameleon.v1.Environment.key_name"
+    mention = "key_name"
+    label = right
+  }
+  edge {
+    from = "md://CHANGELOG.md#changelog.0-20-0-2026-05-26"
+    to = "proto://chameleon.v1.Environment.key_name"
+    mention = "key_name"
+    label = right
+  }
+  edge {
+    from = "md://CHANGELOG.md#changelog.0-4-0-2026-05-11.fixed"
+    to = "pxf://examples/simple/layers/base.pxf#api_url"
+    mention = "api_url"
+    label = right
+  }
+  edge {
+    from = "md://README.md#chameleon.distribution-bundles.what-gets-narrowed"
+    to = "proto://chameleon.v1.BundleManifest.Module.deny"
+    mention = "deny"
+    label = right
+  }
+  edge {
+    from = "md://CHANGELOG.md#changelog.0-18-0-2026-05-23.added"
+    to = "proto://chameleon.v1.BundleManifest.Module.recipients_by_env"
+    mention = "recipients_by_env"
+    label = right
+  }
+  edge {
+    from = "md://CHANGELOG.md#changelog.0-20-0-2026-05-26"
+    to = "proto://chameleon.v1.BundleManifest.Module.attribute_allow"
+    mention = "attribute_allow"
+    label = right
+  }
+}
+
+repo {
+  name = "protoregistry"
+  commit = "215be987fd73c0bce337d20ba82f9da57f9204e3"
+  edge {
+    from = "md://STABILITY.md#stability.storage"
+    to = "sql://column/schema_versions.compiler_version"
+    mention = "compiler_version"
+    label = right
+  }
+  edge {
+    from = "md://docs/design/namespace-hierarchy.md#namespace-hierarchy-and-chained-resolution.data-model.database.parent-import-pinning-shipped-in-phase-2a"
+    to = "sql://column/schema_version_deps.dep_namespace_id"
+    mention = "dep_namespace_id"
+    label = right
+  }
+}
+
+repo {
+  name = "protovalidate"
+  commit = "90182160b60c546a704befcee2958ac0f6a73868"
+  edge {
+    from = "md://.github/CONTRIBUTING.md#contributing-guidelines.validate-proto-invariants.cel-rules-on-every-rule-field"
+    to = "proto://buf.validate.FieldRules.bool"
+    mention = "bool"
+    label = wrong
+    why = "the CEL return type bool, not this oneof member"
+  }
+  edge {
+    from = "md://.github/CONTRIBUTING.md#contributing-guidelines.validate-proto-invariants.field-to-rules-type-mapping"
+    to = "proto://buf.validate.FieldRules.string"
+    mention = "string"
     label = right
   }
 }

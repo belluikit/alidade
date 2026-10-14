@@ -94,9 +94,17 @@ TypeScript's arbitrary-extension rule, a Node builtin through Node's own
 list, and a SvelteKit or Astro virtual module through the type checker's
 ambient modules.
 
-The Markdown samples are two: one drawn from the edges, for precision
-(`internal/oracle/testdata/markdown-sample.pxf`), and one drawn from the
-code spans of the docs, for recall (`markdown-recall-sample.pxf`).
+The Markdown samples are three, each drawn from nine public repositories
+and pinned to their commits:
+
+| sample (`internal/oracle/testdata`) | drawn from | result |
+|---|---|---|
+| `markdown-sample.pxf` | the `documents` edges | 54 of 58 right (0.931) |
+| `markdown-bareword-sample.pxf` | the edges whose mention is a bare lowercase word naming a nested declaration | 32 of 40 right (0.80) |
+| `markdown-recall-sample.pxf` | the code spans of the docs | 12 of the 24 spans that name a declaration are linked (0.50) |
+
+`TestDrawSamples` (`internal/oracle`) draws the items by rule, in order of
+a SHA-256, so nobody picks them. A reader then labels each one.
 
 Not checked: a PXF document's structure (its blocks and fields), since
 protowire-go is the only PXF parser.

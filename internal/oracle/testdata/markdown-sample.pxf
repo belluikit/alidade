@@ -1,38 +1,105 @@
-# The Markdown layer's documents edges, hand-labelled (#148).
+# The Markdown layer's documents edges, hand-labelled (#2).
 #
 # A documents edge is INFERRED: a code span in a section names exactly one
 # node, and nothing but a reader can say whether the prose meant that
-# declaration. These 58 were drawn from the 4,632 documents edges of the
-# 16 repositories checked out beside alidade on 2026-10-08, allotted in
-# proportion to each repository's count and taken in order of the SHA-256
-# of "repo|from|to", and each was judged by reading the sentence around
-# the mention and the declaration it names.
+# declaration. These 58 were drawn from the 1,140 documents edges of nine
+# public repositories (alidade, caliper, chameleon, goasm, protocompile,
+# protoregistry, protovalidate, protowire-go, pylib) on 2026-10-14, by
+# TestDrawSamples: allotted in proportion to each repository's count and
+# taken in order of the SHA-256 of "repo|from|to". Each was judged by
+# reading the sentence around the mention and the declaration it names.
+# 54 of the 58 are right: 0.931.
 #
 # label is right when the mention names that declaration, wrong when it
-# names something else that happens to share the name. TestOracleGoCalls
-# (scripts/oracle.sh) re-reads the sample for every repository checked
-# out at the commit it was labelled at: a right edge gone is a
-# regression, a wrong edge gone is a fix.
+# names something else that happens to share the name. A mention of an
+# MCP tool (`neighbors`) is judged wrong for the Go function of that name
+# behind it. TestOracleGoCalls (scripts/oracle.sh) re-reads the sample for
+# every repository checked out at the commit it was labelled at: a right
+# edge gone is a regression, a wrong edge gone is a fix.
 #
-# Published here: the 10 of the 58 edges that are of public repositories
-# (chameleon, protoregistry, protowire-go). The others were labelled on in-house
-# repositories and are not in this file; every figure above is of the
-# whole sample.
+# This sample replaces one of the same size drawn on 2026-10-08 from 16
+# repositories, most of them private, where 53 of 58 were right (0.914).
+
+repo {
+  name = "alidade"
+  commit = "5b8255e026cb3ef8bae48addbe022f28ebee0a2e"
+  edge {
+    from = "md://docs/usage.md#using-alidade.using-alidade-instead-of-grep"
+    to = "go://github.com/trendvidia/alidade/internal/mcp#neighbors"
+    mention = "neighbors"
+    label = wrong
+    why = "the MCP tool of that name; this is the traversal helper behind it"
+  }
+  edge {
+    from = "md://CONTRIBUTING.md#contributing-to-alidade.building"
+    to = "go://github.com/trendvidia/alidade/internal/python"
+    mention = "python"
+    label = wrong
+    why = "a build tag, not the package"
+  }
+  edge {
+    from = "md://CHANGELOG.md#changelog.v0-7-0-2026-10-07"
+    to = "go://github.com/trendvidia/alidade/internal/adapter/ts#Extensions"
+    mention = "ts.Extensions"
+    label = right
+  }
+  edge {
+    from = "md://docs/usage.md#using-alidade.the-tools"
+    to = "go://github.com/trendvidia/alidade/internal/mcp#neighbors"
+    mention = "neighbors"
+    label = wrong
+    why = "the MCP tool of that name; this is the traversal helper behind it"
+  }
+  edge {
+    from = "md://docs/adr/008-python-engine.md#adr-008-python-cpython-embedded-jedi-as-the-engine-for-calls.decision"
+    to = "py://internal/python/resolve.py"
+    mention = "resolve.py"
+    label = right
+  }
+}
+
+repo {
+  name = "caliper"
+  commit = "b5619f651fb7cfec7b7c514a47382c9ca0a60888"
+  edge {
+    from = "md://ROADMAP.md#caliper-roadmap.phase-1-complete-core-engine.isomorphisms"
+    to = "go://github.com/trendvidia/caliper/pkg/iso#Registry"
+    mention = "iso.Registry"
+    label = right
+  }
+  edge {
+    from = "md://ROADMAP.md#caliper-roadmap.operational-quality.codebase-audit-cleanup"
+    to = "go://github.com/trendvidia/caliper/pkg/analysis/templates#TemplateContext"
+    mention = "TemplateContext"
+    label = right
+  }
+  edge {
+    from = "md://CHANGELOG.md#changelog.v1-3-0-2026-08-29.added"
+    to = "go://github.com/trendvidia/caliper/pkg/analysis#EngineOptions.SkipGenerated"
+    mention = "EngineOptions.SkipGenerated"
+    label = right
+  }
+}
 
 repo {
   name = "chameleon"
-  commit = "92b5cc452ca9c22fb4c8286f253f8fd24e3009c6"
+  commit = "4fdf31cce23295a4362f398d11555fc83ac4ec12"
   edge {
-    from = "md://CHANGELOG.md#changelog.0-23-0-2026-08-10.changed"
-    to = "pxf://examples/simple/chain.pxf#environments.prod"
-    mention = "prod"
-    label = wrong
-    why = "a generic environment name ('resolved cleanly for dev and failed for prod'), not the example chain's prod block"
+    from = "md://docs/RELEASING.md#releasing"
+    to = "go://github.com/trendvidia/chameleon"
+    mention = "github.com/trendvidia/chameleon"
+    label = right
   }
   edge {
-    from = "md://CHANGELOG.md#changelog.0-4-0-2026-05-11.fixed"
-    to = "pxf://examples/simple/layers/base.pxf"
-    mention = "base.pxf"
+    from = "md://examples/simple/README.md#examples-simple"
+    to = "go://github.com/trendvidia/chameleon/cmd/chameleon"
+    mention = "cmd/chameleon"
+    label = right
+  }
+  edge {
+    from = "md://ROADMAP.md#roadmap.milestone-1-v0-6-0-chameleon-internal-cheap"
+    to = "go://github.com/trendvidia/sops/v4"
+    mention = "github.com/trendvidia/sops/v4"
     label = right
   }
   edge {
@@ -54,25 +121,205 @@ repo {
     label = right
   }
   edge {
+    from = "md://examples/simple/README.md#examples-simple"
+    to = "go://github.com/trendvidia/chameleon/examples/buf"
+    mention = "examples/buf/"
+    label = right
+  }
+  edge {
     from = "md://CHANGELOG.md#changelog.0-4-0-2026-05-11.added"
     to = "proto://chameleon.v1.LayerHeader.environment"
     mention = "environment"
     label = right
   }
+  edge {
+    from = "md://CHANGELOG.md#changelog.0-14-3-2026-05-14.fixed"
+    to = "go://github.com/trendvidia/chameleon/cmd/chameleon#explainCmd"
+    mention = "explainCmd"
+    label = right
+  }
+  edge {
+    from = "md://CHANGELOG.md#changelog.0-14-4-2026-05-14.added"
+    to = "go://github.com/trendvidia/chameleon/parse#Move"
+    mention = "parse.Move"
+    label = right
+  }
+  edge {
+    from = "md://CHANGELOG.md#changelog.0-23-0-2026-08-10.changed"
+    to = "go://github.com/trendvidia/chameleon/defaults"
+    mention = "defaults"
+    label = right
+  }
+  edge {
+    from = "md://CHANGELOG.md#changelog.0-18-0-2026-05-23.added"
+    to = "go://github.com/trendvidia/chameleon/internal/secretcatalog"
+    mention = "internal/secretcatalog"
+    label = right
+  }
+  edge {
+    from = "md://CHANGELOG.md#changelog.0-18-0-2026-05-23.added"
+    to = "proto://chameleon.v1.BundleManifest.Module.deny"
+    mention = "deny"
+    label = right
+  }
+  edge {
+    from = "md://CHANGELOG.md#changelog.0-4-0-2026-05-11.added"
+    to = "proto://chameleon.v1.LayerHeader.notes"
+    mention = "notes"
+    label = right
+  }
+  edge {
+    from = "md://ROADMAP.md#roadmap.public-api-surface-at-v1-0.github-com-trendvidia-chameleon-resolver"
+    to = "go://github.com/trendvidia/chameleon/resolver#Request"
+    mention = "Request"
+    label = right
+  }
+  edge {
+    from = "md://CHANGELOG.md#changelog.0-11-0-2026-05-12.tests"
+    to = "go://github.com/trendvidia/chameleon/cmd/protoc-gen-chameleon-go#goTypeForMapKey"
+    mention = "goTypeForMapKey"
+    label = right
+  }
+  edge {
+    from = "md://CHANGELOG.md#changelog.0-10-0-2026-05-12.changed"
+    to = "go://github.com/trendvidia/chameleon/defaults"
+    mention = "defaults"
+    label = right
+  }
+  edge {
+    from = "md://ROADMAP.md#roadmap.public-api-surface-at-v1-0.github-com-trendvidia-chameleon-top-level-convenience"
+    to = "go://github.com/trendvidia/chameleon"
+    mention = "github.com/trendvidia/chameleon"
+    label = right
+  }
+  edge {
+    from = "md://docs/proposals/0001-env-source.md#proposal-0001-kind-env-source.what-landed"
+    to = "go://github.com/trendvidia/chameleon/cmd/chameleon"
+    mention = "cmd/chameleon"
+    label = right
+  }
+  edge {
+    from = "md://CHANGELOG.md#changelog.0-13-0-2026-05-13.added"
+    to = "go://github.com/trendvidia/chameleon/crypt#Decrypter.Decrypt"
+    mention = "Decrypter.Decrypt"
+    label = right
+  }
+  edge {
+    from = "md://CHANGELOG.md#changelog.0-11-0-2026-05-12.added"
+    to = "go://github.com/trendvidia/chameleon/cmd/chameleon#explainCmd"
+    mention = "explainCmd"
+    label = right
+  }
+  edge {
+    from = "md://CHANGELOG.md#changelog.0-11-0-2026-05-12.notes-for-upgraders"
+    to = "go://github.com/trendvidia/chameleon/resolver#Resolver.Resolve"
+    mention = "resolver.Resolve"
+    label = right
+  }
+  edge {
+    from = "md://CHANGELOG.md#changelog.0-23-0-2026-08-10.added"
+    to = "go://github.com/trendvidia/chameleon/crypt#Registered"
+    mention = "Registered"
+    label = right
+  }
+  edge {
+    from = "md://ROADMAP.md#roadmap.public-api-surface-at-v1-0.github-com-trendvidia-chameleon-resolver"
+    to = "go://github.com/trendvidia/chameleon/resolver#WithMeterProvider"
+    mention = "WithMeterProvider"
+    label = right
+  }
 }
+
+repo {
+  name = "goasm"
+  commit = "6372073dce8f1fea8d50b6173a9d7c87dfab9e94"
+  edge {
+    from = "md://README.md#goasm.as-a-library"
+    to = "go://github.com/trendvidia/goasm/template#Parser.Parse"
+    mention = "Parse"
+    label = right
+  }
+}
+
+repo {
+  name = "protocompile"
+  commit = "1dbe2800cfc9295ef0a88ff0e6e06face7ecc6b6"
+  edge {
+    from = "md://README.md#protocompile.using-this-repo.migrating-from-protoparse"
+    to = "go://github.com/trendvidia/protocompile/internal/protoc"
+    mention = "protoc"
+    label = wrong
+    why = "Google's protoc compiler, not this internal package"
+  }
+}
+
 repo {
   name = "protoregistry"
-  commit = "608c66544a7e4b4b6152d2ef1064173f0939b6b2"
+  commit = "215be987fd73c0bce337d20ba82f9da57f9204e3"
+  edge {
+    from = "md://CONTRIBUTING.md#contributing.review-and-merge.escrow-pipeline-for-new-contributors"
+    to = "go://github.com/trendvidia/protoregistry/server"
+    mention = "server/"
+    label = right
+  }
+  edge {
+    from = "md://STABILITY.md#stability.public-surfaces"
+    to = "go://github.com/trendvidia/protoregistry/snapshot"
+    mention = "snapshot/"
+    label = right
+  }
   edge {
     from = "md://docs/design/namespace-hierarchy.md#namespace-hierarchy-and-chained-resolution.design-decisions.d9-re-parenting-events-are-recorded-in-an-append-only-audit-log"
     to = "sql://table/namespace_parent_events"
     mention = "namespace_parent_events"
     label = right
   }
+  edge {
+    from = "md://STABILITY.md#stability.storage"
+    to = "sql://column/schema_versions.compiler_version"
+    mention = "compiler_version"
+    label = right
+  }
+  edge {
+    from = "md://docs/design/namespace-hierarchy.md#namespace-hierarchy-and-chained-resolution.summary"
+    to = "go://github.com/trendvidia/protoregistry/client#WithFallback"
+    mention = "WithFallback"
+    label = right
+  }
+  edge {
+    from = "md://README.md#protoregistry.go-client-sdk"
+    to = "go://github.com/trendvidia/protoregistry/resolve"
+    mention = "resolve"
+    label = right
+  }
+  edge {
+    from = "md://docs/design/namespace-hierarchy.md#namespace-hierarchy-and-chained-resolution.phasing"
+    to = "sql://table/namespace_parent_events"
+    mention = "namespace_parent_events"
+    label = right
+  }
+  edge {
+    from = "md://CHANGELOG.md#changelog.0-70-0-2026-05-06.changed"
+    to = "go://github.com/trendvidia/protoregistry/server#New"
+    mention = "server.New"
+    label = right
+  }
 }
+
+repo {
+  name = "protovalidate"
+  commit = "90182160b60c546a704befcee2958ac0f6a73868"
+  edge {
+    from = "md://examples/README.md#examples.custom-rules"
+    to = "proto://file/examples/cel_field_access.proto"
+    mention = "cel_field_access.proto"
+    label = right
+  }
+}
+
 repo {
   name = "protowire-go"
-  commit = "0cbf9a9ec1d8d6839e3b42cecac64cf00d0a90a7"
+  commit = "ae65d4fab0a8f254522cd31180ccd2b54a05590d"
   edge {
     from = "md://SECURITY.md#security-policy.scope"
     to = "go://github.com/trendvidia/protowire-go/envelope"
@@ -86,9 +333,81 @@ repo {
     label = right
   }
   edge {
+    from = "md://CHANGELOG.md#changelog.1-8-1-2026-09-10.changed"
+    to = "go://github.com/trendvidia/protocompile"
+    mention = "github.com/trendvidia/protocompile"
+    label = right
+  }
+  edge {
     from = "md://CHANGELOG.md#changelog.1-6-0-2026-09-07.security"
     to = "go://github.com/trendvidia/protowire-go/encoding/pxf#UnmarshalOptions"
     mention = "pxf.UnmarshalOptions"
+    label = right
+  }
+  edge {
+    from = "md://CHANGELOG.md#changelog.0-77-0-2026-05-12.changed"
+    to = "go://github.com/trendvidia/protowire-go/encoding/pxf#directDecoder.decodeSecretBlockInto"
+    mention = "decodeSecretBlockInto"
+    label = right
+  }
+  edge {
+    from = "md://CHANGELOG.md#changelog.1-2-0-2026-07-09.added"
+    to = "go://github.com/trendvidia/protowire-go/encoding/pxf"
+    mention = "encoding/pxf"
+    label = right
+  }
+  edge {
+    from = "md://CHANGELOG.md#changelog.1-3-1-2026-07-24.added"
+    to = "go://github.com/trendvidia/protowire-go/encoding/sbe#CodecOptions.NewCodec"
+    mention = "CodecOptions.NewCodec"
+    label = right
+  }
+  edge {
+    from = "md://CHANGELOG.md#changelog.0-77-0-2026-05-12.changed"
+    to = "go://github.com/trendvidia/protowire-go/encoding/pxf#directDecoder.decodeFields"
+    mention = "decodeFields"
+    label = right
+  }
+  edge {
+    from = "md://CHANGELOG.md#changelog.0-70-0-2026-05-06.added"
+    to = "go://github.com/trendvidia/protowire-go/envelope"
+    mention = "envelope"
+    label = right
+  }
+  edge {
+    from = "md://CHANGELOG.md#changelog.0-77-0-2026-05-12.changed"
+    to = "go://github.com/trendvidia/protowire-go/encoding/pxf#Result"
+    mention = "Result"
+    label = right
+  }
+  edge {
+    from = "md://CHANGELOG.md#changelog.1-4-0-2026-08-09.added"
+    to = "go://github.com/trendvidia/protowire-go/encoding/pxf#ViolationDefaultOption"
+    mention = "ViolationDefaultOption"
+    label = right
+  }
+  edge {
+    from = "md://CHANGELOG.md#changelog.1-3-0-2026-07-17"
+    to = "go://github.com/trendvidia/protowire-go/encoding/pxf"
+    mention = "encoding/pxf"
+    label = right
+  }
+  edge {
+    from = "md://CHANGELOG.md#changelog.1-8-0-2026-09-10"
+    to = "go://github.com/trendvidia/protowire-go/encoding/pxf#FormatDocument"
+    mention = "FormatDocument"
+    label = right
+  }
+  edge {
+    from = "md://CHANGELOG.md#changelog.1-4-1-2026-08-15"
+    to = "go://github.com/trendvidia/protowire-go/encoding/pxf#Marshal"
+    mention = "pxf.Marshal"
+    label = right
+  }
+  edge {
+    from = "md://CHANGELOG.md#changelog.1-3-0-2026-07-17.added"
+    to = "go://github.com/trendvidia/protowire-go/encoding/pxf#IsKeyed"
+    mention = "IsKeyed"
     label = right
   }
 }

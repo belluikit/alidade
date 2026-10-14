@@ -6,6 +6,16 @@ is not public.
 
 ## Unreleased
 
+- **Changed: the Markdown layer's hand-labelled samples are drawn from
+  public repositories** (#2). The samples that measured `documents` edges
+  came mostly from private repositories and could not be published. They
+  are drawn again, by rule, from nine public ones, and labelled by
+  reading: 54 of 58 edges right (0.931, where the earlier sample gave
+  0.914); 32 of 40 right for a bare lowercase word naming a nested
+  declaration; and 12 of the 24 code spans that name a declaration are
+  linked (0.50, where the earlier sample gave 27 of 34). The 12 missed
+  are in #7. `TestDrawSamples` draws the items.
+
 - **Fixed: adding or removing a Python file reran jedi on hundreds of
   files that could not have changed** (#281). A file kept jedi's answers
   only if no file had appeared or gone away under any directory name it

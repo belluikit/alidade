@@ -1,221 +1,816 @@
-# Markdown recall, hand-labelled (#189).
+# Markdown recall, hand-labelled (#2).
 #
 # The precision samples are drawn from the documents edges the layer
 # made; this one is drawn from what the docs say. Its population is every
-# inline code span outside fenced blocks in the Markdown files the layer
-# reads: 36,773 spans in the 16 repositories checked out beside alidade
-# on 2026-10-08. 120 were drawn, allotted in proportion to each
-# repository's count and taken in order of the SHA-256 of
-# "repo|file|line|span". Each was labelled by reading its sentence and
-# searching the repository:
+# distinct inline code span of a section, outside fenced blocks, in the
+# Markdown files the layer reads: 7,200 in the nine public repositories
+# of markdown-sample.pxf on 2026-10-14. 120 were drawn by TestDrawSamples,
+# allotted in proportion to each repository's count and taken in order of
+# the SHA-256 of "repo|section|span". Each was labelled by reading its
+# sentence and searching the repository:
 #
 #   declaration  names the declaration in "to", a node of the graph;
 #   nonode       names a declaration of the repository the graph has no
 #                node for;
 #   test         names a test function, absent from the default graph;
 #   external     names a declaration outside the repository;
-#   gone         names a declaration the code no longer has;
+#   gone         names a declaration the code does not have: removed, or
+#                only proposed;
 #   unclear      a reader cannot tell which declaration, if any;
 #   not          names no declaration: a command, flag, value, path,
-#                route, keyword, or a file name used as a concept.
+#                route, keyword, tool name, or a file name used as a
+#                concept.
 #
-# Recall is the share of declaration spans whose section has a documents
-# edge to "to", whatever span the edge records: the linker keeps one edge
-# per section and target.
+# 24 are declarations, 22 external, 3 gone, 1 unclear and 70 not. Recall
+# is the share of declaration spans whose section has a documents edge to
+# "to", whatever span the edge records: the linker keeps one edge per
+# section and target.
 #
-# Relabelled 2026-10-08 with #193: Go struct fields became nodes, so the
-# two fields labelled nonode are declarations; and `Halted` and
-# `Uncomparable`, labelled not after a search whose \b the regex engine
-# did not honour, are a field and an unclear one of four fields.
-#
-# TestOracleGoCalls (scripts/oracle.sh) re-reads
-# the sample for every repository checked out at its commit.
-#
-# Published here: the 19 of the 120 spans that are of public repositories
-# (chameleon, protocompile, protoregistry, protovalidate, protowire-go). The others were labelled on in-house
-# repositories and are not in this file; every figure above is of the
-# whole sample.
+# TestOracleGoCalls (scripts/oracle.sh) re-reads the sample for every
+# repository checked out at its commit. This sample replaces one of the
+# same size drawn on 2026-10-08 from 16 repositories, most of them
+# private.
+
+repo {
+  name = "alidade"
+  commit = "5b8255e026cb3ef8bae48addbe022f28ebee0a2e"
+  span {
+    file = "docs/adr/007-frontend-layer.md"
+    section = "md://docs/adr/007-frontend-layer.md#adr-007-frontend-layer-typescript-and-svelte-at-file-granularity-joined-to-proto-through-protoc-gen-es.amended-2026-10-09-a-sveltekit-app-never-synced-is-read-under-the-config-sveltekit-would-generate-232-the-owner-s-decision"
+    text = "./.svelte-kit/tsconfig.json"
+    label = not
+  }
+  span {
+    file = "docs/adr/003-corpus-scope.md"
+    section = "md://docs/adr/003-corpus-scope.md#adr-003-corpus-scope-five-formats-and-what-is-deliberately-excluded.what-we-are-accepting"
+    text = ".tsv"
+    label = not
+  }
+  span {
+    file = "CHANGELOG.md"
+    section = "md://CHANGELOG.md#changelog.v0-7-0-2026-10-07"
+    text = "Outside"
+    label = declaration
+    to = "go://github.com/trendvidia/alidade/internal/adapter/ts#Report.Outside"
+  }
+  span {
+    file = "docs/adr/008-python-engine.md"
+    section = "md://docs/adr/008-python-engine.md#adr-008-python-cpython-embedded-jedi-as-the-engine-for-calls.the-layer-decided-2026-10-09-the-owner-s-four-calls-on-237"
+    text = "scripts/pytrace.sh"
+    label = not
+  }
+  span {
+    file = "docs/usage.md"
+    section = "md://docs/usage.md#using-alidade.the-tools"
+    text = "app.users"
+    label = not
+  }
+  span {
+    file = "CHANGELOG.md"
+    section = "md://CHANGELOG.md#changelog.unreleased"
+    text = ".venv"
+    label = not
+  }
+  span {
+    file = "docs/adr/007-frontend-layer.md"
+    section = "md://docs/adr/007-frontend-layer.md#adr-007-frontend-layer-typescript-and-svelte-at-file-granularity-joined-to-proto-through-protoc-gen-es.decision.why-esbuild-and-not-an-import-regex"
+    text = "$lib"
+    label = not
+  }
+  span {
+    file = "docs/usage.md"
+    section = "md://docs/usage.md#using-alidade.flags"
+    text = "graph_stats"
+    label = not
+  }
+  span {
+    file = "docs/building.md"
+    section = "md://docs/building.md#building-alidade-from-source.compilers"
+    text = "CC=clang CXX=clang++"
+    label = not
+  }
+  span {
+    file = "README.md"
+    section = "md://README.md#alidade.why-alidade.one-question-can-cross-layers"
+    text = "bundler#unionRecipients"
+    label = external
+  }
+  span {
+    file = "docs/adr/007-frontend-layer.md"
+    section = "md://docs/adr/007-frontend-layer.md#adr-007-frontend-layer-typescript-and-svelte-at-file-granularity-joined-to-proto-through-protoc-gen-es.decision.why-esbuild-and-not-an-import-regex"
+    text = "tsconfig"
+    label = not
+  }
+  span {
+    file = "docs/adr/007-frontend-layer.md"
+    section = "md://docs/adr/007-frontend-layer.md#adr-007-frontend-layer-typescript-and-svelte-at-file-granularity-joined-to-proto-through-protoc-gen-es.decision.why-esbuild-s-resolver-and-not-its-bundler"
+    text = "PluginBuild.Resolve"
+    label = external
+  }
+  span {
+    file = "docs/adr/002-node-identity.md"
+    section = "md://docs/adr/002-node-identity.md#adr-002-node-identity-declaration-anchored-never-positional.why-7-and-8-went-that-way"
+    text = "-"
+    label = not
+  }
+  span {
+    file = "CHANGELOG.md"
+    section = "md://CHANGELOG.md#changelog.v0-7-0-2026-10-07"
+    text = "go_test_module_edges"
+    label = not
+  }
+  span {
+    file = "docs/adr/002-node-identity.md"
+    section = "md://docs/adr/002-node-identity.md#adr-002-node-identity-declaration-anchored-never-positional.decision"
+    text = "goasm://jit/templates/arm64.goasm#AddLocalsInt"
+    label = external
+  }
+  span {
+    file = "CHANGELOG.md"
+    section = "md://CHANGELOG.md#changelog.v0-5-0-2026-09-12"
+    text = "ALTER TABLE ... ADD COLUMN"
+    label = not
+  }
+  span {
+    file = "docs/adr/003-corpus-scope.md"
+    section = "md://docs/adr/003-corpus-scope.md#adr-003-corpus-scope-five-formats-and-what-is-deliberately-excluded.amendment-2026-09-11-a-sixth-format-goasm"
+    text = ".proto → .pb.go"
+    label = not
+  }
+  span {
+    file = "docs/adr/002-node-identity.md"
+    section = "md://docs/adr/002-node-identity.md#adr-002-node-identity-declaration-anchored-never-positional.decision"
+    text = "@protolsp/"
+    label = not
+  }
+  span {
+    file = "docs/adr/003-corpus-scope.md"
+    section = "md://docs/adr/003-corpus-scope.md#adr-003-corpus-scope-five-formats-and-what-is-deliberately-excluded.what-we-are-accepting"
+    text = ".md"
+    label = not
+  }
+  span {
+    file = "docs/usage.md"
+    section = "md://docs/usage.md#using-alidade.what-the-edges-mean"
+    text = "exclude_generated"
+    label = not
+  }
+  span {
+    file = "docs/adr/008-python-engine.md"
+    section = "md://docs/adr/008-python-engine.md#adr-008-python-cpython-embedded-jedi-as-the-engine-for-calls.the-layer-decided-2026-10-09-the-owner-s-four-calls-on-237"
+    text = "internal/oracle"
+    label = declaration
+    to = "go://github.com/trendvidia/alidade/internal/oracle"
+  }
+  span {
+    file = "docs/adr/007-frontend-layer.md"
+    section = "md://docs/adr/007-frontend-layer.md#adr-007-frontend-layer-typescript-and-svelte-at-file-granularity-joined-to-proto-through-protoc-gen-es.context.the-corpus"
+    text = "<script lang=\"ts\">"
+    label = not
+  }
+  span {
+    file = "CHANGELOG.md"
+    section = "md://CHANGELOG.md#changelog.v0-7-0-2026-10-07"
+    text = "go://testing"
+    label = external
+  }
+  span {
+    file = "docs/adr/008-python-engine.md"
+    section = "md://docs/adr/008-python-engine.md#adr-008-python-cpython-embedded-jedi-as-the-engine-for-calls.the-layer-decided-2026-10-09-the-owner-s-four-calls-on-237"
+    text = "go"
+    label = external
+  }
+  span {
+    file = "CONTRIBUTING.md"
+    section = "md://CONTRIBUTING.md#contributing-to-alidade.what-makes-a-good-change"
+    text = "scripts/oracle.sh"
+    label = not
+  }
+}
+
+repo {
+  name = "caliper"
+  commit = "b5619f651fb7cfec7b7c514a47382c9ca0a60888"
+  span {
+    file = "docs/getting-started.md"
+    section = "md://docs/getting-started.md#getting-started-with-caliper.connecting-to-ai-coding-assistants.zed"
+    text = "~/.config/zed/settings.json"
+    label = not
+  }
+  span {
+    file = "ROADMAP.md"
+    section = "md://ROADMAP.md#caliper-roadmap.phase-2-complete-mcp-tool-implementations.cleanup-inserter"
+    text = "f, err := os.Open(...); if err != nil { return err }; defer f.Close()"
+    label = not
+  }
+  span {
+    file = "README.md"
+    section = "md://README.md#caliper.tools.pattern-matching-exploration"
+    text = "go"
+    label = not
+  }
+  span {
+    file = "ROADMAP.md"
+    section = "md://ROADMAP.md#caliper-roadmap.phase-1-complete-core-engine.isomorphisms"
+    text = "sync.Mutex"
+    label = external
+  }
+  span {
+    file = "README.md"
+    section = "md://README.md#caliper.tools.pattern-matching-exploration"
+    text = "inside"
+    label = not
+  }
+  span {
+    file = "ROADMAP.md"
+    section = "md://ROADMAP.md#caliper-roadmap.phase-4-advanced-analysis.inter-procedural-analysis"
+    text = "sql.Query"
+    label = external
+  }
+  span {
+    file = "CHANGELOG.md"
+    section = "md://CHANGELOG.md#changelog.v1-1-1-2026-07-29.fixed"
+    text = "go install"
+    label = not
+  }
+  span {
+    file = "ROADMAP.md"
+    section = "md://ROADMAP.md#caliper-roadmap.operational-quality.consolidate-find-unchecked-error-and-find-error-swallow"
+    text = "UncheckedError"
+    label = declaration
+    to = "go://github.com/trendvidia/caliper/pkg/analysis/templates#UncheckedError"
+  }
+  span {
+    file = "CHANGELOG.md"
+    section = "md://CHANGELOG.md#changelog.v1-6-0-2026-10-05.added"
+    text = "Engine.Failed()"
+    label = declaration
+    to = "go://github.com/trendvidia/caliper/pkg/analysis#Engine.Failed"
+  }
+  span {
+    file = "README.md"
+    section = "md://README.md#caliper.llm-effective-usage.what-works-well-via-llm"
+    text = "find_type_usage"
+    label = not
+  }
+  span {
+    file = "ROADMAP.md"
+    section = "md://ROADMAP.md#caliper-roadmap.operational-quality.pre-existing-analyzer-gaps-surfaced-this-session"
+    text = "find_unchecked_error"
+    label = not
+  }
+}
 
 repo {
   name = "chameleon"
-  commit = "92b5cc452ca9c22fb4c8286f253f8fd24e3009c6"
-
+  commit = "4fdf31cce23295a4362f398d11555fc83ac4ec12"
+  span {
+    file = "README.md"
+    section = "md://README.md#chameleon.working-with-secrets.inspecting-at-resolve-time"
+    text = "--bundle=\"$VAR\""
+    label = not
+  }
+  span {
+    file = "README.md"
+    section = "md://README.md#chameleon.limitations-known-issues"
+    text = "protoc-gen-chameleon-go"
+    label = declaration
+    to = "go://github.com/trendvidia/chameleon/cmd/protoc-gen-chameleon-go"
+  }
   span {
     file = "CHANGELOG.md"
-    line = 248
-    section = "md://CHANGELOG.md#changelog.0-24-0-2026-08-10.changed"
+    section = "md://CHANGELOG.md#changelog.0-12-0-2026-05-12.added-codegen"
+    text = "go_package"
+    label = not
+  }
+  span {
+    file = "README.md"
+    section = "md://README.md#chameleon.distribution-bundles.consuming"
+    text = "Chain"
+    label = declaration
+    to = "go://github.com/trendvidia/chameleon/bundle#Bundle.Chain"
+  }
+  span {
+    file = "docs/RELEASING.md"
+    section = "md://docs/RELEASING.md#releasing"
+    text = "cmd/chameleon/vX.Y.Z"
+    label = not
+  }
+  span {
+    file = "ROADMAP.md"
+    section = "md://ROADMAP.md#roadmap.public-api-surface-at-v1-0.cli-binaries-stable"
+    text = "bundle build"
+    label = not
+  }
+  span {
+    file = "ROADMAP.md"
+    section = "md://ROADMAP.md#roadmap.other-deferred-items.resolver-time-content-sha256-verification"
+    text = "@header.content_sha256"
+    label = declaration
+    to = "proto://chameleon.v1.LayerHeader.content_sha256"
+  }
+  span {
+    file = "CHANGELOG.md"
+    section = "md://CHANGELOG.md#changelog.0-21-0-2026-06-01.changed"
+    text = "SOPS_AGE_KEY"
+    label = not
+  }
+  span {
+    file = "CHANGELOG.md"
+    section = "md://CHANGELOG.md#changelog.0-12-0-2026-05-12.notes-for-upgraders"
+    text = "*dynamicpb.Message"
+    label = external
+  }
+  span {
+    file = "CHANGELOG.md"
+    section = "md://CHANGELOG.md#changelog.0-23-0-2026-08-10.changed"
+    text = "go list -deps"
+    label = not
+  }
+  span {
+    file = "CHANGELOG.md"
+    section = "md://CHANGELOG.md#changelog.0-23-0-2026-08-10.fixed"
+    text = "\"yes\""
+    label = not
+  }
+  span {
+    file = "CHANGELOG.md"
+    section = "md://CHANGELOG.md#changelog.0-4-0-2026-05-11.added"
+    text = "insteadOf"
+    label = not
+  }
+  span {
+    file = "docs/proposals/0001-env-source.md"
+    section = "md://docs/proposals/0001-env-source.md#proposal-0001-kind-env-source.design-points-need-decisions.2-type-coercion"
+    text = "ParseUint"
+    label = external
+  }
+  span {
+    file = "docs/RELEASING.md"
+    section = "md://docs/RELEASING.md#releasing.local-development"
+    text = "replace"
+    label = not
+  }
+  span {
+    file = "CHANGELOG.md"
+    section = "md://CHANGELOG.md#changelog.0-20-0-2026-05-26.added"
+    text = "attribute_allow: [\"public.*\"]"
+    label = not
+  }
+  span {
+    file = "README.md"
+    section = "md://README.md#chameleon.working-with-secrets.encrypting-layers.naming-the-encryption-key-per-environment"
+    text = "BundleManifest"
+    label = declaration
+    to = "proto://chameleon.v1.BundleManifest"
+  }
+  span {
+    file = "CHANGELOG.md"
+    section = "md://CHANGELOG.md#changelog.0-10-0-2026-05-12.added"
+    text = "chain.ParseSpec"
+    label = declaration
+    to = "go://github.com/trendvidia/chameleon/chain#ParseSpec"
+  }
+  span {
+    file = "docs/proposals/0001-env-source.md"
+    section = "md://docs/proposals/0001-env-source.md#proposal-0001-kind-env-source.implementation-surface-sketch-no-code"
+    text = "EnvSource"
+    label = gone
+  }
+  span {
+    file = "README.md"
+    section = "md://README.md#chameleon.compatibility"
+    text = "chameleon/sops"
+    label = declaration
+    to = "go://github.com/trendvidia/chameleon/sops"
+  }
+  span {
+    file = "CHANGELOG.md"
+    section = "md://CHANGELOG.md#changelog.0-24-0-2026-08-10.internal"
+    text = "202ae0e"
+    label = not
+  }
+  span {
+    file = "CHANGELOG.md"
+    section = "md://CHANGELOG.md#changelog.0-23-0-2026-08-10.changed"
+    text = "github.com/trendvidia/chameleon/cmd/chameleon"
+    label = declaration
+    to = "go://github.com/trendvidia/chameleon/cmd/chameleon"
+  }
+  span {
+    file = "CHANGELOG.md"
+    section = "md://CHANGELOG.md#changelog.0-23-0-2026-08-10.added"
+    text = "--schema"
+    label = not
+  }
+  span {
+    file = "CHANGELOG.md"
+    section = "md://CHANGELOG.md#changelog.0-13-0-2026-05-13.added"
+    text = "examples/simple/README.md"
+    label = not
+  }
+  span {
+    file = "CHANGELOG.md"
+    section = "md://CHANGELOG.md#changelog.0-14-0-2026-05-14.added"
+    text = "ci"
+    label = not
+  }
+  span {
+    file = "CHANGELOG.md"
+    section = "md://CHANGELOG.md#changelog.0-23-0-2026-08-10.changed"
+    text = "go.mod"
+    label = not
+  }
+  span {
+    file = "CHANGELOG.md"
+    section = "md://CHANGELOG.md#changelog.0-24-0-2026-08-10.internal"
+    text = "go.mod"
+    label = not
+  }
+  span {
+    file = "CHANGELOG.md"
+    section = "md://CHANGELOG.md#changelog.0-14-0-2026-05-14.added"
+    text = "check"
+    label = not
+  }
+  span {
+    file = "CHANGELOG.md"
+    section = "md://CHANGELOG.md#changelog.0-10-0-2026-05-12.notes-for-upgraders"
+    text = "reset"
+    label = not
+  }
+  span {
+    file = "README.md"
+    section = "md://README.md#chameleon.working-with-secrets.accessing-secrets-in-code-three-rules"
+    text = "cfg.Field.Value"
+    label = not
+  }
+  span {
+    file = "CHANGELOG.md"
+    section = "md://CHANGELOG.md#changelog.0-20-0-2026-05-26.added"
+    text = "chameleon migrate"
+    label = not
+  }
+  span {
+    file = "CHANGELOG.md"
+    section = "md://CHANGELOG.md#changelog.0-5-0-2026-05-11.changed"
+    text = "Document.BodyOffset"
+    label = external
+  }
+  span {
+    file = "CHANGELOG.md"
+    section = "md://CHANGELOG.md#changelog.0-1-0-2026-05-10.added"
+    text = "Resolution.Destroy"
+    label = declaration
+    to = "go://github.com/trendvidia/chameleon/resolver#Resolution.Destroy"
+  }
+  span {
+    file = "CHANGELOG.md"
+    section = "md://CHANGELOG.md#changelog.0-14-0-2026-05-14.added"
+    text = "fmt-check"
+    label = not
+  }
+  span {
+    file = "CHANGELOG.md"
+    section = "md://CHANGELOG.md#changelog.0-4-0-2026-05-11.added"
+    text = "@<directive>"
+    label = not
+  }
+  span {
+    file = "README.md"
+    section = "md://README.md#chameleon.distribution-bundles.debugging-a-bundle-from-the-cli"
+    text = "--chain"
+    label = not
+  }
+  span {
+    file = "ROADMAP.md"
+    section = "md://ROADMAP.md#roadmap.public-api-surface-at-v1-0.github-com-trendvidia-chameleon-sops"
+    text = "\"sops\""
+    label = not
+  }
+  span {
+    file = "CHANGELOG.md"
+    section = "md://CHANGELOG.md#changelog.0-9-0-2026-05-12.changed"
+    text = "proto.Message"
+    label = external
+  }
+  span {
+    file = "ROADMAP.md"
+    section = "md://ROADMAP.md#roadmap.public-api-surface-at-v1-0.github-com-trendvidia-chameleon-validate"
+    text = "Validate(msg, present) error"
+    label = declaration
+    to = "go://github.com/trendvidia/chameleon/validate#Validate"
+  }
+  span {
+    file = "CHANGELOG.md"
+    section = "md://CHANGELOG.md#changelog.0-23-0-2026-08-10.changed"
+    text = "source"
+    label = declaration
+    to = "go://github.com/trendvidia/chameleon/source"
+  }
+  span {
+    file = "CHANGELOG.md"
+    section = "md://CHANGELOG.md#changelog.0-23-0-2026-08-10.deprecated"
+    text = "sops.Err*"
+    label = unclear
+  }
+  span {
+    file = "README.md"
+    section = "md://README.md#chameleon.observability.chameleon-check-schema-cli.checking-a-whole-schema-repo.skipping-part-of-the-tree"
     text = "--exclude"
     label = not
   }
-
   span {
     file = "CHANGELOG.md"
-    line = 429
-    section = "md://CHANGELOG.md#changelog.0-23-0-2026-08-10.changed"
-    text = "chameleon.Load"
-    label = declaration
-    to = "go://github.com/trendvidia/chameleon#Load"
-  }
-
-  span {
-    file = "CHANGELOG.md"
-    line = 556
-    section = "md://CHANGELOG.md#changelog.0-23-0-2026-08-10.fixed"
-    text = "repeated"
-    label = not
-  }
-
-  span {
-    file = "CHANGELOG.md"
-    line = 646
-    section = "md://CHANGELOG.md#changelog.0-20-0-2026-05-26.added"
-    text = ".pxf"
-    label = not
-  }
-
-  span {
-    file = "CHANGELOG.md"
-    line = 1158
     section = "md://CHANGELOG.md#changelog.0-14-1-2026-05-14.fixed"
-    text = "/* */"
+    text = "cmd/chameleon/testdata/src/genpkg/"
     label = not
   }
+}
 
-  span {
-    file = "CHANGELOG.md"
-    line = 1182
-    section = "md://CHANGELOG.md#changelog.0-14-0-2026-05-14.changed"
-    text = "chameleon-lint"
-    label = not
-  }
-
-  span {
-    file = "CHANGELOG.md"
-    line = 1803
-    section = "md://CHANGELOG.md#changelog.0-9-0-2026-05-12.what-v0-9-0-closes"
-    text = "cfg.DbPassword.Value"
-    label = not
-  }
-
+repo {
+  name = "goasm"
+  commit = "6372073dce8f1fea8d50b6173a9d7c87dfab9e94"
   span {
     file = "README.md"
-    line = 323
-    section = "md://README.md#chameleon.observability.chameleon-cli"
-    text = "--base64"
+    section = "md://README.md#goasm.as-a-library"
+    text = "gen.NewGenerator"
+    label = declaration
+    to = "go://github.com/trendvidia/goasm/gen#NewGenerator"
+  }
+  span {
+    file = "README.md"
+    section = "md://README.md#goasm"
+    text = "e.EmitLoadSlot(n)"
     label = not
   }
-
-  span {
-    file = "docs/proposals/0001-env-source.md"
-    line = 67
-    section = "md://docs/proposals/0001-env-source.md#proposal-0001-kind-env-source.design-points-need-decisions.2-type-coercion"
-    text = "time.ParseDuration"
-    label = external
-  }
-
 }
 
 repo {
   name = "protocompile"
   commit = "1dbe2800cfc9295ef0a88ff0e6e06face7ecc6b6"
-
   span {
-    file = "CONTRIBUTING.md"
-    line = 53
-    section = "md://CONTRIBUTING.md#contributing-to-trendvidia-protocompile.local-ci-is-the-gate-cloud-ci-is-the-exception.when-cloud-ci-fires-automatically"
-    text = ".proto"
-    label = not
+    file = "README.md"
+    section = "md://README.md#protocompile.using-this-repo.migrating-from-protoparse"
+    text = "parser.ResultFromAST"
+    label = gone
   }
-
+  span {
+    file = "FORK.md"
+    section = "md://FORK.md#fork-notice.maintenance-policy.skipping-the-wrong-upstream-commits"
+    text = "AnnotationDeclNode"
+    label = gone
+  }
+  span {
+    file = "README.md"
+    section = "md://README.md#protocompile"
+    text = "github.com/jhump/protoreflect/desc/protoparse"
+    label = external
+  }
 }
 
 repo {
   name = "protoregistry"
-  commit = "608c66544a7e4b4b6152d2ef1064173f0939b6b2"
-
+  commit = "215be987fd73c0bce337d20ba82f9da57f9204e3"
   span {
-    file = "CHANGELOG.md"
-    line = 103
-    section = "md://CHANGELOG.md#changelog.0-71-0-2026-05-16.changed"
-    text = "rawDescriptorSet []byte"
-    label = declaration
-    to = "go://github.com/trendvidia/protoregistry/client#schemaSnapshot.rawDescriptorSet"
+    file = "STABILITY.md"
+    section = "md://STABILITY.md#stability.storage"
+    text = "FileDescriptorSet"
+    label = external
   }
-
   span {
     file = "docs/design/namespace-hierarchy.md"
-    line = 291
-    section = "md://docs/design/namespace-hierarchy.md#namespace-hierarchy-and-chained-resolution.data-model.database"
-    text = "SetNamespaceParent"
-    label = unclear
+    section = "md://docs/design/namespace-hierarchy.md#namespace-hierarchy-and-chained-resolution.design-decisions.d4-builtins-becomes-the-implicit-root"
+    text = "__builtins__"
+    label = not
   }
-
+  span {
+    file = "CHANGELOG.md"
+    section = "md://CHANGELOG.md#changelog.0-70-0-2026-05-06.added.security-and-operational-hardening"
+    text = "--yes"
+    label = not
+  }
+  span {
+    file = "docs/design/namespace-hierarchy.md"
+    section = "md://docs/design/namespace-hierarchy.md#namespace-hierarchy-and-chained-resolution.phasing"
+    text = "Registry.GetNamespaceChain"
+    label = declaration
+    to = "go://github.com/trendvidia/protoregistry#Registry.GetNamespaceChain"
+  }
+  span {
+    file = "CHANGELOG.md"
+    section = "md://CHANGELOG.md#changelog.0-70-0-2026-05-06.changed"
+    text = "errors.As"
+    label = external
+  }
+  span {
+    file = "README.md"
+    section = "md://README.md#protoregistry.cli-reference.global-flags"
+    text = "--tls-server-name"
+    label = not
+  }
+  span {
+    file = "README.md"
+    section = "md://README.md#protoregistry.go-client-sdk"
+    text = "client.New"
+    label = declaration
+    to = "go://github.com/trendvidia/protoregistry/client#New"
+  }
+  span {
+    file = "CHANGELOG.md"
+    section = "md://CHANGELOG.md#changelog.0-71-0-2026-05-16.added-client"
+    text = ".proto"
+    label = not
+  }
+  span {
+    file = "README.md"
+    section = "md://README.md#protoregistry.cli-reference.serve-flags"
+    text = ":50051"
+    label = not
+  }
+  span {
+    file = "docs/design/namespace-hierarchy.md"
+    section = "md://docs/design/namespace-hierarchy.md#namespace-hierarchy-and-chained-resolution.design-decisions.d1-linear-single-parent-hierarchy"
+    text = "child → parent → grandparent → ... → __builtins__ → Google WKT"
+    label = not
+  }
 }
 
 repo {
   name = "protovalidate"
   commit = "90182160b60c546a704befcee2958ac0f6a73868"
-
   span {
-    file = "tools/protovalidate-conformance/README.md"
-    line = 34
-    section = "md://tools/protovalidate-conformance/README.md#conformance-test-harness.flags"
-    text = "false"
+    file = "examples/README.md"
+    section = "md://examples/README.md#examples.custom-rules"
+    text = "cel_*.proto"
     label = not
   }
-
+  span {
+    file = ".github/CONTRIBUTING.md"
+    section = "md://.github/CONTRIBUTING.md#contributing-guidelines.validate-proto-invariants.example-fields"
+    text = "\"true\""
+    label = not
+  }
 }
 
 repo {
   name = "protowire-go"
-  commit = "0cbf9a9ec1d8d6839e3b42cecac64cf00d0a90a7"
-
+  commit = "ae65d4fab0a8f254522cd31180ccd2b54a05590d"
   span {
     file = "CHANGELOG.md"
-    line = 424
-    section = "md://CHANGELOG.md#changelog.1-6-0-2026-09-07.changed"
-    text = "bytes_value"
-    label = external
+    section = "md://CHANGELOG.md#changelog.1-7-0-2026-09-08"
+    text = "MapEntry"
+    label = declaration
+    to = "go://github.com/trendvidia/protowire-go/encoding/pxf#MapEntry"
   }
-
   span {
-    file = "CHANGELOG.md"
-    line = 461
-    section = "md://CHANGELOG.md#changelog.1-6-0-2026-09-07.changed"
-    text = "double x = 1 @default(1e10)"
+    file = "CODE_OF_CONDUCT.md"
+    section = "md://CODE_OF_CONDUCT.md#code-of-conduct.reporting"
+    text = "SECURITY.md"
     label = not
   }
-
   span {
     file = "CHANGELOG.md"
-    line = 1776
-    section = "md://CHANGELOG.md#changelog.1-0-0-2026-05-13.v1-0-spec-changes"
-    text = "TableReader"
-    label = gone
+    section = "md://CHANGELOG.md#changelog.1-1-0-2026-07-06.added"
+    text = "FormatDocument"
+    label = declaration
+    to = "go://github.com/trendvidia/protowire-go/encoding/pxf#FormatDocument"
   }
-
-  span {
-    file = "CHANGELOG.md"
-    line = 2022
-    section = "md://CHANGELOG.md#changelog.0-74-0-2026-05-12.added"
-    text = "@header"
-    label = not
-  }
-
-  span {
-    file = "CHANGELOG.md"
-    line = 2085
-    section = "md://CHANGELOG.md#changelog.0-73-0-2026-05-11.added"
-    text = "@<name>"
-    label = not
-  }
-
   span {
     file = "README.md"
-    line = 414
-    section = "md://README.md#protowire-go.performance-opting-into-the-fast-path"
-    text = "go mod tidy"
+    section = "md://README.md#protowire-go.schema-registry-integration"
+    text = "atomic.Pointer"
+    label = external
+  }
+  span {
+    file = "CHANGELOG.md"
+    section = "md://CHANGELOG.md#changelog.0-75-0-2026-05-12.added"
+    text = "UnmarshalOptions{SkipValidate: true}.Unmarshal"
+    label = declaration
+    to = "go://github.com/trendvidia/protowire-go/encoding/pxf#UnmarshalOptions.Unmarshal"
+  }
+  span {
+    file = "CHANGELOG.md"
+    section = "md://CHANGELOG.md#changelog.1-3-0-2026-07-17.changed"
+    text = "(pxf.key)"
+    label = external
+  }
+  span {
+    file = "CHANGELOG.md"
+    section = "md://CHANGELOG.md#changelog.1-8-0-2026-09-10"
+    text = "bufbuild/protocompile"
+    label = external
+  }
+  span {
+    file = "CHANGELOG.md"
+    section = "md://CHANGELOG.md#changelog.0-71-0-2026-05-10.added"
+    text = "UnmarshalFull"
+    label = declaration
+    to = "go://github.com/trendvidia/protowire-go/encoding/pxf#UnmarshalFull"
+  }
+  span {
+    file = "CHANGELOG.md"
+    section = "md://CHANGELOG.md#changelog.1-8-0-2026-09-10.changed-2"
+    text = "github.com/bufbuild/protocompile"
+    label = external
+  }
+  span {
+    file = "CHANGELOG.md"
+    section = "md://CHANGELOG.md#changelog.1-8-0-2026-09-10.fixed"
+    text = "fmt"
     label = not
   }
-
+  span {
+    file = "CHANGELOG.md"
+    section = "md://CHANGELOG.md#changelog.1-6-0-2026-09-07.changed"
+    text = "\"zero\" → 0"
+    label = not
+  }
+  span {
+    file = "CHANGELOG.md"
+    section = "md://CHANGELOG.md#changelog.1-2-0-2026-07-09.added"
+    text = "Rewriter.Bytes"
+    label = declaration
+    to = "go://github.com/trendvidia/protowire-go/encoding/pxf#Rewriter.Bytes"
+  }
+  span {
+    file = "CHANGELOG.md"
+    section = "md://CHANGELOG.md#changelog.1-6-0-2026-09-07.security"
+    text = "@default"
+    label = not
+  }
+  span {
+    file = "CHANGELOG.md"
+    section = "md://CHANGELOG.md#changelog.1-4-0-2026-08-09.fixed"
+    text = "BytesKind"
+    label = external
+  }
+  span {
+    file = "README.md"
+    section = "md://README.md#protowire-go.struct-binary-marshaling-encoding-pb.supported-types"
+    text = "uint64"
+    label = not
+  }
+  span {
+    file = "CHANGELOG.md"
+    section = "md://CHANGELOG.md#changelog.1-7-0-2026-09-08.fixed"
+    text = "\"123\""
+    label = not
+  }
+  span {
+    file = "README.md"
+    section = "md://README.md#protowire-go.struct-binary-marshaling-encoding-pb"
+    text = "protowire:\"N\""
+    label = not
+  }
+  span {
+    file = "CHANGELOG.md"
+    section = "md://CHANGELOG.md#changelog.1-4-0-2026-08-09.fixed"
+    text = "(pxf.key)"
+    label = external
+  }
+  span {
+    file = "CHANGELOG.md"
+    section = "md://CHANGELOG.md#changelog.1-3-0-2026-07-17.added"
+    text = "Rewriter.KeyedByField(fieldPath, keyField)"
+    label = declaration
+    to = "go://github.com/trendvidia/protowire-go/encoding/pxf#Rewriter.KeyedByField"
+  }
+  span {
+    file = "CHANGELOG.md"
+    section = "md://CHANGELOG.md#changelog.0-70-0-2026-05-06.added"
+    text = "(pxf.default)"
+    label = external
+  }
+  span {
+    file = "CHANGELOG.md"
+    section = "md://CHANGELOG.md#changelog.1-1-2-2026-07-09.fixed"
+    text = "Parse"
+    label = declaration
+    to = "go://github.com/trendvidia/protowire-go/encoding/pxf#Parse"
+  }
+  span {
+    file = "CHANGELOG.md"
+    section = "md://CHANGELOG.md#changelog.1-5-0-2026-08-31"
+    text = "1314"
+    label = not
+  }
+  span {
+    file = "CHANGELOG.md"
+    section = "md://CHANGELOG.md#changelog.1-6-0-2026-09-07.fixed"
+    text = "invalid duration: 5seconds"
+    label = not
+  }
+  span {
+    file = "CHANGELOG.md"
+    section = "md://CHANGELOG.md#changelog.0-70-2-2026-05-06.documentation"
+    text = "go.mod"
+    label = not
+  }
+  span {
+    file = "CHANGELOG.md"
+    section = "md://CHANGELOG.md#changelog.1-6-0-2026-09-07.changed"
+    text = "int_value"
+    label = external
+  }
 }
