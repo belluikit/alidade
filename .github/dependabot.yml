@@ -1,0 +1,20 @@
+version: 2
+updates:
+  # A dependency that moves changes what the release binary links, so a
+  # Dependabot pull request fails CI's notices check until
+  # `go run scripts/notices.go` regenerates THIRD_PARTY_NOTICES.txt on its
+  # branch: that is the check doing its job, not a broken PR.
+  - package-ecosystem: gomod
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      go-modules:
+        patterns: ["*"]
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]

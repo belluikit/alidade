@@ -1,5 +1,9 @@
 # alidade
 
+[![CI](https://github.com/belluikit/alidade/actions/workflows/ci.yml/badge.svg)](https://github.com/belluikit/alidade/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/belluikit/alidade)](https://github.com/belluikit/alidade/releases)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 **A code graph of your whole repository, for AI agents, served over MCP.**
 
 alidade maps a repository as one graph: code with real types, plus the
