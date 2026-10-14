@@ -1,0 +1,138 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Read-only: CI runs code from pull requests, forks included, on
+# GitHub-hosted runners (#282).
+permissions:
+  contents: read
+
+jobs:
+  # macos-26, not macos-15: v8go's own libc++ headers need clang 21, which
+  # is this image's default (Xcode 26.6). macos-15's clang 17 rejects them
+  # ("attribute '__visibility__' is not supported by '#pragma clang
+  # attribute'", #283's first run).
+  test:
+    name: vet + build + test
+    runs-on: macos-26
+    steps:
+      # typescript-go, TypeScript 7's compiler, is a submodule the frontend
+      # layer builds from (#215).
+      - uses: actions/checkout@v5
+        with:
+          submodules: true
+
+      # Stock Go (#282), the version the release is built with.
+      - uses: actions/setup-go@v7
+        with:
+          go-version: 1.27.2
+
+      - name: gofmt
+        run: |
+          out=$(gofmt -l ./internal ./cmd 2>/dev/null || true)
+          if [ -n "$out" ]; then
+            echo "::error::gofmt found unformatted files:"
+            echo "$out"
+            exit 1
+          fi
+
+      # Both builds (#221, #237): the release links V8 for Svelte
+      # components and CPython for Python calls (-tags v8,python, cgo,
+      # CGO_CXXFLAGS=-nostdinc++ for V8's own libc++); without the tags a
+      # component is unchecked and Python unresolved, each saying so, and
+      # that path is tested too. CGO_LDFLAGS is the build's own, not the
+      # runner's: Homebrew's point at its libraries.
+      - name: go vet
+        run: |
+          go vet ./...
+          CGO_LDFLAGS= CGO_CXXFLAGS=-nostdinc++ go vet -tags v8,python ./...
+
+      - name: build
+        run: |
+          go build ./...
+          CGO_LDFLAGS= CGO_CXXFLAGS=-nostdinc++ go build -tags v8,python ./...
+
+      - name: test
+        run: |
+          go test ./...
+          CGO_LDFLAGS= CGO_CXXFLAGS=-nostdinc++ go test -race -tags v8,python ./...
+
+  # The same suite on Linux (#248), amd64. Linux breakage once showed only
+  # by hand (#246). zig is the C toolchain, as the release's linux builds:
+  # v8go's own libc++ headers need clang 21 or newer, which Ubuntu 24.04
+  # does not package.
+  test-linux:
+    name: linux vet + build + test
+    runs-on: ubuntu-24.04
+    env:
+      CC: zig cc -fno-sanitize=undefined
+      CXX: zig c++ -fno-sanitize=undefined
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: true
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version: 1.27.2
+
+      - name: Install zig
+        run: scripts/install-zig.sh "$RUNNER_TEMP/zig"
+
+      - name: go vet
+        run: |
+          go vet ./...
+          CGO_LDFLAGS= CGO_CXXFLAGS=-nostdinc++ go vet -tags v8,python ./...
+
+      - name: build
+        run: |
+          go build ./...
+          CGO_LDFLAGS= CGO_CXXFLAGS=-nostdinc++ go build -tags v8,python ./...
+
+      - name: test
+        run: |
+          go test ./...
+          CGO_LDFLAGS= CGO_CXXFLAGS=-nostdinc++ go test -race -tags v8,python ./...
+
+  lint:
+    name: golangci-lint
+    runs-on: macos-26
+    steps:
+      # typescript-go, TypeScript 7's compiler, is a submodule the frontend
+      # layer builds from (#215).
+      - uses: actions/checkout@v5
+        with:
+          submodules: true
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version: 1.27.2
+
+      - uses: golangci/golangci-lint-action@v8
+        with:
+          # Pin to v2.x — the action's "latest" otherwise resolves to a v1.x
+          # release built with an older Go and chokes on go.mod's 1.26
+          # directive. v2 uses the .golangci.yml schema this repo ships.
+          # The pinned release must be built with a Go no older than the
+          # one installed above: v2.10.1 could not read Go 1.27 export data
+          # ("export data version 4 is greater than maximum supported
+          # version 2").
+          version: v2.14.0
+          args: --timeout=5m --build-tags v8,python
+        env:
+          CGO_CXXFLAGS: -nostdinc++
+
+      - name: Cyclomatic complexity per governance domain
+        run: scripts/complexity.sh
+
+      # The notices a release ships list what the binary links (#282): a
+      # dependency moved without regenerating them fails here.
+      - name: Third-party notices are current
+        run: go run scripts/notices.go -check
+
+      - name: Every source file carries its license header
+        run: go run scripts/headers.go

@@ -1,0 +1,9 @@
+@header chameleon.v1.LayerHeader
+{
+  id = "base"
+}
+@type example.v1.Config
+
+server {
+  host = "0.0.0.0"
+}

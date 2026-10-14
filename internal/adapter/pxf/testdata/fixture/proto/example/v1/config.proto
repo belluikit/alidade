@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+package example.v1;
+
+// Config is what the fixture's documents are typed as.
+message Config {
+  Server server = 1;
+  message Server {
+    string host = 1;
+    int32 port = 2;
+  }
+}
+
+// Row is the dataset's row type.
+message Row {
+  string name = 1;
+  int32 count = 2;
+}

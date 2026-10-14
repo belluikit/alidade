@@ -1,0 +1,3 @@
+# A template file no directive names: nodes, and no generates edge.
+# TEMPLATE Nop()
+    NOP

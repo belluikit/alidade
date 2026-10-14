@@ -1,0 +1,4 @@
+@dataset example.v1.Row (name, count)
+
+("one", 1)
+("two", 2)

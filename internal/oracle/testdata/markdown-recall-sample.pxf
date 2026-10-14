@@ -1,0 +1,221 @@
+# Markdown recall, hand-labelled (#189).
+#
+# The precision samples are drawn from the documents edges the layer
+# made; this one is drawn from what the docs say. Its population is every
+# inline code span outside fenced blocks in the Markdown files the layer
+# reads: 36,773 spans in the 16 repositories checked out beside alidade
+# on 2026-10-08. 120 were drawn, allotted in proportion to each
+# repository's count and taken in order of the SHA-256 of
+# "repo|file|line|span". Each was labelled by reading its sentence and
+# searching the repository:
+#
+#   declaration  names the declaration in "to", a node of the graph;
+#   nonode       names a declaration of the repository the graph has no
+#                node for;
+#   test         names a test function, absent from the default graph;
+#   external     names a declaration outside the repository;
+#   gone         names a declaration the code no longer has;
+#   unclear      a reader cannot tell which declaration, if any;
+#   not          names no declaration: a command, flag, value, path,
+#                route, keyword, or a file name used as a concept.
+#
+# Recall is the share of declaration spans whose section has a documents
+# edge to "to", whatever span the edge records: the linker keeps one edge
+# per section and target.
+#
+# Relabelled 2026-10-08 with #193: Go struct fields became nodes, so the
+# two fields labelled nonode are declarations; and `Halted` and
+# `Uncomparable`, labelled not after a search whose \b the regex engine
+# did not honour, are a field and an unclear one of four fields.
+#
+# TestOracleGoCalls (scripts/oracle.sh) re-reads
+# the sample for every repository checked out at its commit.
+#
+# Published here: the 19 of the 120 spans that are of public repositories
+# (chameleon, protocompile, protoregistry, protovalidate, protowire-go). The others were labelled on in-house
+# repositories and are not in this file; every figure above is of the
+# whole sample.
+
+repo {
+  name = "chameleon"
+  commit = "92b5cc452ca9c22fb4c8286f253f8fd24e3009c6"
+
+  span {
+    file = "CHANGELOG.md"
+    line = 248
+    section = "md://CHANGELOG.md#changelog.0-24-0-2026-08-10.changed"
+    text = "--exclude"
+    label = not
+  }
+
+  span {
+    file = "CHANGELOG.md"
+    line = 429
+    section = "md://CHANGELOG.md#changelog.0-23-0-2026-08-10.changed"
+    text = "chameleon.Load"
+    label = declaration
+    to = "go://github.com/trendvidia/chameleon#Load"
+  }
+
+  span {
+    file = "CHANGELOG.md"
+    line = 556
+    section = "md://CHANGELOG.md#changelog.0-23-0-2026-08-10.fixed"
+    text = "repeated"
+    label = not
+  }
+
+  span {
+    file = "CHANGELOG.md"
+    line = 646
+    section = "md://CHANGELOG.md#changelog.0-20-0-2026-05-26.added"
+    text = ".pxf"
+    label = not
+  }
+
+  span {
+    file = "CHANGELOG.md"
+    line = 1158
+    section = "md://CHANGELOG.md#changelog.0-14-1-2026-05-14.fixed"
+    text = "/* */"
+    label = not
+  }
+
+  span {
+    file = "CHANGELOG.md"
+    line = 1182
+    section = "md://CHANGELOG.md#changelog.0-14-0-2026-05-14.changed"
+    text = "chameleon-lint"
+    label = not
+  }
+
+  span {
+    file = "CHANGELOG.md"
+    line = 1803
+    section = "md://CHANGELOG.md#changelog.0-9-0-2026-05-12.what-v0-9-0-closes"
+    text = "cfg.DbPassword.Value"
+    label = not
+  }
+
+  span {
+    file = "README.md"
+    line = 323
+    section = "md://README.md#chameleon.observability.chameleon-cli"
+    text = "--base64"
+    label = not
+  }
+
+  span {
+    file = "docs/proposals/0001-env-source.md"
+    line = 67
+    section = "md://docs/proposals/0001-env-source.md#proposal-0001-kind-env-source.design-points-need-decisions.2-type-coercion"
+    text = "time.ParseDuration"
+    label = external
+  }
+
+}
+
+repo {
+  name = "protocompile"
+  commit = "1dbe2800cfc9295ef0a88ff0e6e06face7ecc6b6"
+
+  span {
+    file = "CONTRIBUTING.md"
+    line = 53
+    section = "md://CONTRIBUTING.md#contributing-to-trendvidia-protocompile.local-ci-is-the-gate-cloud-ci-is-the-exception.when-cloud-ci-fires-automatically"
+    text = ".proto"
+    label = not
+  }
+
+}
+
+repo {
+  name = "protoregistry"
+  commit = "608c66544a7e4b4b6152d2ef1064173f0939b6b2"
+
+  span {
+    file = "CHANGELOG.md"
+    line = 103
+    section = "md://CHANGELOG.md#changelog.0-71-0-2026-05-16.changed"
+    text = "rawDescriptorSet []byte"
+    label = declaration
+    to = "go://github.com/trendvidia/protoregistry/client#schemaSnapshot.rawDescriptorSet"
+  }
+
+  span {
+    file = "docs/design/namespace-hierarchy.md"
+    line = 291
+    section = "md://docs/design/namespace-hierarchy.md#namespace-hierarchy-and-chained-resolution.data-model.database"
+    text = "SetNamespaceParent"
+    label = unclear
+  }
+
+}
+
+repo {
+  name = "protovalidate"
+  commit = "90182160b60c546a704befcee2958ac0f6a73868"
+
+  span {
+    file = "tools/protovalidate-conformance/README.md"
+    line = 34
+    section = "md://tools/protovalidate-conformance/README.md#conformance-test-harness.flags"
+    text = "false"
+    label = not
+  }
+
+}
+
+repo {
+  name = "protowire-go"
+  commit = "0cbf9a9ec1d8d6839e3b42cecac64cf00d0a90a7"
+
+  span {
+    file = "CHANGELOG.md"
+    line = 424
+    section = "md://CHANGELOG.md#changelog.1-6-0-2026-09-07.changed"
+    text = "bytes_value"
+    label = external
+  }
+
+  span {
+    file = "CHANGELOG.md"
+    line = 461
+    section = "md://CHANGELOG.md#changelog.1-6-0-2026-09-07.changed"
+    text = "double x = 1 @default(1e10)"
+    label = not
+  }
+
+  span {
+    file = "CHANGELOG.md"
+    line = 1776
+    section = "md://CHANGELOG.md#changelog.1-0-0-2026-05-13.v1-0-spec-changes"
+    text = "TableReader"
+    label = gone
+  }
+
+  span {
+    file = "CHANGELOG.md"
+    line = 2022
+    section = "md://CHANGELOG.md#changelog.0-74-0-2026-05-12.added"
+    text = "@header"
+    label = not
+  }
+
+  span {
+    file = "CHANGELOG.md"
+    line = 2085
+    section = "md://CHANGELOG.md#changelog.0-73-0-2026-05-11.added"
+    text = "@<name>"
+    label = not
+  }
+
+  span {
+    file = "README.md"
+    line = 414
+    section = "md://README.md#protowire-go.performance-opting-into-the-fast-path"
+    text = "go mod tidy"
+    label = not
+  }
+
+}

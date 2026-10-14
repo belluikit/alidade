@@ -1,0 +1,47 @@
+syntax = "proto3";
+
+package example.v1;
+
+import "example/v1/unit.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "example.com/fixture/gen/example/v1;examplev1";
+
+// Shape is the fixture's main message: nested message and enum, fields of
+// every reference kind, a oneof, and a map.
+message Shape {
+  string name = 1;
+  Kind kind = 2;
+  Unit unit = 3;
+  google.protobuf.Timestamp created = 4;
+  repeated Shape children = 5;
+  map<string, Unit> units_by_name = 6;
+  oneof size {
+    double radius = 7;
+    Side side = 8;
+  }
+
+  message Side {
+    double length = 1;
+  }
+
+  enum Kind {
+    KIND_UNSPECIFIED = 0;
+    KIND_CIRCLE = 1;
+    KIND_SQUARE = 2;
+  }
+}
+
+// Palette is a top-level enum.
+enum Palette {
+  PALETTE_UNSPECIFIED = 0;
+  PALETTE_MONO = 1;
+}
+
+service ShapeService {
+  rpc GetShape(GetShapeRequest) returns (Shape);
+}
+
+message GetShapeRequest {
+  string name = 1;
+}

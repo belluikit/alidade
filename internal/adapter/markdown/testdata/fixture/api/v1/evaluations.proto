@@ -1,0 +1,10 @@
+syntax = "proto3";
+
+package example.api.v1;
+
+message CreateRequest {}
+message CreateResponse {}
+
+service EvaluationsService {
+  rpc Create(CreateRequest) returns (CreateResponse);
+}

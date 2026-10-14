@@ -1,0 +1,5 @@
+@type example.v1.Config
+
+server {
+  port = 443
+}

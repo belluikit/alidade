@@ -1,0 +1,94 @@
+# The Markdown layer's documents edges, hand-labelled (#148).
+#
+# A documents edge is INFERRED: a code span in a section names exactly one
+# node, and nothing but a reader can say whether the prose meant that
+# declaration. These 58 were drawn from the 4,632 documents edges of the
+# 16 repositories checked out beside alidade on 2026-10-08, allotted in
+# proportion to each repository's count and taken in order of the SHA-256
+# of "repo|from|to", and each was judged by reading the sentence around
+# the mention and the declaration it names.
+#
+# label is right when the mention names that declaration, wrong when it
+# names something else that happens to share the name. TestOracleGoCalls
+# (scripts/oracle.sh) re-reads the sample for every repository checked
+# out at the commit it was labelled at: a right edge gone is a
+# regression, a wrong edge gone is a fix.
+#
+# Published here: the 10 of the 58 edges that are of public repositories
+# (chameleon, protoregistry, protowire-go). The others were labelled on in-house
+# repositories and are not in this file; every figure above is of the
+# whole sample.
+
+repo {
+  name = "chameleon"
+  commit = "92b5cc452ca9c22fb4c8286f253f8fd24e3009c6"
+  edge {
+    from = "md://CHANGELOG.md#changelog.0-23-0-2026-08-10.changed"
+    to = "pxf://examples/simple/chain.pxf#environments.prod"
+    mention = "prod"
+    label = wrong
+    why = "a generic environment name ('resolved cleanly for dev and failed for prod'), not the example chain's prod block"
+  }
+  edge {
+    from = "md://CHANGELOG.md#changelog.0-4-0-2026-05-11.fixed"
+    to = "pxf://examples/simple/layers/base.pxf"
+    mention = "base.pxf"
+    label = right
+  }
+  edge {
+    from = "md://CHANGELOG.md#changelog.0-23-0-2026-08-10.changed"
+    to = "go://github.com/trendvidia/chameleon/resolver#ErrSchemaViolation"
+    mention = "ErrSchemaViolation"
+    label = right
+  }
+  edge {
+    from = "md://ROADMAP.md#roadmap.public-api-surface-at-v1-0.github-com-trendvidia-chameleon-sops"
+    to = "go://github.com/trendvidia/chameleon/sops#ErrEmptyPlaintext"
+    mention = "ErrEmptyPlaintext"
+    label = right
+  }
+  edge {
+    from = "md://CHANGELOG.md#changelog.0-23-0-2026-08-10.added"
+    to = "go://github.com/trendvidia/chameleon/crypt#Register"
+    mention = "Register"
+    label = right
+  }
+  edge {
+    from = "md://CHANGELOG.md#changelog.0-4-0-2026-05-11.added"
+    to = "proto://chameleon.v1.LayerHeader.environment"
+    mention = "environment"
+    label = right
+  }
+}
+repo {
+  name = "protoregistry"
+  commit = "608c66544a7e4b4b6152d2ef1064173f0939b6b2"
+  edge {
+    from = "md://docs/design/namespace-hierarchy.md#namespace-hierarchy-and-chained-resolution.design-decisions.d9-re-parenting-events-are-recorded-in-an-append-only-audit-log"
+    to = "sql://table/namespace_parent_events"
+    mention = "namespace_parent_events"
+    label = right
+  }
+}
+repo {
+  name = "protowire-go"
+  commit = "0cbf9a9ec1d8d6839e3b42cecac64cf00d0a90a7"
+  edge {
+    from = "md://SECURITY.md#security-policy.scope"
+    to = "go://github.com/trendvidia/protowire-go/envelope"
+    mention = "envelope"
+    label = right
+  }
+  edge {
+    from = "md://CHANGELOG.md#changelog.1-6-0-2026-09-07.security"
+    to = "go://github.com/trendvidia/protowire-go/encoding/pb#Unmarshal"
+    mention = "pb.Unmarshal"
+    label = right
+  }
+  edge {
+    from = "md://CHANGELOG.md#changelog.1-6-0-2026-09-07.security"
+    to = "go://github.com/trendvidia/protowire-go/encoding/pxf#UnmarshalOptions"
+    mention = "pxf.UnmarshalOptions"
+    label = right
+  }
+}

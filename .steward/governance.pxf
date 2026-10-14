@@ -1,0 +1,245 @@
+manifesto {
+  # alidade composes analyses that already exist into one graph. The drift
+  # risk is the mirror image of caliper's: caliper must not grow into other
+  # languages, while alidade must not grow analysis of its own. The mission
+  # therefore names the five formats deliberately (ADR 003) and forbids the
+  # thing that would turn this into a second caliper (ADR 000).
+  mission = "Whole-repository code intelligence. Composes existing analyses — caliper for type-resolved Go, protocompile for .proto, protowire-go for .pxf, sqlc configuration for PostgreSQL, goldmark for Markdown — into one queryable graph exposed over MCP. Owns the graph, the identity scheme and the agent-facing surface. Owns no parser and no type checker: a new format is a new adapter over an existing library, never a parser written here. Formats outside those five are out of scope until ADR 003 is amended."
+  mission_drift_gate = true
+  # Two categories. First, anything that would mean writing our own parsing or
+  # analysis — the ADR 000 violation. Second, the usual heavyweights that
+  # conflict with a lean single binary.
+  blocked_module_globs = [
+    "github.com/smacker/go-tree-sitter",
+    "github.com/tree-sitter/**",
+    "honnef.co/go/tools",
+    "github.com/golangci/golangci-lint",
+    "github.com/jhump/protoreflect",
+    "github.com/bufbuild/protocompile",
+    "github.com/spf13/viper",
+    "github.com/gorilla/**",
+    "go.uber.org/zap",
+    "github.com/sirupsen/logrus",
+    "github.com/rs/zerolog"
+  ]
+  # Looser than caliper's 5%: alidade does not gate other repos' PRs, so a
+  # regression costs its own users latency rather than everyone's CI. But
+  # ADR 005 rests on a full build staying in the 1-2s range, so this is not
+  # unbounded either — a 15% regression is the signal to look.
+  max_perf_regression_percent = 15
+  perf_significance_alpha = 0.05
+}
+
+domains = [
+  {
+    name = "graph"
+    # The core: node/edge schema, identity minting, merge. Highest criticality
+    # in the repo, and not because it is complex. An identity bug is SILENT —
+    # a query returns nothing and reads as "nothing calls this" rather than as
+    # a broken join (ADR 002). Errors here are discovered as wrong conclusions,
+    # which is the failure this whole tool exists to prevent.
+    path_globs = [
+      "internal/graph/**",
+    ]
+    min_coverage = 85
+    max_cyclomatic_complexity = 12
+    approval_threshold = 800
+    criticality_multiplier = 3.0
+    ignored_sarif_rules = []
+  }
+  {
+    name = "adapters"
+    # Per-layer extraction: Go, .proto, .pxf, SQL, Markdown. Each is a thin
+    # translation over an upstream library. Failures here are loud and local —
+    # an adapter emits wrong edges for one layer — so the bar is lower than
+    # the core's.
+    path_globs = [
+      "internal/adapter/**",
+    ]
+    min_coverage = 75
+    max_cyclomatic_complexity = 12
+    approval_threshold = 500
+    criticality_multiplier = 2.0
+  }
+  {
+    name = "mcp"
+    # The agent-facing surface: traversal tools and token-budgeted
+    # serialization. Wire-shape changes break every consumer at once.
+    path_globs = [
+      "internal/mcp/**",
+      "cmd/**",
+    ]
+    min_coverage = 75
+    max_cyclomatic_complexity = 10
+    approval_threshold = 500
+    criticality_multiplier = 2.0
+  }
+  {
+    name = "adr"
+    # ADRs are the contract this repo is built against, not commentary.
+    # Amending one is a design change and needs the same weight as amending
+    # governance — hence restricted, not filed under docs.
+    path_globs = [
+      "docs/adr/**",
+    ]
+    min_coverage = 0
+    restricted = true
+    supermajority_ratio = 0.75
+    criticality_multiplier = 2.5
+  }
+  {
+    name = "docs"
+    path_globs = ["docs/**", "**/*.md", "**/*.txt"]
+    min_coverage = 0
+    criticality_multiplier = 0.5
+  }
+  {
+    name = "ci"
+    path_globs = [
+      ".github/**",
+      "scripts/**",
+      "Makefile",
+      "*.yaml",
+      "*.yml",
+    ]
+    restricted = true
+    supermajority_ratio = 1.0
+    criticality_multiplier = 2.0
+  }
+  {
+    # Safety net: anything unmatched still gets basic gates.
+    name = "other"
+    path_globs = ["**"]
+    min_coverage = 60
+    max_cyclomatic_complexity = 15
+    criticality_multiplier = 1.0
+  }
+]
+
+escrow {
+  # Private internal repo — no external contributor onboarding queue.
+  sandbox_issue_count = 0
+  sandbox_labels = []
+  sandbox_templates = []
+}
+
+decay {
+  half_life = 4320h
+  base_points = 100
+}
+
+immune_system {
+  allowed_licenses = ["MIT", "Apache-2.0", "BSD-2-Clause", "BSD-3-Clause", "ISC"]
+  require_pinned_dependencies = true
+  anomaly_quarantine {
+    documentation_concentration = 0.75
+    sensitive_path_globs = [
+      "internal/graph/**",
+      "docs/adr/**",
+      ".steward/governance.pxf",
+      ".github/**",
+      "go.mod",
+      "go.sum",
+    ]
+    timelock = 24h
+  }
+}
+
+amendments {
+  supermajority_ratio = 0.75
+  top_n_holders = 3
+  voting_period = 72h
+  amendment_path_globs = [
+    ".steward/governance.pxf",
+    "docs/adr/**",
+    "CODEOWNERS",
+  ]
+}
+
+slashing {
+  # Enabled, but softer than caliper's. A caliper bug blocks other repos' PRs;
+  # an alidade bug produces a wrong answer to a question, which is serious but
+  # contained to this tool's users.
+  enabled = true
+  base_points = 50
+  growth_half_life = 2160h
+  max_multiplier = 4.0
+}
+
+founders = [
+  {
+    handle = "trendvidia-bot"
+    reputation_seed = {
+      "graph": 1500
+      "adapters": 1200
+      "mcp": 1200
+      "adr": 1200
+      "docs": 600
+      "ci": 1000
+      "other": 500
+    }
+  }
+]
+
+alternatives {
+  enabled = true
+  groups = [
+    { name = "logger" modules = [
+        "github.com/sirupsen/logrus",
+        "go.uber.org/zap",
+        "github.com/rs/zerolog",
+    ] }
+    { name = "config" modules = [
+        "github.com/spf13/viper",
+        "github.com/kelseyhightower/envconfig",
+        "github.com/caarlos0/env/v6",
+    ] }
+    # ADR 000 as a dependency gate: Go analysis comes from caliper, and .proto
+    # parsing from trendvidia/protocompile. A second framework in either slot
+    # means alidade has started analysing rather than composing.
+    { name = "go-analysis" modules = [
+        "honnef.co/go/tools",
+        "github.com/golangci/golangci-lint",
+    ] }
+    { name = "proto-parser" modules = [
+        "github.com/jhump/protoreflect",
+        "github.com/bufbuild/protocompile",
+    ] }
+    { name = "parser-toolkit" modules = [
+        "github.com/smacker/go-tree-sitter",
+        "github.com/alecthomas/participle/v2",
+        "github.com/antlr4-go/antlr/v4",
+    ] }
+  ]
+  behavioral {
+    jaccard_threshold = 0.40
+    max_pairs = 20
+    # Graph vocabulary appears in every package here; suppress to cut noise.
+    extra_stopwords = ["Node", "Edge", "Graph", "Walk", "Visit", "Adapter", "Layer", "ID"]
+  }
+}
+
+sarif {
+  enabled = true
+  artifact_glob = "*.sarif"
+}
+
+precedent {
+  backend = "jaccard"
+  threshold = 0.45
+  candidate_limit = 50
+}
+
+triage {
+  backend = "deterministic"
+  high_priority_min = 2.0
+  medium_priority_min = 1.0
+}
+
+caliper {
+  # alidade depends on caliper, so it should be gated by caliper. Full
+  # dogfood: if a rule catches something here, that is signal about the
+  # dependency as much as about this code.
+  enabled = true
+  rules = []
+}

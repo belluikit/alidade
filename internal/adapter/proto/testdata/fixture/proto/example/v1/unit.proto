@@ -1,0 +1,13 @@
+syntax = "proto3";
+
+package example.v1;
+
+// No go_package: buf.gen.yaml's managed mode assigns one.
+
+// Unit is imported by shape.proto.
+message Unit {
+  string symbol = 1;
+}
+
+// UnitExt extends Unit's options for the extension case. Kept simple:
+// an extension of a well-known message would need descriptor.proto.

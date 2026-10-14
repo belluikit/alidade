@@ -1,0 +1,133 @@
+name: Release
+
+# Builds the alidade binaries for a tag and attaches them to its GitHub
+# release, which is what the Homebrew formula in trendvidia/homebrew-tap
+# downloads. Runs on a v* tag push, or by hand for a tag that already
+# exists (the first release, v0.1.0, was tagged before this workflow).
+#
+# Nothing is built for a tag that is not on main with its CI passed: the
+# gate job checks it against GitHub (scripts/release-gate.sh, #105). A
+# dispatch with dry_run runs the gate alone, for any ref, and builds and
+# attaches nothing — the way the gate is proven without tagging.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing tag to build and attach assets to (e.g. v0.1.0); on a dry run, any ref'
+        required: true
+      dry_run:
+        description: 'Run the release gate only: build and attach nothing'
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  checks: read
+
+jobs:
+  gate:
+    name: release gate
+    runs-on: ubuntu-24.04
+    outputs:
+      sha: ${{ steps.gate.outputs.sha }}
+    steps:
+      # The workflow's own commit, for the script: the ref is resolved
+      # through GitHub, and an older tag's tree has no copy of the gate.
+      - uses: actions/checkout@v5
+
+      - name: Require a main commit whose CI passed
+        id: gate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          # As in Build: the ref reaches the shell as a variable (#101).
+          REF: ${{ github.event.inputs.tag || github.ref_name }}
+        run: scripts/release-gate.sh "$REF"
+
+  build:
+    name: build + attach
+    needs: gate
+    if: ${{ github.event.inputs.dry_run != 'true' }}
+    runs-on: macos-26
+    steps:
+      - name: Refuse a dry run
+        # A second guard beside the job's if: a dry run that reached this
+        # job would rebuild and re-attach a real release's assets.
+        env:
+          DRY_RUN: ${{ github.event.inputs.dry_run }}
+        run: |
+          if [ "$DRY_RUN" = true ]; then echo "::error::dry run reached the build job"; exit 1; fi
+
+      # The commit the gate passed, not the ref again: a tag moved after
+      # the gate would otherwise build what was never checked.
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.gate.outputs.sha }}
+          # typescript-go is a submodule the binary builds from (#215).
+          submodules: true
+
+      # Stock Go (#282), the version CI tests with.
+      - uses: actions/setup-go@v7
+        with:
+          go-version: 1.27.2
+
+      # The toolchain that builds the release, checked on the machine that
+      # builds it. A compiler bug once shipped every MCP parameter with one
+      # description (#160, in the go-plus fork releases were then built
+      # with), and the release gate only proves CI passed on some runner.
+      # The darwin/amd64 binary is checked too, under Rosetta, where the
+      # runner has it: the bug hit both darwin architectures.
+      - name: Test the MCP surface with this toolchain
+        env:
+          CGO_CXXFLAGS: -nostdinc++
+          # Not the host's: Homebrew's point at arm64 libraries.
+          CGO_LDFLAGS: ""
+          # The go tool turns cgo off for a GOARCH other than the host's
+          # unless asked: the darwin/amd64 test needs it on, and v0.10.0's
+          # first release run failed without it (undefined: v8.Isolate).
+          CGO_ENABLED: "1"
+        run: |
+          go test -count=1 -tags v8,python ./internal/mcp ./internal/adapter/ts/... ./internal/python ./internal/cli
+          if arch -x86_64 /usr/bin/true 2>/dev/null; then
+            CC="clang -arch x86_64" CXX="clang++ -arch x86_64" GOARCH=amd64 go test -count=1 -tags v8,python ./internal/mcp ./internal/adapter/ts/... ./internal/python ./internal/cli
+          else
+            echo "::warning::no Rosetta on this runner: the darwin/amd64 build is not tested"
+          fi
+
+      # The binary links V8 (#221): darwin builds with the runner's clang,
+      # linux cross-compiles with zig as the C toolchain.
+      - name: Install zig
+        run: scripts/install-zig.sh "$RUNNER_TEMP/zig"
+
+      - name: Build
+        env:
+          # The tag reaches the shell as a variable, never spliced into the
+          # script: a dispatch input is free text, and ${{ }} would run it
+          # as code (#101).
+          TAG: ${{ github.event.inputs.tag || github.ref_name }}
+        run: |
+          version="${TAG#v}"
+          mkdir -p dist
+          for target in darwin/arm64 darwin/amd64 linux/amd64 linux/arm64; do
+            os="${target%/*}"; arch="${target#*/}"
+            out="dist/alidade_${version}_${os}_${arch}"
+            mkdir -p "$out"
+            scripts/release-build.sh "$target" "$out/alidade"
+            # The licenses of what the binary carries ship beside it (#282).
+            cp THIRD_PARTY_NOTICES.txt "$out/"
+            tar -C "$out" -czf "$out.tar.gz" alidade THIRD_PARTY_NOTICES.txt
+            rm -r "$out"
+          done
+          (cd dist && shasum -a 256 -- *.tar.gz > "alidade_${version}_checksums.txt")
+          ls -l dist
+
+      - name: Attach to the release
+        # Pinned by commit, not tag: this job can write releases, and a
+        # moved tag would run someone else's code with that right (#101).
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
+        with:
+          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
+          files: dist/*
+          fail_on_unmatched_files: true

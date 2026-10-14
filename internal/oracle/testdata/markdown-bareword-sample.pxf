@@ -1,0 +1,48 @@
+# A second hand-labelled sample of Markdown documents edges (#167): the
+# class #167 is about, a bare lowercase word naming a nested declaration
+# (a field, an rpc, a method, a .pxf block). 40 were drawn from the 281
+# such edges on the 16 repositories beside alidade on 2026-10-08, in
+# order of the SHA-256 of "repo|from|to", and judged by reading the
+# sentence; one could not be judged and is left out. 17 of the 39 are
+# right: 44%, against 0.914 for documents edges overall
+# (markdown-sample.pxf).
+#
+# #167's rule — the section must name the declaration's parent — keeps 11
+# of the 17 right and 1 of the 22 wrong. The 6 right ones it drops are
+# reported as gone by the oracle: that is the rule's measured cost, kept
+# visible for a better rule to recover.
+#
+# Published here: the 4 of the 39 edges that are of public repositories
+# (chameleon). The others were labelled on in-house
+# repositories and are not in this file; every figure above is of the
+# whole sample.
+
+repo {
+  name = "chameleon"
+  commit = "92b5cc452ca9c22fb4c8286f253f8fd24e3009c6"
+  edge {
+    from = "md://CHANGELOG.md#changelog.0-23-0-2026-08-10.changed"
+    to = "pxf://examples/simple/chain.pxf#environments.prod"
+    mention = "prod"
+    label = wrong
+    why = "a generic environment name"
+  }
+  edge {
+    from = "md://CHANGELOG.md#changelog.0-4-0-2026-05-11.added"
+    to = "proto://chameleon.v1.LayerHeader.environment"
+    mention = "environment"
+    label = right
+  }
+  edge {
+    from = "md://CHANGELOG.md#changelog.0-18-0-2026-05-23.added"
+    to = "proto://chameleon.v1.BundleManifest.Module.deny"
+    mention = "deny"
+    label = right
+  }
+  edge {
+    from = "md://CHANGELOG.md#changelog.0-4-0-2026-05-11.added"
+    to = "proto://chameleon.v1.LayerHeader.notes"
+    mention = "notes"
+    label = right
+  }
+}

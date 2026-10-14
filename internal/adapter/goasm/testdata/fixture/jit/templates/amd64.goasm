@@ -1,0 +1,15 @@
+# ALIAS BP = RBX
+# ALIAS TAG_INT = R8
+
+# TEMPLATE AddLocalsInt(dst uint8, src1 uint8, src2 uint8)
+    MOV  RAX, src1
+    MOV  RAX, [BP + RAX*8]
+    MOV  RCX, src2
+    MOV  RCX, [BP + RCX*8]
+    ADD  RAX, RCX
+    SUB  RAX, TAG_INT
+    MOV  RCX, dst
+    MOV  [BP + RCX*8], RAX
+
+# TEMPLATE Breakpoint()
+    INT3

@@ -1,0 +1,42 @@
+version: "2"
+
+run:
+  timeout: 5m
+  tests: true
+
+linters:
+  default: none
+  enable:
+    - govet
+    - ineffassign
+    - misspell
+    - staticcheck
+    - unused
+    - unconvert
+    # errcheck intentionally disabled — caliper's find_unchecked_error, with
+    # this repo's .caliper.pxf allowlist, is the source of truth. Running both
+    # produces duplicate noise. alidade depends on caliper; it should be
+    # gated by it too.
+  exclusions:
+    paths:
+      - testdata
+    rules:
+      # SA5011 ("possible nil pointer dereference") is unreliable in table
+      # tests: the guard is `if x == nil { t.Fatal(...) }`, and staticcheck
+      # only knows the following deref is safe if it derives that
+      # testing.T.Fatal does not return. The CI runner does not derive it and
+      # reports the guarded deref as a nil dereference. The code is correct —
+      # t.Fatal calls runtime.Goexit.
+      #
+      # Carried over from caliper, where this cost a red main branch and four
+      # CI runs to diagnose (caliper#21). Scoped to _test.go and SA5011 alone,
+      # so staticcheck keeps full force on production code and every other
+      # check keeps full force on tests.
+      - path: '_test\.go'
+        linters:
+          - staticcheck
+        text: 'SA5011'
+
+formatters:
+  enable:
+    - gofmt

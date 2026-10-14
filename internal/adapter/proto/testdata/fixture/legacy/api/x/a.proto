@@ -1,0 +1,11 @@
+syntax = "proto3";
+
+package x;
+
+// No buf configuration covers legacy/: the include root legacy/api is
+// inferred from this import.
+import "x/b.proto";
+
+message A {
+  B b = 1;
+}

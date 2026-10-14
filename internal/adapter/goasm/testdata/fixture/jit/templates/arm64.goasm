@@ -1,0 +1,18 @@
+# ALIAS CTX = X19
+# ALIAS BP = X22
+# ALIAS SP = X21
+# ALIAS TAG_INT = X28
+
+# TEMPLATE AddLocalsInt(dst uint8, src1 uint8, src2 uint8)
+    MOVZ X24, src1
+    LDR  X24, [BP, X24, LSL #3]
+    MOVZ X25, src2
+    LDR  X25, [BP, X25, LSL #3]
+    ADD  X24, X24, X25
+    SUB  X24, X24, TAG_INT
+    MOVZ X26, dst
+    STR  X24, [BP, X26, LSL #3]
+
+# TEMPLATE PushInt(reg int)
+    STR  reg, [SP, #0]
+    ADD  SP, SP, #8

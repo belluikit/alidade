@@ -1,0 +1,3 @@
+# The deployed site is build output; the ts layer skips what this file
+# ignores (ADR 007 rule 4).
+site/

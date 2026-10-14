@@ -1,0 +1,23 @@
+@type chameleon.v1.ChainSpec
+
+version = "1.0.0"
+default_environment = "local"
+
+environments = [
+  { name = "prod" }
+  { name = "staging" extends = "prod" }
+  { name = "local"   extends = "staging" }
+]
+
+sources = {
+  "default": { kind = "fs"  options = { "root": "./layers" } }
+  "env":     { kind = "env" options = { "prefix": "APP_" } }
+}
+
+layers = [
+  { id = "base"        path = "base.pxf"                 for_each = ONCE    required = true }
+  { id = "env-plain"   path = "env/${env}.pxf"           for_each = PER_ENV }
+  { id = "secrets"     path = "secrets/${env}.pxf"       for_each = ONCE }
+  { id = "region"      path = "region/${ctx.region}.pxf" for_each = ONCE }
+  { id = "env-runtime" path = "(env)"                    for_each = ONCE    source = "env" }
+]

@@ -1,0 +1,9 @@
+syntax = "proto3";
+
+package other;
+
+// Plain has no go_package, so it links to no Go type, and it lives
+// outside every buf module, so its import path is repo-relative.
+message Plain {
+  int32 n = 1;
+}

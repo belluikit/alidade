@@ -1,0 +1,39 @@
+# The PXF layer's chain links, every one, judged by reading (#187).
+#
+# A chain link joins a chameleon chain specification to a layer file it
+# loads, with the environments that load it. alidade expands the chain
+# with chameleon's own chain package, and chameleon's CLI uses the same
+# package, so no independent tool can check the expansion. These are all
+# 26 links of the 6 repositories checked out beside alidade on
+# 2026-10-08, each read against its chain: ONCE loads the environment's
+# own file, PER_ENV one per ancestor root-first, a missing file, an
+# unset context value or a non-file source loads nothing.
+#
+# TestOracleGoCalls (scripts/oracle.sh) re-reads the census for every
+# repository checked out at its commit: a link gone, an environment
+# list changed, or a chain link not listed here is reported.
+#
+# Published here: the 2 of the 26 links that are of public repositories
+# (chameleon). The others were labelled on in-house
+# repositories and are not in this file; every figure above is of the
+# whole sample.
+
+repo {
+  name = "chameleon"
+  commit = "92b5cc452ca9c22fb4c8286f253f8fd24e3009c6"
+
+  edge {
+    from = "pxf://examples/simple/chain.pxf"
+    to = "pxf://examples/simple/layers/base.pxf"
+    envs = "dev prod sandbox uat"
+    label = right
+  }
+
+  edge {
+    from = "pxf://examples/simple/chain.pxf"
+    to = "pxf://examples/simple/layers/env/dev.pxf"
+    envs = "dev"
+    label = right
+  }
+
+}

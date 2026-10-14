@@ -1,0 +1,44 @@
+# Binaries
+/alidade
+/bin/
+/dist/
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Test and coverage
+*.test
+*.out
+coverage.out
+coverage.html
+*.coverprofile
+
+# Go workspace — machine-local, must not be shared
+go.work
+go.work.sum
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# AI assistant — local settings and context, per-machine
+.claude/
+CLAUDE.md
+AGENTS.md
+
+# Python bytecode (the py fixture's __pycache__/junk.py is tracked on purpose)
+*.pyc
+
+# Local tooling and scratch
+.venv/
+.tmp/
+*.sarif
+/bench-results/

@@ -1,0 +1,26 @@
+# Questions over protocompile where a text search should struggle
+# (#202): callers of a method whose name dozens of types share.
+# References from the oracle's type-checker resolution of every call
+# expression (internal/oracle), static calls, without tests.
+#
+# The sets the published figures come from (#149, #202, #206, #284) hold 49
+# more questions, about in-house repositories; they are not published.
+
+repo = "protocompile"
+commit = "1dbe2800cfc9295ef0a88ff0e6e06face7ecc6b6"
+
+question {
+  id = "pc-annotation-name"
+  shape = graph
+  text = "In protocompile, which functions and methods call the Name method of ast.DeclAnnotation directly?"
+  want = ["printDeclAnnotation", "buildAnnotationDecl", "decl", "Definition", "resolveBareAnnotation", "validateAnnotationUseArgs", "newAnnotation", "Span"]
+  note = "ast.DeclAnnotation.Span, printer.printer.printDeclAnnotation, fdp.buildAnnotationDecl, astx.protoEncoder.decl, ir.Symbol.Definition, ir.resolveBareAnnotation, ir.validateAnnotationUseArgs, ir.walker.newAnnotation. 23 types declare Name; a text search for .Name( matches 365 lines outside tests."
+}
+
+question {
+  id = "pc-typeany-span"
+  shape = graph
+  text = "In protocompile, which functions and methods call the Span method of ast.TypeAny directly?"
+  want = ["buildTypeRefinementEntry", "Definition", "prev", "parse", "DeclDef", "TypePrefixed"]
+  note = "ast.DeclDef.Span, ast.TypePrefixed.Span, fdp.buildTypeRefinementEntry, ir.Symbol.Definition, parser.defOutputs.parse, parser.defOutputs.prev, parser.defParser.parse. 34 types declare Span; a text search for .Span( matches 246 lines outside tests."
+}

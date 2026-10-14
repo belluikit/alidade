@@ -1,0 +1,29 @@
+syntax = "proto3";
+
+package app.v1;
+
+// Role is what a user may do.
+enum Role {
+  ROLE_UNSPECIFIED = 0;
+  ROLE_VIEWER = 1;
+  ROLE_ADMIN = 2;
+}
+
+// User is an account.
+message User {
+  string id = 1;
+  string email = 2;
+  Role role = 3;
+}
+
+message GetUserRequest {
+  string id = 1;
+}
+
+message GetUserResponse {
+  User user = 1;
+}
+
+service UserService {
+  rpc GetUser(GetUserRequest) returns (GetUserResponse);
+}
