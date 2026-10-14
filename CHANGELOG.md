@@ -8,6 +8,8 @@ tracker's. From v0.12.1 on, every number is this repository's.
 
 ## Unreleased
 
+## v0.13.0 — 2026-10-14
+
 - **Changed: alidade lives at `github.com/belluikit/alidade`.** The
   repository moved from `trendvidia`, and the module path moved with it,
   so `go install` and imports use the new path. Issue and pull request
