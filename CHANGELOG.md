@@ -8,6 +8,10 @@ tracker's. From v0.12.1 on, every number is this repository's.
 
 ## Unreleased
 
+- **Changed: Homebrew installs from `belluikit/tap`.** The tap moved with
+  alidade: `brew install belluikit/tap/alidade`. A tap already added as
+  `trendvidia/tap` keeps updating through GitHub's redirect (#16).
+
 ## v0.13.0 — 2026-10-14
 
 - **Changed: alidade lives at `github.com/belluikit/alidade`.** The

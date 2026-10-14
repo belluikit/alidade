@@ -1,7 +1,7 @@
 name: Release
 
 # Builds the alidade binaries for a tag and attaches them to its GitHub
-# release, which is what the Homebrew formula in trendvidia/homebrew-tap
+# release, which is what the Homebrew formula in belluikit/homebrew-tap
 # downloads. Runs on a v* tag push, or by hand for a tag that already
 # exists (the first release, v0.1.0, was tagged before this workflow).
 #

@@ -112,7 +112,7 @@ over stdio, and opens no port.
 With Homebrew:
 
 ```
-brew install trendvidia/tap/alidade
+brew install belluikit/tap/alidade
 ```
 
 Or download a binary for macOS or Linux, arm64 or amd64, from the
