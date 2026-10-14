@@ -160,30 +160,54 @@ Every tool that returns a list keeps to a token budget, and says what it
 cut. [Using alidade](docs/usage.md#the-tools) explains each one and what
 the edges mean.
 
-## Measured against grep
+## Measured against grep and graphify
 
-On our own question set, with one model, twice each: 43 questions over
-three repositories, covering call graphs, schema to code, text and docs
-(#206).
+47 questions about who calls what, over four public repositories, each
+asked three times of the same model. Nobody picked the questions: a rule
+draws them from the Go type checker's calls, and from the calls recorded
+while a Python test suite ran
+([#3](https://github.com/trendvidia/alidade/issues/3)).
 
-| an agent with | correct | cost per correct answer |
+| an agent with | correct | cost per correct answer | median time |
+|---|---|---|---|
+| alidade and Read, no grep | 138 of 141 | $0.019 | 6.9 s |
+| Read and Grep | 137 of 141 | $0.036 | 7.5 s |
+| [graphify](https://github.com/Graphify-Labs/graphify) as its installer sets it up, with Read and Grep | 137 of 141 | $0.038 | 8.9 s |
+| graphify's MCP tools and Read, no grep | 108 of 141 | $0.065 | 7.6 s |
+
+**Accuracy is a tie** between alidade, grep, and graphify as installed.
+
+**alidade costs about half as much per correct answer.** The gap is widest
+for the callers of a method whose name several types share, where a text
+search returns every one of them:
+
+| 12 such questions, three times each | correct | cost per correct answer |
 |---|---|---|
-| alidade's tools and Read, no grep | 86 of 86 | $0.032 |
-| grep, no alidade | 84 of 86 | $0.042 |
+| alidade | 33 of 36 | $0.015 |
+| grep | 32 of 36 | $0.054 |
 
-**Where alidade wins clearly:** the callers of a method whose name many
-types share (#202). In protocompile, 23 types declare `Name`, and `.Name(`
-matches 365 lines.
+**Where it makes no difference:** a function named uniquely enough that
+grep's matches are its uses. All three practical setups answered those 60
+of 60, within a cent of each other.
 
-| four such questions, twice each | correct | cost per correct answer |
-|---|---|---|
-| alidade | 8 of 8 | $0.030 |
-| grep | 5 of 8 | $0.145 |
+### What this does not measure
 
-**Where it does not:** a function, constant or field named uniquely enough
-that grep's matches are its uses, where grep answered every session
-correctly. And a call chain of three hops, which both answered 6 of 6 at
-the same cost.
+- **Only call-graph questions.** There are no text, documentation or
+  schema-to-code questions, because no oracle generates those yet.
+- **Nothing graphify does beyond calls.** graphify reads dozens of
+  languages through tree-sitter where alidade reads four through their
+  compilers, and it adds documents, images and community structure that
+  alidade has no counterpart for. The fourth row is its graph tools with
+  no text search beside them, which is not how it is meant to be run.
+- **Python answers are the calls a test suite made.** A call no test made
+  is in no answer.
+- **One model, one harness, ours.** graphify publishes
+  [its own benchmark](https://github.com/Graphify-Labs/graphify/blob/main/BENCHMARKS.md);
+  its code questions are not published, so we could not run them. If we
+  have set graphify up wrongly, please open an issue.
+
+The question sets are in `internal/bench/testdata/gen-*.pxf`, and
+`scripts/bench.sh` runs them: see [Developing alidade](docs/development.md).
 
 ## Status
 
