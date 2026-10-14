@@ -1,0 +1,89 @@
+# Questions over caliper drawn by rule, not picked (#284): bench.Generate over the
+# type checker's static calls (internal/oracle), without tests, at the commit
+# below. Strata: unique (callers of a name no other declaration shares),
+# shared (callers of a method name five or more declarations share), chain
+# (the functions between two declarations three calls apart). Candidates are
+# taken in order of the SHA-256 of "repo|stratum|id".
+
+repo = "caliper"
+commit = "b5619f651fb7cfec7b7c514a47382c9ca0a60888"
+
+question {
+  id = "caliper-unique-1"
+  shape = unique
+  text = "In caliper, which functions and methods call the function mcp.transformResultWithDiff directly?"
+  want = ["handleAddMissingCleanup", "handleApplyTransform", "handleMigrateAPI"]
+  note = "go://github.com/trendvidia/caliper/pkg/mcp#transformResultWithDiff. 1 declarations in the calls are named transformResultWithDiff. The type checker's static callers: go://github.com/trendvidia/caliper/pkg/mcp#Server.handleAddMissingCleanup, go://github.com/trendvidia/caliper/pkg/mcp#Server.handleApplyTransform, go://github.com/trendvidia/caliper/pkg/mcp#Server.handleMigrateAPI."
+}
+
+question {
+  id = "caliper-unique-2"
+  shape = unique
+  text = "In caliper, which functions and methods call the WithNameConstraints method of patterns.Pattern directly?"
+  want = ["POptNames", "handleFindPattern"]
+  note = "go://github.com/trendvidia/caliper/pkg/analysis/patterns#Pattern.WithNameConstraints. 1 declarations in the calls are named WithNameConstraints. The type checker's static callers: go://github.com/trendvidia/caliper/pkg/analysis/patterns#POptNames, go://github.com/trendvidia/caliper/pkg/mcp#Server.handleFindPattern."
+}
+
+question {
+  id = "caliper-unique-3"
+  shape = unique
+  text = "In caliper, which functions and methods call the function templates.lookupIdent directly?"
+  want = ["Analyze", "checkClosure"]
+  note = "go://github.com/trendvidia/caliper/pkg/analysis/templates#lookupIdent. 1 declarations in the calls are named lookupIdent. The type checker's static callers: go://github.com/trendvidia/caliper/pkg/analysis/templates#RaceCondition.checkClosure, go://github.com/trendvidia/caliper/pkg/analysis/templates#SliceAppendRace.Analyze."
+}
+
+question {
+  id = "caliper-unique-4"
+  shape = unique
+  text = "In caliper, which functions and methods call the MethodSets method of analysis.Engine directly?"
+  want = ["AnalyzeProgram"]
+  note = "go://github.com/trendvidia/caliper/pkg/analysis#Engine.MethodSets. 1 declarations in the calls are named MethodSets. The type checker's static callers: go://github.com/trendvidia/caliper/pkg/analysis/templates#PairedCalls.AnalyzeProgram, go://github.com/trendvidia/caliper/pkg/analysis/templates#StaleCapture.AnalyzeProgram."
+}
+
+question {
+  id = "caliper-unique-5"
+  shape = unique
+  text = "In caliper, which functions and methods call the function mcp.findCommonRoot directly?"
+  want = ["findingsCompact", "findingsGrouped"]
+  note = "go://github.com/trendvidia/caliper/pkg/mcp#findCommonRoot. 1 declarations in the calls are named findCommonRoot. The type checker's static callers: go://github.com/trendvidia/caliper/pkg/mcp#Server.findingsCompact, go://github.com/trendvidia/caliper/pkg/mcp#Server.findingsGrouped."
+}
+
+question {
+  id = "caliper-chain-1"
+  shape = chain
+  text = "In caliper, how does transform.Rewriter.transformFile end up calling patterns.typeMatches? Name each function or method in the chain between them."
+  want = ["MatchNode", "enforceTypeConstraints"]
+  note = "go://github.com/trendvidia/caliper/pkg/transform#Rewriter.transformFile -> go://github.com/trendvidia/caliper/pkg/analysis/patterns#Pattern.MatchNode -> go://github.com/trendvidia/caliper/pkg/analysis/patterns#Pattern.enforceTypeConstraints -> go://github.com/trendvidia/caliper/pkg/analysis/patterns#typeMatches, the one shortest chain of static calls by the type checker."
+}
+
+question {
+  id = "caliper-chain-2"
+  shape = chain
+  text = "In caliper, how does patterns.NegativePattern.MatchAbsence end up calling patterns.matchNodes? Name each function or method in the chain between them."
+  want = ["MatchNode", "NegateInScope"]
+  note = "go://github.com/trendvidia/caliper/pkg/analysis/patterns#NegativePattern.MatchAbsence -> go://github.com/trendvidia/caliper/pkg/analysis/patterns#NegativePattern.NegateInScope -> go://github.com/trendvidia/caliper/pkg/analysis/patterns#Pattern.MatchNode -> go://github.com/trendvidia/caliper/pkg/analysis/patterns#matchNodes, the one shortest chain of static calls by the type checker."
+}
+
+question {
+  id = "caliper-chain-3"
+  shape = chain
+  text = "In caliper, how does mcp.Server.handleRunPatterns end up calling gcl.runContainsRule? Name each function or method in the chain between them."
+  want = ["Run", "runRule"]
+  note = "go://github.com/trendvidia/caliper/pkg/mcp#Server.handleRunPatterns -> go://github.com/trendvidia/caliper/pkg/gcl#Run -> go://github.com/trendvidia/caliper/pkg/gcl#runRule -> go://github.com/trendvidia/caliper/pkg/gcl#runContainsRule, the one shortest chain of static calls by the type checker."
+}
+
+question {
+  id = "caliper-chain-4"
+  shape = chain
+  text = "In caliper, how does transform.Rewriter.transformFile end up calling patterns.matchArgList? Name each function or method in the chain between them."
+  want = ["MatchNode", "matchNodes"]
+  note = "go://github.com/trendvidia/caliper/pkg/transform#Rewriter.transformFile -> go://github.com/trendvidia/caliper/pkg/analysis/patterns#Pattern.MatchNode -> go://github.com/trendvidia/caliper/pkg/analysis/patterns#matchNodes -> go://github.com/trendvidia/caliper/pkg/analysis/patterns#matchArgList, the one shortest chain of static calls by the type checker."
+}
+
+question {
+  id = "caliper-chain-5"
+  shape = chain
+  text = "In caliper, how does caliper-mcp.main end up calling mcp.Server.cachedHandler? Name each function or method in the chain between them."
+  want = ["NewServer", "registerTools"]
+  note = "go://github.com/trendvidia/caliper/cmd/caliper-mcp#main -> go://github.com/trendvidia/caliper/pkg/mcp#NewServer -> go://github.com/trendvidia/caliper/pkg/mcp#Server.registerTools -> go://github.com/trendvidia/caliper/pkg/mcp#Server.cachedHandler, the one shortest chain of static calls by the type checker."
+}

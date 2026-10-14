@@ -35,7 +35,10 @@ import (
 //
 // The graphify and graphify_grep arms (#284) need two more: ALIDADE_BENCH_GRAPHIFY, the
 // graphify-mcp binary, and ALIDADE_BENCH_GRAPH, the graph.json it built
-// for the checkout.
+// for the checkout. graphify_installed needs ALIDADE_BENCH_GRAPHIFY_EXE,
+// the graphify binary; ALIDADE_BENCH_GRAPHIFY_DIR, a copy of the checkout
+// at the same commit holding graphify-out; and ALIDADE_BENCH_GRAPHIFY_MD,
+// the CLAUDE.md section graphify installs (graphify/always_on/claude-md.md).
 func TestBench(t *testing.T) {
 	repo := os.Getenv("ALIDADE_BENCH")
 	if repo == "" {
@@ -91,13 +94,20 @@ func setup(t *testing.T, repo string, set *Set) (Header, *Runner) {
 	}
 	h := Header{Repo: set.Repo, Commit: set.Commit, Model: env("ALIDADE_BENCH_MODEL", "claude-sonnet-5-5"),
 		Alidade: bin, Claude: version(t, claude, "--version"), Started: time.Now()}
-	return h, &Runner{Repo: repo, Claude: claude, Model: h.Model, Budget: budget, Scratch: t.TempDir()}
+	return h, &Runner{Language: set.Language, Repo: repo, Claude: claude, Model: h.Model, Budget: budget, Scratch: t.TempDir()}
 }
 
 func arms(t *testing.T, bin, repo string) []Arm {
 	all := Arms(bin, repo)
 	if server, graph := os.Getenv("ALIDADE_BENCH_GRAPHIFY"), os.Getenv("ALIDADE_BENCH_GRAPH"); server != "" && graph != "" {
 		maps.Copy(all, Graphify(server, graph))
+	}
+	if exe, dir := os.Getenv("ALIDADE_BENCH_GRAPHIFY_EXE"), os.Getenv("ALIDADE_BENCH_GRAPHIFY_DIR"); exe != "" && dir != "" {
+		text, err := os.ReadFile(os.Getenv("ALIDADE_BENCH_GRAPHIFY_MD"))
+		if err != nil {
+			t.Fatalf("ALIDADE_BENCH_GRAPHIFY_MD: %v", err)
+		}
+		all["graphify_installed"] = GraphifyInstalled(exe, dir, string(text))
 	}
 	var out []Arm
 	for _, name := range strings.Split(env("ALIDADE_BENCH_ARMS", "alidade,none"), ",") {
@@ -160,7 +170,9 @@ func run(t *testing.T, r *Runner, questions []Question, arms []Arm) []*Run {
 					t.Error(err)
 					continue
 				}
-				if len(res.Denied) > 0 {
+				// An arm with rules of its own (Bash for one command) has
+				// its other Bash calls refused by design.
+				if len(res.Denied) > 0 && len(j.a.Allow) == 0 {
 					t.Errorf("%s/%s/%d: permissions denied %q: the run did not have its arm's tools", j.q.ID, j.a.Name, j.n, res.Denied)
 				}
 				t.Logf("%s/%s/%d: correct %v, %d tokens, $%.4f, %s", j.q.ID, j.a.Name, j.n, res.Correct, res.Tokens(), res.CostUSD, res.Duration.Round(time.Second))
