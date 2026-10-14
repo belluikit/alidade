@@ -123,6 +123,29 @@ builds it, serving real repositories over stdio.
 `ALIDADE_E2E_BIN` and `ALIDADE_E2E_REF` check a release as shipped, against
 the source it was built from.
 
+## The agent benchmark
+
+`internal/bench` asks questions of headless Claude Code sessions, one per
+question and arm, and scores each answer against the names it must
+contain. An arm is a set of tools: alidade and Read, grep alone, or
+graphify in two setups. It spends API money, capped per session, so it
+runs only when asked.
+
+- **Question sets** are in `internal/bench/testdata`. The `gen-*.pxf` sets
+  are drawn by rule, so nobody picks the questions:
+  `TestGenerateSet` draws a Go repository's from the type checker's calls,
+  and `scripts/pybenchgen.py` a Python repository's from the calls its
+  test suite made under `scripts/pytrace.sh`.
+- **Running it:** `scripts/bench.sh`, with the repository checked out at
+  the commit its set names. `internal/bench/live_test.go` lists the
+  settings, among them the arms and the two graphify needs.
+- **Reading it:** `TestReport` folds results files into one line per arm
+  and kind of question, with cost per correct answer and response time.
+
+The comparison in the README is
+[#3](https://github.com/trendvidia/alidade/issues/3), which says how each
+arm was set up.
+
 ## Releases
 
 The release workflow builds nothing for a tag that is not on main, or whose
