@@ -68,6 +68,19 @@ jobs:
           # typescript-go is a submodule the binary builds from (#215).
           submodules: true
 
+      # The checkout fetches no tags, and stock Go stamps a binary with a
+      # release's version only when its tag is in the checkout: v0.12.0
+      # shipped calling itself v0.0.0-20261014064831-56503fac9adf (#11).
+      # The tag must still name the commit the gate passed.
+      - name: Fetch the release tag
+        env:
+          TAG: ${{ github.event.inputs.tag || github.ref_name }}
+          SHA: ${{ needs.gate.outputs.sha }}
+        run: |
+          git fetch --no-tags --depth=1 origin "refs/tags/$TAG:refs/tags/$TAG"
+          at=$(git rev-parse "refs/tags/$TAG^{commit}")
+          if [ "$at" != "$SHA" ]; then echo "::error::$TAG is at $at, not $SHA, the commit the gate passed"; exit 1; fi
+
       # Stock Go (#282), the version CI tests with.
       - uses: actions/setup-go@v7
         with:
@@ -115,6 +128,12 @@ jobs:
             out="dist/alidade_${version}_${os}_${arch}"
             mkdir -p "$out"
             scripts/release-build.sh "$target" "$out/alidade"
+            # The binary this runner can run says which release it is (#11).
+            if [ "$target" = darwin/arm64 ]; then
+              said=$("$out/alidade" version)
+              echo "$said"
+              case "$said" in "alidade $TAG ("*) ;; *) echo "::error::the binary does not report $TAG"; exit 1 ;; esac
+            fi
             # The licenses of what the binary carries ship beside it (#282).
             cp THIRD_PARTY_NOTICES.txt "$out/"
             tar -C "$out" -czf "$out.tar.gz" alidade THIRD_PARTY_NOTICES.txt
