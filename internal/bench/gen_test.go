@@ -20,30 +20,7 @@ import (
 // and passes over a target with one caller, with nine, or whose answer
 // is in its question.
 func TestGenerate(t *testing.T) {
-	var calls []Edge
-	add := func(from, to string) { calls = append(calls, Edge{"go://m/" + from, "go://m/" + to}) }
-	// Lone has two callers and a name of its own.
-	add("p#A", "p#Lone")
-	add("p#B", "p#Lone")
-	// Solo has one caller; Crowd has nine.
-	add("p#A", "p#Solo")
-	for _, c := range []string{"C1", "C2", "C3", "C4", "C5", "C6", "C7", "C8", "C9"} {
-		add("p#"+c, "p#Crowd")
-	}
-	// Five types declare Close; T1's has two callers.
-	for _, typ := range []string{"T1", "T2", "T3", "T4", "T5"} {
-		add("p#User"+typ, "p#"+typ+".Close")
-	}
-	add("p#Other", "p#T1.Close")
-	// Start -> Mid1 -> Mid2 -> End, and no other way.
-	add("q#Start", "q#Mid1")
-	add("q#Mid1", "q#Mid2")
-	add("q#Mid2", "q#End")
-	// Echo's only callers are named Echo too: its answer is in its question.
-	add("r#X.Echo", "r#Echo")
-	add("r#Y.Echo", "r#Echo")
-
-	s := Generate("m", strings.Repeat("c", 40), calls, 3)
+	s := Generate("m", strings.Repeat("c", 40), genCalls(), 3)
 	got := map[string][]string{}
 	for _, q := range s.Questions {
 		got[q.Shape+" "+q.Text] = q.Want
@@ -66,7 +43,39 @@ func TestGenerate(t *testing.T) {
 	if len(got) != 3 {
 		t.Errorf("%d questions, want 3: %v", len(got), got)
 	}
-	// A generated set reads back as it was written.
+}
+
+// genCalls is a call graph with one candidate of each stratum and one of
+// each exclusion.
+func genCalls() []Edge {
+	var calls []Edge
+	add := func(from, to string) { calls = append(calls, Edge{"go://m/" + from, "go://m/" + to}) }
+	// Lone has two callers and a name of its own.
+	add("p#A", "p#Lone")
+	add("p#B", "p#Lone")
+	// Solo has one caller; Crowd has nine.
+	add("p#A", "p#Solo")
+	for _, c := range []string{"C1", "C2", "C3", "C4", "C5", "C6", "C7", "C8", "C9"} {
+		add("p#"+c, "p#Crowd")
+	}
+	// Five types declare Close; T1's has two callers.
+	for _, typ := range []string{"T1", "T2", "T3", "T4", "T5"} {
+		add("p#User"+typ, "p#"+typ+".Close")
+	}
+	add("p#Other", "p#T1.Close")
+	// Start -> Mid1 -> Mid2 -> End, and no other way.
+	add("q#Start", "q#Mid1")
+	add("q#Mid1", "q#Mid2")
+	add("q#Mid2", "q#End")
+	// Echo's only callers are named Echo too: its answer is in its question.
+	add("r#X.Echo", "r#Echo")
+	add("r#Y.Echo", "r#Echo")
+	return calls
+}
+
+// A generated set reads back as it was written.
+func TestMarshalReadsBack(t *testing.T) {
+	s := Generate("m", strings.Repeat("c", 40), genCalls(), 3)
 	path := filepath.Join(t.TempDir(), "m.pxf")
 	if err := os.WriteFile(path, s.Marshal("A header\n\nof two paragraphs."), 0o644); err != nil {
 		t.Fatal(err)
