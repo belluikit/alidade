@@ -12,9 +12,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/trendvidia/alidade/internal/adapter/golang"
-	"github.com/trendvidia/alidade/internal/build"
-	"github.com/trendvidia/alidade/internal/graph"
+	"github.com/belluikit/alidade/internal/adapter/golang"
+	"github.com/belluikit/alidade/internal/build"
+	"github.com/belluikit/alidade/internal/graph"
 )
 
 // TestCorpus runs the real repositories named by ALIDADE_CORPUS — roots

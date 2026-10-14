@@ -7,7 +7,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"github.com/trendvidia/alidade/internal/scope"
+	"github.com/belluikit/alidade/internal/scope"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -21,7 +21,7 @@ import (
 
 	mcpsdk "github.com/mark3labs/mcp-go/mcp"
 
-	"github.com/trendvidia/alidade/internal/graph"
+	"github.com/belluikit/alidade/internal/graph"
 )
 
 // search_text (#178) is a search of the working tree's text that

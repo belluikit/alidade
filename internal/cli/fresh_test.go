@@ -14,7 +14,7 @@ import (
 	"github.com/mark3labs/mcp-go/client"
 	mcpsdk "github.com/mark3labs/mcp-go/mcp"
 
-	"github.com/trendvidia/alidade/internal/mcp"
+	"github.com/belluikit/alidade/internal/mcp"
 )
 
 // TestServeAnswersFromTheFilesOnDisk is #204's done-when on a real build:

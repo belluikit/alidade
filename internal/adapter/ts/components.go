@@ -14,8 +14,8 @@ import (
 
 	tsgo "github.com/microsoft/typescript-go/shim"
 
-	"github.com/trendvidia/alidade/internal/adapter/ts/svelte"
-	"github.com/trendvidia/alidade/internal/graph"
+	"github.com/belluikit/alidade/internal/adapter/ts/svelte"
+	"github.com/belluikit/alidade/internal/graph"
 )
 
 // Svelte components reach the type checker as svelte2tsx translates them

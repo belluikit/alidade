@@ -11,7 +11,7 @@ import (
 
 	"github.com/yuin/goldmark/ast"
 
-	"github.com/trendvidia/alidade/internal/graph"
+	"github.com/belluikit/alidade/internal/graph"
 )
 
 // githubAnchor returns the anchor GitHub gives a heading, and the slug it

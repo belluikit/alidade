@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/trendvidia/alidade/internal/graph"
+	"github.com/belluikit/alidade/internal/graph"
 )
 
 func pxfTree(t *testing.T, files map[string]string) *graph.Graph {

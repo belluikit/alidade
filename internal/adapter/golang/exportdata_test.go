@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/trendvidia/alidade/internal/graph"
+	"github.com/belluikit/alidade/internal/graph"
 )
 
 // moduleView renders the module's own part of a Go layer graph — every

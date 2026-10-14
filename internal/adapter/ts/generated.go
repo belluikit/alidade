@@ -10,7 +10,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/trendvidia/alidade/internal/graph"
+	"github.com/belluikit/alidade/internal/graph"
 )
 
 // A genFile is what a protoc-gen-es output file states about itself: the

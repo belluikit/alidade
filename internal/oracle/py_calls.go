@@ -13,7 +13,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/trendvidia/alidade/internal/graph"
+	"github.com/belluikit/alidade/internal/graph"
 )
 
 // The Python layer's oracle is execution (#237, ADR 006 as amended): a

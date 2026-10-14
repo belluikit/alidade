@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/trendvidia/alidade/internal/graph"
+	"github.com/belluikit/alidade/internal/graph"
 )
 
 // TestOneBadInputCostsOneFact pins #92: an input no ID can name, or that

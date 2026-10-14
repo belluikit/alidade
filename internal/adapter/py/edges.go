@@ -7,8 +7,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/trendvidia/alidade/internal/graph"
-	"github.com/trendvidia/alidade/internal/python"
+	"github.com/belluikit/alidade/internal/graph"
+	"github.com/belluikit/alidade/internal/python"
 )
 
 // kinds maps the resolver's declaration kinds to the graph's.

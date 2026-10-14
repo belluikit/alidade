@@ -8,7 +8,7 @@ package main
 import (
 	"os"
 
-	"github.com/trendvidia/alidade/internal/cli"
+	"github.com/belluikit/alidade/internal/cli"
 )
 
 func main() {

@@ -11,7 +11,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/trendvidia/alidade/internal/graph"
+	"github.com/belluikit/alidade/internal/graph"
 )
 
 var (

@@ -12,8 +12,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/trendvidia/alidade/internal/build"
-	"github.com/trendvidia/alidade/internal/graph"
+	"github.com/belluikit/alidade/internal/build"
+	"github.com/belluikit/alidade/internal/graph"
 )
 
 // TestOracleGoCalls is the Go calls harness (#148): for each repository

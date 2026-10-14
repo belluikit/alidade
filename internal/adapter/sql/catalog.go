@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/trendvidia/alidade/internal/graph"
+	"github.com/belluikit/alidade/internal/graph"
 )
 
 // The schema catalog: every relation and column as the migrations leave

@@ -1,4 +1,4 @@
-module github.com/trendvidia/alidade
+module github.com/belluikit/alidade
 
 go 1.26.2
 

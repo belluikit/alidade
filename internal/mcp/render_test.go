@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/trendvidia/alidade/internal/graph"
+	"github.com/belluikit/alidade/internal/graph"
 )
 
 // renderedFacts names, for every field of the core's Node and Edge, the

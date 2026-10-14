@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/trendvidia/alidade/internal/build"
-	"github.com/trendvidia/alidade/internal/graph"
+	"github.com/belluikit/alidade/internal/build"
+	"github.com/belluikit/alidade/internal/graph"
 )
 
 // fixture is a module with one of each call the oracle resolves: a static

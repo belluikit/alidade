@@ -19,8 +19,8 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/trendvidia/alidade/internal/adapter/golang"
-	"github.com/trendvidia/alidade/internal/graph"
+	"github.com/belluikit/alidade/internal/adapter/golang"
+	"github.com/belluikit/alidade/internal/graph"
 )
 
 // The goasm oracle (#187) runs the generator a //go:generate directive

@@ -5,7 +5,7 @@ package sql
 
 import (
 	"fmt"
-	dirs "github.com/trendvidia/alidade/internal/scope"
+	dirs "github.com/belluikit/alidade/internal/scope"
 	"os"
 	"path/filepath"
 	"strings"
@@ -14,7 +14,7 @@ import (
 	oliphant "github.com/sqlc-dev/oliphant"
 	"github.com/sqlc-dev/oliphant/ast"
 
-	"github.com/trendvidia/alidade/internal/graph"
+	"github.com/belluikit/alidade/internal/graph"
 )
 
 // Options controls the SQL layer.

@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/trendvidia/alidade/internal/graph"
+	"github.com/belluikit/alidade/internal/graph"
 )
 
 // wide is a graph large enough that every budgeted tool truncates: a hub

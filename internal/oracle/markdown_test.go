@@ -6,7 +6,7 @@ package oracle
 import (
 	"testing"
 
-	"github.com/trendvidia/alidade/internal/graph"
+	"github.com/belluikit/alidade/internal/graph"
 )
 
 // The committed sample reads: every repository pinned to a full commit,

@@ -137,7 +137,7 @@ func modules() ([]module, error) {
 		for _, line := range strings.Split(string(raw), "\n") {
 			f := strings.Split(line, "\t")
 			// The shim is alidade's own code, under typescript-go's path.
-			if len(f) != 3 || f[0] == "github.com/trendvidia/alidade" || f[0] == "github.com/microsoft/typescript-go/shim" {
+			if len(f) != 3 || f[0] == "github.com/belluikit/alidade" || f[0] == "github.com/microsoft/typescript-go/shim" {
 				continue
 			}
 			seen[f[0]] = module{path: f[0], version: f[1], dir: f[2]}

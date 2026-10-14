@@ -8,7 +8,7 @@ import (
 
 	tsgo "github.com/microsoft/typescript-go/shim"
 
-	"github.com/trendvidia/alidade/internal/graph"
+	"github.com/belluikit/alidade/internal/graph"
 )
 
 // declPath is a declaration's path when the layer gives it a node — its

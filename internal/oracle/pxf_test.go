@@ -9,8 +9,8 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/trendvidia/alidade/internal/build"
-	"github.com/trendvidia/alidade/internal/graph"
+	"github.com/belluikit/alidade/internal/build"
+	"github.com/belluikit/alidade/internal/graph"
 )
 
 // TestPXFReaderFollowsTheSpec: each directive shape the protowire

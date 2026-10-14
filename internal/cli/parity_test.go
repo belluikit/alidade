@@ -15,8 +15,8 @@ import (
 	mcpsdk "github.com/mark3labs/mcp-go/mcp"
 	"github.com/trendvidia/protowire-go/encoding/pxf"
 
-	"github.com/trendvidia/alidade/internal/graph"
-	"github.com/trendvidia/alidade/internal/mcp"
+	"github.com/belluikit/alidade/internal/graph"
+	"github.com/belluikit/alidade/internal/mcp"
 )
 
 // surfaceKeys names, for every field of mcp.BuildInfo, the key it is

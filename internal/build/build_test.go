@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/trendvidia/alidade/internal/graph"
+	"github.com/belluikit/alidade/internal/graph"
 )
 
 func TestBuildGoModule(t *testing.T) {

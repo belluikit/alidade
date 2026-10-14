@@ -4,7 +4,7 @@
 package ts
 
 import (
-	"github.com/trendvidia/alidade/internal/adapter/ts/svelte"
+	"github.com/belluikit/alidade/internal/adapter/ts/svelte"
 	"path/filepath"
 	"reflect"
 	"sort"
@@ -12,7 +12,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/trendvidia/alidade/internal/graph"
+	"github.com/belluikit/alidade/internal/graph"
 )
 
 var (

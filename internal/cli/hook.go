@@ -13,8 +13,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/trendvidia/alidade/internal/mcp"
-	"github.com/trendvidia/alidade/internal/scope"
+	"github.com/belluikit/alidade/internal/mcp"
+	"github.com/belluikit/alidade/internal/scope"
 )
 
 // hook is a Claude Code PreToolUse hook (#208, the owner's decision):

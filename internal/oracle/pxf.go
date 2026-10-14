@@ -11,7 +11,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/trendvidia/alidade/internal/graph"
+	"github.com/belluikit/alidade/internal/graph"
 )
 
 // The PXF oracle (#187) reads each .pxf file's directives from its raw

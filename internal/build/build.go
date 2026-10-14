@@ -10,22 +10,22 @@ package build
 import (
 	"cmp"
 	"fmt"
-	"github.com/trendvidia/alidade/internal/scope"
+	"github.com/belluikit/alidade/internal/scope"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 	"time"
 
-	"github.com/trendvidia/alidade/internal/adapter/goasm"
-	"github.com/trendvidia/alidade/internal/adapter/golang"
-	"github.com/trendvidia/alidade/internal/adapter/markdown"
-	"github.com/trendvidia/alidade/internal/adapter/proto"
-	"github.com/trendvidia/alidade/internal/adapter/pxf"
-	"github.com/trendvidia/alidade/internal/adapter/py"
-	"github.com/trendvidia/alidade/internal/adapter/sql"
-	"github.com/trendvidia/alidade/internal/adapter/ts"
-	"github.com/trendvidia/alidade/internal/graph"
+	"github.com/belluikit/alidade/internal/adapter/goasm"
+	"github.com/belluikit/alidade/internal/adapter/golang"
+	"github.com/belluikit/alidade/internal/adapter/markdown"
+	"github.com/belluikit/alidade/internal/adapter/proto"
+	"github.com/belluikit/alidade/internal/adapter/pxf"
+	"github.com/belluikit/alidade/internal/adapter/py"
+	"github.com/belluikit/alidade/internal/adapter/sql"
+	"github.com/belluikit/alidade/internal/adapter/ts"
+	"github.com/belluikit/alidade/internal/graph"
 )
 
 // Options selects what each layer extracts. Layers not yet built have no

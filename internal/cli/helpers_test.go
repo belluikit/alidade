@@ -3,6 +3,6 @@
 
 package cli
 
-import "github.com/trendvidia/alidade/internal/build"
+import "github.com/belluikit/alidade/internal/build"
 
 func defaultOpts() build.Options { return build.DefaultOptions() }

@@ -9,7 +9,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/trendvidia/alidade/internal/graph"
+	"github.com/belluikit/alidade/internal/graph"
 )
 
 // A Class is what explains one of the graph's calls edges.

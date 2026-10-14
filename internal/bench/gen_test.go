@@ -11,8 +11,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/trendvidia/alidade/internal/graph"
-	"github.com/trendvidia/alidade/internal/oracle"
+	"github.com/belluikit/alidade/internal/graph"
+	"github.com/belluikit/alidade/internal/oracle"
 )
 
 // Generate takes each stratum's candidates by rule: a unique name, a

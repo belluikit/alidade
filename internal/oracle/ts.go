@@ -19,8 +19,8 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/descriptorpb"
 
-	tsadapter "github.com/trendvidia/alidade/internal/adapter/ts"
-	"github.com/trendvidia/alidade/internal/graph"
+	tsadapter "github.com/belluikit/alidade/internal/adapter/ts"
+	"github.com/belluikit/alidade/internal/graph"
 )
 
 // The frontend oracle has two halves (#168).

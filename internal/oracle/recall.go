@@ -10,7 +10,7 @@ import (
 
 	"github.com/trendvidia/protowire-go/encoding/pxf"
 
-	"github.com/trendvidia/alidade/internal/graph"
+	"github.com/belluikit/alidade/internal/graph"
 )
 
 // The Markdown recall sample (testdata/markdown-recall-sample.pxf, #189)

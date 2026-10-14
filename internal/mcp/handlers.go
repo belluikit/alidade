@@ -10,7 +10,7 @@ import (
 
 	mcpsdk "github.com/mark3labs/mcp-go/mcp"
 
-	"github.com/trendvidia/alidade/internal/graph"
+	"github.com/belluikit/alidade/internal/graph"
 )
 
 // statsOut is graph_stats' shape.

@@ -8,7 +8,7 @@ import (
 
 	tsgo "github.com/microsoft/typescript-go/shim"
 
-	"github.com/trendvidia/alidade/internal/graph"
+	"github.com/belluikit/alidade/internal/graph"
 )
 
 // Dispatch through interfaces (#229, the owner's decision; ADR 007

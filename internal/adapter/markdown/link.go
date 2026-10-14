@@ -10,8 +10,8 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/trendvidia/alidade/internal/adapter/ts"
-	"github.com/trendvidia/alidade/internal/graph"
+	"github.com/belluikit/alidade/internal/adapter/ts"
+	"github.com/belluikit/alidade/internal/graph"
 )
 
 // Link resolves the mentions Extract collected against the merged graph

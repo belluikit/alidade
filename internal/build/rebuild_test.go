@@ -11,9 +11,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/trendvidia/alidade/internal/adapter/golang"
-	"github.com/trendvidia/alidade/internal/graph"
-	"github.com/trendvidia/alidade/internal/python"
+	"github.com/belluikit/alidade/internal/adapter/golang"
+	"github.com/belluikit/alidade/internal/graph"
+	"github.com/belluikit/alidade/internal/python"
 )
 
 // TestRebuildSeesEditsUnderBuildDirs pins #93: "build" and "dist" are the

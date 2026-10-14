@@ -12,16 +12,16 @@ import (
 
 	mcpsdk "github.com/mark3labs/mcp-go/mcp"
 
-	"github.com/trendvidia/alidade/internal/adapter/goasm"
-	"github.com/trendvidia/alidade/internal/adapter/markdown"
-	"github.com/trendvidia/alidade/internal/adapter/proto"
-	"github.com/trendvidia/alidade/internal/adapter/pxf"
-	"github.com/trendvidia/alidade/internal/adapter/py"
-	"github.com/trendvidia/alidade/internal/adapter/sql"
-	"github.com/trendvidia/alidade/internal/adapter/ts"
-	"github.com/trendvidia/alidade/internal/adapter/ts/svelte"
-	"github.com/trendvidia/alidade/internal/build"
-	"github.com/trendvidia/alidade/internal/graph"
+	"github.com/belluikit/alidade/internal/adapter/goasm"
+	"github.com/belluikit/alidade/internal/adapter/markdown"
+	"github.com/belluikit/alidade/internal/adapter/proto"
+	"github.com/belluikit/alidade/internal/adapter/pxf"
+	"github.com/belluikit/alidade/internal/adapter/py"
+	"github.com/belluikit/alidade/internal/adapter/sql"
+	"github.com/belluikit/alidade/internal/adapter/ts"
+	"github.com/belluikit/alidade/internal/adapter/ts/svelte"
+	"github.com/belluikit/alidade/internal/build"
+	"github.com/belluikit/alidade/internal/graph"
 )
 
 // search_text (#178) finds text the graph does not hold and names the
