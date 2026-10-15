@@ -648,7 +648,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ==============================================================================
-github.com/mark3labs/mcp-go v0.57.0
+github.com/mark3labs/mcp-go v1.2.1
 
 --- LICENSE
 
@@ -2189,7 +2189,7 @@ rights granted to you under this License for this implementation of Go
 shall terminate as of the date such litigation is filed.
 
 ==============================================================================
-golang.org/x/mod v0.41.0
+golang.org/x/mod v0.42.0
 
 --- LICENSE
 
@@ -2247,7 +2247,7 @@ rights granted to you under this License for this implementation of Go
 shall terminate as of the date such litigation is filed.
 
 ==============================================================================
-golang.org/x/sync v0.23.0
+golang.org/x/sync v0.24.0
 
 --- LICENSE
 
@@ -2305,7 +2305,7 @@ rights granted to you under this License for this implementation of Go
 shall terminate as of the date such litigation is filed.
 
 ==============================================================================
-golang.org/x/sys v0.48.0
+golang.org/x/sys v0.49.0
 
 --- LICENSE
 
@@ -2421,7 +2421,7 @@ rights granted to you under this License for this implementation of Go
 shall terminate as of the date such litigation is filed.
 
 ==============================================================================
-golang.org/x/tools v0.51.0
+golang.org/x/tools v0.52.0
 
 --- LICENSE
 
