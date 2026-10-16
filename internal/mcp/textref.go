@@ -11,6 +11,8 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+
+	"github.com/belluikit/alidade/internal/worktree"
 )
 
 // search_text at a commit (#23): what origin/main says after a merge, or
@@ -49,6 +51,7 @@ func (ts *textSearch) walkRef(visit func(rel string, line int, text string, src 
 		in.WriteString(b.sha + "\n")
 	}
 	cmd := exec.Command("git", "-C", ts.root, "cat-file", "--batch")
+	cmd.Env = worktree.GitEnv()
 	cmd.Stdin = &in
 	out, err := cmd.StdoutPipe()
 	if err != nil {
@@ -80,20 +83,42 @@ func (ts *textSearch) walkRef(visit func(rel string, line int, text string, src 
 // refBlobs are the commit's files to search: regular files the call asks
 // for, under no directory search_text leaves out, and not too large.
 // The skip list is the one on disk, .alidade.pxf of the tree searched.
+// Without --full-tree, ls-tree lists the directory searched, by paths
+// relative to it, as the walk on disk does when the graph is built from
+// a directory below the checkout's top.
 func (ts *textSearch) refBlobs() ([]blob, error) {
-	out, err := gitOut(ts.root, "ls-tree", "-r", "-z", "--long", "--full-tree", ts.ref)
+	out, err := gitOut(ts.root, "ls-tree", "-r", "-z", "--long", ts.ref)
 	if err != nil {
 		return nil, fmt.Errorf("git ls-tree %s: %w", ts.ref, err)
 	}
-	var blobs []blob
+	var all []blob
+	venvs := map[string]bool{}
 	for _, entry := range bytes.Split(out, []byte{0}) {
-		b, ok := parseTreeEntry(string(entry))
-		if !ok || b.size > maxTextFile || !ts.wanted(b.rel) || ts.skippedRel(b.rel) {
+		if b, ok := parseTreeEntry(string(entry)); ok {
+			all = append(all, b)
+			if dir, file, ok := cutLast(b.rel); ok && file == "pyvenv.cfg" {
+				venvs[dir] = true
+			}
+		}
+	}
+	var blobs []blob
+	for _, b := range all {
+		if b.size > maxTextFile || !ts.wanted(b.rel) || ts.skippedRel(b.rel, venvs) {
 			continue
 		}
 		blobs = append(blobs, b)
 	}
 	return blobs, nil
+}
+
+// cutLast splits a repo-relative path at its last slash: its directory,
+// and its name; false for a file at the top.
+func cutLast(rel string) (string, string, bool) {
+	i := strings.LastIndexByte(rel, '/')
+	if i < 0 {
+		return "", rel, false
+	}
+	return rel[:i], rel[i+1:], true
 }
 
 // parseTreeEntry reads one line of ls-tree --long, "mode type sha
@@ -113,11 +138,13 @@ func parseTreeEntry(entry string) (blob, bool) {
 }
 
 // skippedRel reports whether a repo-relative file lies under a directory
-// search_text leaves out, by name or by the skip list.
-func (ts *textSearch) skippedRel(rel string) bool {
+// search_text leaves out: by name, by the skip list, or as a virtual
+// environment, one of venvs, which [scope.Dirs.SkipsDir] finds on disk
+// by its pyvenv.cfg.
+func (ts *textSearch) skippedRel(rel string, venvs map[string]bool) bool {
 	dirs := strings.Split(rel, "/")
-	for _, d := range dirs[:len(dirs)-1] {
-		if textSkipDirs[d] {
+	for i, d := range dirs[:len(dirs)-1] {
+		if textSkipDirs[d] || venvs[strings.Join(dirs[:i+1], "/")] {
 			return true
 		}
 	}
@@ -149,6 +176,7 @@ func readBlob(r *bufio.Reader) ([]byte, error) {
 // gitOut runs git in dir and returns its output.
 func gitOut(dir string, args ...string) ([]byte, error) {
 	cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
+	cmd.Env = worktree.GitEnv() // -C does not override a GIT_DIR exported
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	out, err := cmd.Output()

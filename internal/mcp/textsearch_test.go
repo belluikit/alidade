@@ -5,6 +5,7 @@ package mcp
 
 import (
 	"context"
+	"maps"
 	"os"
 	"path/filepath"
 	"strings"
@@ -102,11 +103,14 @@ func checkPaging(t *testing.T, h *harness) {
 
 // pageThrough follows next from a small-budget search until an answer is
 // not cut, counting each hit reached and the pages read.
-func pageThrough(t *testing.T, h *harness, pattern string) (map[string]int, int) {
+func pageThrough(t *testing.T, h *harness, pattern string, extra ...map[string]any) (map[string]int, int) {
 	t.Helper()
 	seen, after := map[string]int{}, ""
 	for page := 1; page <= 20; page++ {
 		args := map[string]any{"pattern": pattern, "max_tokens": 200}
+		for _, e := range extra {
+			maps.Copy(args, e)
+		}
 		if after != "" {
 			args["after"] = after
 		}
@@ -408,25 +412,34 @@ func TestSearchTextSkipsNamesEveryLayerSkips(t *testing.T) {
 // order. A directory "a" and a sibling "a-c" are where a directory walk
 // and string order part: the walk enters a/ first, while "a-c/x.md" <
 // "a/x.md" as strings, so after a hit in a/ the rest of a-c/ was skipped.
+//
+// The same holds of a commit's files; and continuing reads no file
+// before the one the cut answer ended in, which only its hits' dropping
+// kept out of the answer.
 func TestSearchTextPagesInPathOrder(t *testing.T) {
-	dir := t.TempDir()
-	if real, err := filepath.EvalSymlinks(dir); err == nil {
-		dir = real
-	}
+	dir := gittest.TempDir(t)
 	body := strings.Repeat("marker line\n", 40)
+	files := map[string]string{}
 	for _, name := range []string{"a/x.md", "a-c/x.md", "a.md", "b/x.md"} {
-		writeFile(t, filepath.Join(dir, name), body)
+		files[name] = body
 	}
+	gittest.Init(t, dir, files)
 	s := New(func() (*graph.Graph, BuildInfo, error) {
 		return graph.NewBuilder(dir).Build(), BuildInfo{Root: dir}, nil
 	})
 	h := &harness{t: t, c: connect(t, s)}
-	seen, pages := pageThrough(t, h, "marker")
-	if pages < 3 {
-		t.Errorf("%d pages: the budget never cut inside a directory", pages)
-	}
-	if len(seen) != 160 {
-		t.Errorf("pages reached %d of 160 hits", len(seen))
+	for _, at := range []map[string]any{{}, {"ref": "HEAD"}} {
+		seen, pages := pageThrough(t, h, "marker", at)
+		if pages < 3 {
+			t.Errorf("%v: %d pages: the budget never cut inside a directory", at, pages)
+		}
+		if len(seen) != 160 {
+			t.Errorf("%v: pages reached %d of 160 hits", at, len(seen))
+		}
+		r := h.callJSON("search_text", map[string]any{"pattern": "marker", "after": "a/x.md:40", "ref": at["ref"]})
+		if r["files"] != 2.0 || r["total"] != 40.0 {
+			t.Errorf("%v: continuing after a/x.md:40 read %v files for %v hits, want 2 (a/x.md, b/x.md) and 40", at, r["files"], r["total"])
+		}
 	}
 }
 
@@ -493,7 +506,8 @@ func TestSearchTextAtACommit(t *testing.T) {
 	base := gittest.TempDir(t)
 	main, wt := filepath.Join(base, "main"), filepath.Join(base, "wt")
 	gittest.Init(t, main, map[string]string{"docs/a.md": "first wording\n", "vendor/v.md": "first wording\n",
-		"a/x.md": "wording\n", "a-c/x.md": "wording\n", "bin.dat": "wording\x00\n"})
+		"a/x.md": "wording\n", "a-c/x.md": "wording\n", "bin.dat": "wording\x00\n",
+		"env/pyvenv.cfg": "home = /usr/bin\n", "env/lib/site.md": "wording\n"})
 	gittest.Commit(t, main, map[string]string{"docs/a.md": "second wording\n"}, "second")
 	writeFile(t, filepath.Join(main, "docs/a.md"), "third wording\n") // not committed
 	gittest.Git(t, main, "worktree", "add", "-q", "-b", "feature", wt)
@@ -528,8 +542,8 @@ func TestSearchTextAtACommit(t *testing.T) {
 }
 
 // checkAtCommit: the commit's three text hits, in path order — a-c/
-// before a/, as strings sort — none in vendor/ or a binary file, none
-// naming a declaration, and the commit named.
+// before a/, as strings sort — none in vendor/, a virtual environment
+// or a binary file, none naming a declaration, and the commit named.
 func checkAtCommit(t *testing.T, r map[string]any, ref, want string) {
 	t.Helper()
 	var got []string
@@ -546,5 +560,69 @@ func checkAtCommit(t *testing.T, r map[string]any, ref, want string) {
 	}
 	if sha, _ := r["ref"].(string); len(sha) != 40 {
 		t.Errorf("ref %s: the answer names commit %q", ref, r["ref"])
+	}
+}
+
+// TestSearchTextAtACommitBelowTheTop: a graph built from a directory
+// below the checkout's top searches that directory, by paths relative to
+// it, at a commit as on disk; a relative root is the repository's, not
+// the directory's.
+func TestSearchTextAtACommitBelowTheTop(t *testing.T) {
+	base := gittest.TempDir(t)
+	main, wt := filepath.Join(base, "main"), filepath.Join(base, "wt")
+	gittest.Init(t, main, map[string]string{"sub/pkg/x.md": "wording\n", "top.md": "wording\n"})
+	gittest.Git(t, main, "worktree", "add", "-q", "-b", "feature", wt)
+	sub := filepath.Join(main, "sub")
+	s := New(func() (*graph.Graph, BuildInfo, error) {
+		return graph.NewBuilder(sub).Build(), BuildInfo{Root: sub}, nil
+	}).Root(sub)
+	h := &harness{t: t, c: connect(t, s)}
+	for _, ref := range []string{"", "HEAD"} {
+		r := h.callJSON("search_text", map[string]any{"pattern": "wording", "path": "pkg/", "ref": ref})
+		hits, _ := r["hits"].([]any)
+		if len(hits) != 1 || hits[0].(map[string]any)["at"] != "pkg/x.md:1" {
+			t.Errorf("ref %q: %v, want pkg/x.md:1 alone", ref, r)
+		}
+	}
+	if r := h.callJSON("search_text", map[string]any{"pattern": "wording", "root": "../wt"}); r["root"] != wt || r["total"] != 2.0 {
+		t.Errorf("root ../wt, from a graph of main/sub: %v, want wt's two hits", r)
+	}
+}
+
+// TestSearchTextAtACommitUnderAGitHook: a server started from a git hook,
+// with GIT_DIR exported, still reads the commits of the tree searched.
+func TestSearchTextAtACommitUnderAGitHook(t *testing.T) {
+	base := gittest.TempDir(t)
+	main, hooked := filepath.Join(base, "main"), filepath.Join(base, "hooked")
+	gittest.Init(t, main, map[string]string{"a.md": "main's wording\n"})
+	gittest.Init(t, hooked, map[string]string{"a.md": "the hook's wording\n"})
+	t.Setenv("GIT_DIR", filepath.Join(hooked, ".git"))
+	s := New(func() (*graph.Graph, BuildInfo, error) {
+		return graph.NewBuilder(main).Build(), BuildInfo{Root: main}, nil
+	}).Root(main)
+	h := &harness{t: t, c: connect(t, s)}
+	r := h.callJSON("search_text", map[string]any{"pattern": "wording", "ref": "HEAD"})
+	if hits, _ := r["hits"].([]any); len(hits) != 1 || hits[0].(map[string]any)["text"] != "main's wording" {
+		t.Errorf("ref HEAD under GIT_DIR: %v, want main's wording", r)
+	}
+}
+
+// TestSearchTextRootOutsideAnyRepository: a graph built from a directory
+// in no repository has no other worktree, even when the server runs
+// inside a repository whose worktree root names, and the refusal says
+// why rather than calling root another repository's.
+func TestSearchTextRootOutsideAnyRepository(t *testing.T) {
+	base := gittest.TempDir(t)
+	main, wt, plain := filepath.Join(base, "main"), filepath.Join(base, "wt"), filepath.Join(base, "plain")
+	gittest.Init(t, main, map[string]string{"a.md": "wording\n"})
+	gittest.Git(t, main, "worktree", "add", "-q", "-b", "feature", wt)
+	writeFile(t, filepath.Join(plain, "p.md"), "wording\n")
+	t.Chdir(main)
+	s := New(func() (*graph.Graph, BuildInfo, error) {
+		return graph.NewBuilder(plain).Build(), BuildInfo{Root: plain}, nil
+	}).Root(plain)
+	h := &harness{t: t, c: connect(t, s)}
+	if text, isErr := h.call("search_text", map[string]any{"pattern": "wording", "root": wt}); !isErr || !strings.Contains(text, "in no git repository") {
+		t.Errorf("root %s, from a graph in no repository: %s (refused %v), want it refused as in no repository", wt, text, isErr)
 	}
 }

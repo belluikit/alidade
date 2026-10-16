@@ -54,7 +54,7 @@ model is told what to use instead:
 
 - the Grep tool;
 - Bash's `grep`, `egrep`, `fgrep`, `rg`, `ag`, `ack` and `git grep`
-  (`git -C <dir> grep` included).
+  (`git -C <dir> grep` and `git --work-tree <dir> grep` included).
 
 Every worktree of the repository counts as the repository: a search in
 another `git worktree` of it is refused too, and the model is told to

@@ -12,6 +12,7 @@ package worktree
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 )
 
@@ -33,6 +34,10 @@ func Top(dir string) string {
 // It is "" when top is no checkout, and has its symbolic links resolved,
 // so two of them compare as strings.
 func CommonDir(top string) string {
+	if top == "" {
+		// filepath.Join would make ".git", the process's own.
+		return ""
+	}
 	dotgit := filepath.Join(top, ".git")
 	info, err := os.Stat(dotgit)
 	if err != nil {
@@ -64,6 +69,27 @@ func CommonDir(top string) string {
 func Same(a, b string) bool {
 	ca := CommonDir(a)
 	return ca != "" && ca == CommonDir(b)
+}
+
+// localEnv are the variables that point git at a repository other than
+// the one its working directory is in, as `git rev-parse
+// --local-env-vars` lists them. A git hook exports some of them, and -C
+// does not override them.
+var localEnv = []string{
+	"GIT_ALTERNATE_OBJECT_DIRECTORIES", "GIT_CONFIG", "GIT_CONFIG_PARAMETERS", "GIT_CONFIG_COUNT",
+	"GIT_OBJECT_DIRECTORY", "GIT_DIR", "GIT_WORK_TREE", "GIT_IMPLICIT_WORK_TREE", "GIT_GRAFT_FILE",
+	"GIT_INDEX_FILE", "GIT_NO_REPLACE_OBJECTS", "GIT_REPLACE_REF_BASE", "GIT_PREFIX", "GIT_SHALLOW_FILE",
+	"GIT_COMMON_DIR",
+}
+
+// GitEnv is the process's environment without localEnv, for a git
+// command that must read the repository its directory is in.
+func GitEnv() []string {
+	env := os.Environ()
+	return slices.DeleteFunc(env, func(kv string) bool {
+		name, _, _ := strings.Cut(kv, "=")
+		return slices.Contains(localEnv, name)
+	})
 }
 
 func abs(base, p string) string {

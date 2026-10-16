@@ -128,13 +128,16 @@ func served(targets []string, repo string) (string, string, bool) {
 }
 
 // checkoutOf is the checkout of the repository a target lies in: the
-// repository's own, or another worktree of it; "" for neither.
+// repository's own, or another worktree of it; "" for neither. The
+// nearest checkout is asked first, since a worktree can lie inside the
+// repository's own, as Claude Code's .claude/worktrees/<name> does, and
+// a search there is one of that worktree.
 func checkoutOf(target, repo string) string {
-	if inside(target, repo) {
-		return repo
-	}
 	if top := worktree.Top(target); top != "" && worktree.Same(top, repo) {
 		return top
+	}
+	if inside(target, repo) {
+		return repo
 	}
 	return ""
 }
@@ -200,7 +203,8 @@ func placeSearch(dir string, words []string, prog int) ([]string, bool) {
 		return nil, false
 	}
 	if filepath.Base(words[prog]) == "git" {
-		// git -C dir grep searches dir, and its paths are dir's.
+		// git -C dir grep searches dir, and its paths are dir's; git
+		// --work-tree dir grep searches dir.
 		_, cdirs, _ := gitGrep(words[prog+1:])
 		for _, c := range cdirs {
 			if strings.ContainsAny(c, "$`") {
@@ -241,7 +245,7 @@ func runsSearch(words []string) (int, bool) {
 // gitGrep reads the words after git: its own options before the command
 // — -C dir, -c key=value, --no-pager — and reports whether the command is
 // grep, how many words that took, grep's included, and the directories
-// -C moves it to, in order.
+// -C and --work-tree move it to, in order.
 func gitGrep(words []string) (int, []string, bool) {
 	var cdirs []string
 	for i := 0; i < len(words); i++ {
@@ -251,9 +255,11 @@ func gitGrep(words []string) (int, []string, bool) {
 			return i + 1, cdirs, true
 		case !strings.HasPrefix(w, "-"):
 			return 0, nil, false
-		case w == "-C" && i+1 < len(words):
+		case (w == "-C" || w == "--work-tree") && i+1 < len(words):
 			i++
 			cdirs = append(cdirs, words[i])
+		case strings.HasPrefix(w, "--work-tree="):
+			cdirs = append(cdirs, strings.TrimPrefix(w, "--work-tree="))
 		case gitValueOptions[w]:
 			i++
 		}

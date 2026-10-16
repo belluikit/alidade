@@ -207,6 +207,11 @@ func TestHookCoversWorktrees(t *testing.T) {
 	main, wt, other := filepath.Join(base, "main"), filepath.Join(base, "wt"), filepath.Join(base, "other")
 	gittest.Init(t, main, map[string]string{"a.go": "package a\n", "vendor/v/v.go": "package v\n"})
 	gittest.Git(t, main, "worktree", "add", "-q", "-b", "feature", wt)
+	// Worktrees inside the main checkout: where Claude Code puts them,
+	// and under .tmp, which a search of the main checkout leaves out.
+	nested, hidden := filepath.Join(main, ".claude", "worktrees", "n"), filepath.Join(main, ".tmp", "h")
+	gittest.Git(t, main, "worktree", "add", "-q", "-b", "nested", nested)
+	gittest.Git(t, main, "worktree", "add", "-q", "-b", "hidden", hidden)
 	gittest.Init(t, other, map[string]string{"a.go": "package a\n"})
 	for _, c := range []struct {
 		name, cwd, tool string
@@ -222,14 +227,26 @@ func TestHookCoversWorktrees(t *testing.T) {
 		{"another repository", main, "Bash", map[string]any{"command": "grep -rn Foo " + other}, "-"},
 		{"under vendor in the worktree", main, "Bash", map[string]any{"command": "grep -rn Foo " + wt + "/vendor"}, "-"},
 		{"reading a worktree file", main, "Bash", map[string]any{"command": "sed -n 1,20p " + wt + "/a.go"}, "-"},
+		{"a worktree inside the main checkout", main, "Bash", map[string]any{"command": "grep -rn Foo .claude/worktrees/n"}, nested},
+		{"a worktree under a directory the main checkout's search leaves out", main, "Grep", map[string]any{"pattern": "Foo", "path": hidden}, hidden},
+		{"git --work-tree the worktree grep", main, "Bash", map[string]any{"command": "git --git-dir " + main + "/.git --work-tree " + wt + " grep Foo"}, wt},
+		{"git --work-tree= the repository, from elsewhere", main, "Bash", map[string]any{"command": "cd " + other + " && git --work-tree=" + main + " grep Foo"}, ""},
+		{"git --work-tree another repository", main, "Bash", map[string]any{"command": "git --git-dir " + other + "/.git --work-tree " + other + " grep Foo"}, "-"},
 	} {
-		denied, reason := runHook(t, c.cwd, c.tool, c.input)
-		if denied != (c.root != "-") {
-			t.Errorf("%s: denied %v", c.name, denied)
-			continue
-		}
-		if names := c.root != "" && c.root != "-"; names != strings.Contains(reason, "root=\""+c.root+"\"") {
-			t.Errorf("%s: reason %q, want it to name root %q: %v", c.name, reason, c.root, names)
-		}
+		checkHookRoot(t, c.name, c.cwd, c.tool, c.input, c.root)
+	}
+}
+
+// checkHookRoot runs the hook and checks the root its refusal names: ""
+// for a refusal naming none, "-" for a call let through.
+func checkHookRoot(t *testing.T, name, cwd, tool string, input map[string]any, root string) {
+	t.Helper()
+	denied, reason := runHook(t, cwd, tool, input)
+	if denied != (root != "-") {
+		t.Errorf("%s: denied %v", name, denied)
+		return
+	}
+	if names := root != "" && root != "-"; names != strings.Contains(reason, "root=\""+root+"\"") {
+		t.Errorf("%s: reason %q, want it to name root %q: %v", name, reason, root, names)
 	}
 }

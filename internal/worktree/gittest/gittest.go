@@ -10,6 +10,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"testing"
+
+	"github.com/belluikit/alidade/internal/worktree"
 )
 
 // Init makes a git repository at dir holding files, committed.
@@ -39,12 +41,14 @@ func Commit(t testing.TB, dir string, files map[string]string, msg string) {
 }
 
 // Git runs git in dir with a fixed identity and none of the user's
-// configuration, and returns its output.
+// configuration, and returns its output. A GIT_DIR or GIT_INDEX_FILE a
+// git hook exported is dropped, or git would write to that repository
+// rather than dir's.
 func Git(t testing.TB, dir string, args ...string) string {
 	t.Helper()
 	cmd := exec.Command("git", args...)
 	cmd.Dir = dir
-	cmd.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL="+os.DevNull, "GIT_CONFIG_NOSYSTEM=1",
+	cmd.Env = append(worktree.GitEnv(), "GIT_CONFIG_GLOBAL="+os.DevNull, "GIT_CONFIG_NOSYSTEM=1",
 		"GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@example.com", "GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@example.com")
 	out, err := cmd.CombinedOutput()
 	if err != nil {

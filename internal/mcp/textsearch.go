@@ -115,6 +115,7 @@ func (s *Server) handleSearchText(ctx context.Context, req mcpsdk.CallToolReques
 		return nil, err
 	}
 	afterFile, afterLine := splitAt(req.GetString("after", ""))
+	ts.after = afterFile
 	c := &textPage{ts: ts, budget: budget, used: envelope, filesOnly: req.GetBool("files_only", false), matched: map[string]int{}}
 	visit := func(rel string, line int, text string, src []byte) bool {
 		if rel < afterFile || rel == afterFile && line <= afterLine {
@@ -194,9 +195,13 @@ func treeParam(root, served string) (string, bool, error) {
 	if root == "" {
 		return served, false, nil
 	}
+	repo := worktree.Top(served)
+	if repo == "" {
+		return "", false, fmt.Errorf("root: %s is in no git repository, so it has no other worktree", served)
+	}
 	p := root
 	if !filepath.IsAbs(p) {
-		p = filepath.Join(served, p)
+		p = filepath.Join(repo, p)
 	}
 	p, err := filepath.EvalSymlinks(p)
 	if err != nil {
@@ -208,7 +213,7 @@ func treeParam(root, served string) (string, bool, error) {
 	if worktree.Top(p) != p {
 		return "", false, fmt.Errorf("root: %s is not the top directory of a checkout; give the worktree's top, and path for a directory in it", root)
 	}
-	if !worktree.Same(p, worktree.Top(served)) {
+	if !worktree.Same(p, repo) {
 		return "", false, fmt.Errorf("root: %s is not a worktree of the repository at %s; `git worktree list` names its worktrees", root, served)
 	}
 	return p, true, nil
@@ -355,7 +360,10 @@ type textSearch struct {
 	prefix       string
 	exclude      []string
 	excludeTests bool
-	goDecl       map[string][]declRange
+	// after is the file a cut answer ended in: the files before it are
+	// not read again to continue it.
+	after  string
+	goDecl map[string][]declRange
 	// skip are the directories the build leaves out (.alidade.pxf).
 	skip *scope.Dirs
 }
@@ -394,7 +402,7 @@ func (ts *textSearch) walkDir(dir string, visit func(rel string, line int, text 
 	for _, d := range entries {
 		p := filepath.Join(dir, d.Name())
 		if d.IsDir() {
-			if textSkipDirs[d.Name()] || ts.skip.SkipsDir(ts.root, p) || ts.excluded(ts.rel(p)+"/") {
+			if rel := ts.rel(p) + "/"; textSkipDirs[d.Name()] || !ts.mayHold(rel) || ts.excluded(rel) || ts.skip.SkipsDir(ts.root, p) {
 				continue
 			}
 			if err := ts.walkDir(p, visit); err != nil {
@@ -464,9 +472,20 @@ func (ts *textSearch) read(p string, d fs.DirEntry) (string, []byte, bool) {
 }
 
 // wanted reports whether a repo-relative file is one the call asks for:
-// under prefix, not excluded, and not a test when tests are left out.
+// under prefix, not excluded, not a test when tests are left out, and
+// not before the file a cut answer ended in.
 func (ts *textSearch) wanted(rel string) bool {
-	return strings.HasPrefix(rel, ts.prefix) && !ts.excluded(rel) && (!ts.excludeTests || !testFile(rel))
+	return strings.HasPrefix(rel, ts.prefix) && rel >= ts.after && !ts.excluded(rel) && (!ts.excludeTests || !testFile(rel))
+}
+
+// mayHold reports whether a directory, repo-relative with a slash after
+// it, can hold a file the call asks for: one under prefix, or holding
+// it, and not wholly before after. Every path that starts with dir sorts
+// before after exactly when dir does and after does not start with dir.
+func (ts *textSearch) mayHold(dir string) bool {
+	underPrefix := strings.HasPrefix(dir, ts.prefix) || strings.HasPrefix(ts.prefix, dir)
+	before := dir < ts.after && !strings.HasPrefix(ts.after, dir)
+	return underPrefix && !before
 }
 
 // binary reports whether a file's contents are not text: a NUL byte in

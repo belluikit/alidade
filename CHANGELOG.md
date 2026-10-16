@@ -18,8 +18,10 @@ tracker's. From v0.12.1 on, every number is this repository's.
 - **Changed: the grep hook covers every worktree of the repository**
   (#23). A search in another worktree of the session's repository is
   refused as one in the repository is, and the refusal names the `root`
-  to pass. `git -C <dir> grep`, `git --no-pager grep` and
-  `git -c key=value grep` are recognised as searches.
+  to pass, a worktree inside the checkout (`.claude/worktrees/<name>`)
+  included. `git -C <dir> grep`, `git --work-tree <dir> grep`,
+  `git --no-pager grep` and `git -c key=value grep` are recognised as
+  searches.
 - **Fixed: continuing a cut `search_text` answer could skip files**
   (#23). Files were searched in directory order, `a/` before `a-c/`,
   while `after` compares paths as strings, so a page that ended in `a/`
