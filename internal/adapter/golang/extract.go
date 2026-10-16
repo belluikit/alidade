@@ -400,6 +400,9 @@ type loadedModule struct {
 func loadModules(rec *recorder, m *graph.Minter, mods []Module, opts Options, report *Report) ([]loadedModule, error) {
 	var out []loadedModule
 	for _, mod := range mods {
+		if opts.patterns != nil && len((*opts.patterns)[mod.Dir]) == 0 {
+			continue // SPIKE (#25): no package of this module is asked for
+		}
 		start := time.Now()
 		eng, err := load(mod.Dir, opts, nil)
 		report.Load += time.Since(start)
@@ -466,6 +469,10 @@ func excludedInModules(loaded []loadedModule, tests bool) []string {
 // load runs caliper over the module for one configuration: the host's
 // when env is nil, otherwise the GOOS and GOARCH env carries.
 func load(dir string, opts Options, env []string) (*analysis.Engine, error) {
+	var patterns []string
+	if opts.patterns != nil {
+		patterns = (*opts.patterns)[dir] // SPIKE (#25): load only these packages
+	}
 	eng, err := analysis.NewEngineWithOptions(dir, analysis.EngineOptions{
 		// Never inherited from analysis.DefaultOptions: both flags are
 		// alidade's decision (ADR 004). SkipGenerated is off so the AST
@@ -476,7 +483,7 @@ func load(dir string, opts Options, env []string) (*analysis.Engine, error) {
 		Env:           env,
 
 		DepsFromExportData: opts.DepsFromExportData,
-	})
+	}, patterns...)
 	if err != nil {
 		return nil, fmt.Errorf("golang: load %s: %w", dir, err)
 	}
