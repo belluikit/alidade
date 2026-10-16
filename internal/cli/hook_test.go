@@ -62,6 +62,7 @@ func runHook(t *testing.T, cwd, tool string, input map[string]any) (denied bool,
 func TestHookDeniesGrepInTheRepository(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	t.Setenv("ALIDADE_ALLOW_GREP", "")
+	t.Setenv("CLAUDE_PROJECT_DIR", "")
 	repo, outside := hookRepo(t)
 	sub := filepath.Join(repo, "internal", "x")
 	for _, c := range []struct {
@@ -149,6 +150,7 @@ func TestHookLetsThrough(t *testing.T) {
 		t.Error("ALIDADE_ALLOW_GREP=1 still denied")
 	}
 	t.Setenv("ALIDADE_ALLOW_GREP", "")
+	t.Setenv("CLAUDE_PROJECT_DIR", "")
 	var out bytes.Buffer
 	if code := hook(strings.NewReader("not json"), &out, &out); code != 0 || out.Len() != 0 {
 		t.Errorf("unreadable input: exit %d, output %q", code, out.String())
@@ -169,6 +171,7 @@ func TestHookLetsThrough(t *testing.T) {
 func TestHookSaysTheEscapeIsTheSessions(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	t.Setenv("ALIDADE_ALLOW_GREP", "")
+	t.Setenv("CLAUDE_PROJECT_DIR", "")
 	repo, _ := hookRepo(t)
 	for _, c := range []struct {
 		command string
@@ -203,6 +206,7 @@ func TestHookSaysTheEscapeIsTheSessions(t *testing.T) {
 func TestHookCoversWorktrees(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	t.Setenv("ALIDADE_ALLOW_GREP", "")
+	t.Setenv("CLAUDE_PROJECT_DIR", "")
 	base := gittest.TempDir(t)
 	main, wt, other := filepath.Join(base, "main"), filepath.Join(base, "wt"), filepath.Join(base, "other")
 	gittest.Init(t, main, map[string]string{"a.go": "package a\n", "vendor/v/v.go": "package v\n"})
@@ -235,6 +239,11 @@ func TestHookCoversWorktrees(t *testing.T) {
 	} {
 		checkHookRoot(t, c.name, c.cwd, c.tool, c.input, c.root)
 	}
+	// The session started in main, and the Bash tool's cd moved its cwd:
+	// the session's repository is still the one alidade serves.
+	t.Setenv("CLAUDE_PROJECT_DIR", main)
+	checkHookRoot(t, "cd into the worktree, then grep", wt, "Bash", map[string]any{"command": "grep -rn Foo ."}, wt)
+	checkHookRoot(t, "cd into another repository, then grep", other, "Bash", map[string]any{"command": "grep -rn Foo ."}, "-")
 }
 
 // checkHookRoot runs the hook and checks the root its refusal names: ""

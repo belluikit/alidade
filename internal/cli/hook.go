@@ -40,7 +40,7 @@ func hook(stdin io.Reader, stdout, stderr io.Writer) int {
 	if !ok {
 		return 0
 	}
-	repo := worktree.Top(in.Cwd)
+	repo := worktree.Top(in.sessionDir())
 	target, top, ok := served(targets, repo)
 	if !ok {
 		return 0
@@ -140,6 +140,19 @@ func checkoutOf(target, repo string) string {
 		return repo
 	}
 	return ""
+}
+
+// sessionDir is the directory the session started in, which alidade
+// serves (setup registers `serve -root .` there): CLAUDE_PROJECT_DIR,
+// which Claude Code gives its hooks and its MCP servers alike. The
+// input's cwd follows the Bash tool's cd, so after cd into a worktree it
+// names that worktree, and a search there would not be told its root. A
+// hook run without the variable falls back to cwd.
+func (in hookInput) sessionDir() string {
+	if dir := os.Getenv("CLAUDE_PROJECT_DIR"); dir != "" {
+		return dir
+	}
+	return in.Cwd
 }
 
 func (in hookInput) resolve(p string) string {

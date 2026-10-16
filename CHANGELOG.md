@@ -21,7 +21,10 @@ tracker's. From v0.12.1 on, every number is this repository's.
   to pass, a worktree inside the checkout (`.claude/worktrees/<name>`)
   included. `git -C <dir> grep`, `git --work-tree <dir> grep`,
   `git --no-pager grep` and `git -c key=value grep` are recognised as
-  searches.
+  searches. The session's repository is the one it started in
+  (`CLAUDE_PROJECT_DIR`), which alidade serves, wherever `cd` has moved
+  the Bash tool since: a search after `cd` into a worktree is told its
+  `root`, and one after `cd` into another repository is let through.
 - **Fixed: continuing a cut `search_text` answer could skip files**
   (#23). Files were searched in directory order, `a/` before `a-c/`,
   while `after` compares paths as strings, so a page that ended in `a/`
