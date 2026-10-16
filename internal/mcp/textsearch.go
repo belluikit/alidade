@@ -267,30 +267,62 @@ type textSearch struct {
 }
 
 // walk calls visit for every matching line of every text file under the
-// root, in path order.
+// root, in the string order of their paths, which a cut answer's next
+// relies on to continue: "a-c/x" comes before "a/x", as git orders a
+// tree, though a directory walk enters a/ first.
 func (ts *textSearch) walk(prefix string, visit func(rel string, line int, text string, src []byte) bool) error {
-	return filepath.WalkDir(ts.root, func(p string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return nil
-		}
-		if d.IsDir() {
-			if p != ts.root && (textSkipDirs[d.Name()] || ts.skip.SkipsDir(ts.root, p)) {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-		rel, src, ok := ts.read(p, d, prefix)
-		if !ok {
-			return nil
-		}
-		ts.files++
-		for i, line := range bytes.Split(src, []byte("\n")) {
-			if ts.match(line) && !visit(rel, i+1, string(line), src) {
-				return filepath.SkipAll
-			}
-		}
+	err := ts.walkDir(ts.root, prefix, visit)
+	if err == filepath.SkipAll {
 		return nil
-	})
+	}
+	return err
+}
+
+// walkDir walks one directory, its entries in path order: a directory
+// sorts as its name with a slash after it.
+func (ts *textSearch) walkDir(dir, prefix string, visit func(rel string, line int, text string, src []byte) bool) error {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil
+	}
+	key := func(d fs.DirEntry) string {
+		if d.IsDir() {
+			return d.Name() + "/"
+		}
+		return d.Name()
+	}
+	slices.SortFunc(entries, func(a, b fs.DirEntry) int { return strings.Compare(key(a), key(b)) })
+	for _, d := range entries {
+		p := filepath.Join(dir, d.Name())
+		if d.IsDir() {
+			if textSkipDirs[d.Name()] || ts.skip.SkipsDir(ts.root, p) {
+				continue
+			}
+			if err := ts.walkDir(p, prefix, visit); err != nil {
+				return err
+			}
+			continue
+		}
+		if err := ts.searchFile(p, d, prefix, visit); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// searchFile calls visit for every matching line of one file.
+func (ts *textSearch) searchFile(p string, d fs.DirEntry, prefix string, visit func(rel string, line int, text string, src []byte) bool) error {
+	rel, src, ok := ts.read(p, d, prefix)
+	if !ok {
+		return nil
+	}
+	ts.files++
+	for i, line := range bytes.Split(src, []byte("\n")) {
+		if ts.match(line) && !visit(rel, i+1, string(line), src) {
+			return filepath.SkipAll
+		}
+	}
+	return nil
 }
 
 // read returns a file's repo-relative path and contents when it is one

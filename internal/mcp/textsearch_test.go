@@ -375,3 +375,30 @@ func TestSearchTextSkipsNamesEveryLayerSkips(t *testing.T) {
 		}
 	}
 }
+
+// TestSearchTextPagesInPathOrder: a cut answer's next continues by
+// comparing paths as strings, so the walk must visit files in that
+// order. A directory "a" and a sibling "a-c" are where a directory walk
+// and string order part: the walk enters a/ first, while "a-c/x.md" <
+// "a/x.md" as strings, so after a hit in a/ the rest of a-c/ was skipped.
+func TestSearchTextPagesInPathOrder(t *testing.T) {
+	dir := t.TempDir()
+	if real, err := filepath.EvalSymlinks(dir); err == nil {
+		dir = real
+	}
+	body := strings.Repeat("marker line\n", 40)
+	for _, name := range []string{"a/x.md", "a-c/x.md", "a.md", "b/x.md"} {
+		writeFile(t, filepath.Join(dir, name), body)
+	}
+	s := New(func() (*graph.Graph, BuildInfo, error) {
+		return graph.NewBuilder(dir).Build(), BuildInfo{Root: dir}, nil
+	})
+	h := &harness{t: t, c: connect(t, s)}
+	seen, pages := pageThrough(t, h, "marker")
+	if pages < 3 {
+		t.Errorf("%d pages: the budget never cut inside a directory", pages)
+	}
+	if len(seen) != 160 {
+		t.Errorf("pages reached %d of 160 hits", len(seen))
+	}
+}
