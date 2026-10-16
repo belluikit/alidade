@@ -15,6 +15,7 @@ import (
 
 	"github.com/belluikit/alidade/internal/mcp"
 	"github.com/belluikit/alidade/internal/scope"
+	"github.com/belluikit/alidade/internal/worktree"
 )
 
 // hook is a Claude Code PreToolUse hook (#208, the owner's decision):
@@ -39,7 +40,8 @@ func hook(stdin io.Reader, stdout, stderr io.Writer) int {
 	if !ok {
 		return 0
 	}
-	target, ok := served(targets, gitRoot(in.Cwd))
+	repo := worktree.Top(in.Cwd)
+	target, top, ok := served(targets, repo)
 	if !ok {
 		return 0
 	}
@@ -47,7 +49,7 @@ func hook(stdin io.Reader, stdout, stderr io.Writer) int {
 	out := map[string]any{"hookSpecificOutput": map[string]any{
 		"hookEventName":            "PreToolUse",
 		"permissionDecision":       "deny",
-		"permissionDecisionReason": reasonFor(in.ToolInput.Command),
+		"permissionDecisionReason": reasonFor(in.ToolInput.Command, top, repo),
 	}}
 	if err := json.NewEncoder(stdout).Encode(out); err != nil {
 		fmt.Fprintf(stderr, "alidade hook: %v\n", err)
@@ -58,6 +60,7 @@ func hook(stdin io.Reader, stdout, stderr io.Writer) int {
 const denyReason = "Text search is off in this repository: alidade serves it (and answered every benchmark question correctly without grep). " +
 	"For text — a literal, a regular expression, a log message — use mcp__alidade__search_text: every hit comes with the declaration holding it. " +
 	"For how code relates — callers, implementations, uses, schema to code — use mcp__alidade__find_nodes, then neighbors or shortest_path. " +
+	"search_text also searches another git worktree of the repository (root, its top directory) and a commit's files (ref, such as origin/main). " +
 	escapeNote
 
 // escapeNote says how a session gets grep back: by its environment when
@@ -74,12 +77,17 @@ var inlineEscapeRE = regexp.MustCompile(`(^|[\s;&|(])(export\s+)?ALIDADE_ALLOW_G
 
 // reasonFor is the refusal's reason, saying so when the command set
 // ALIDADE_ALLOW_GREP=1 itself: it is not honoured there, since an agent
-// could otherwise lift the refusal at will.
-func reasonFor(command string) string {
-	if inlineEscapeRE.MatchString(command) {
-		return "ALIDADE_ALLOW_GREP=1 set inside a command is not honoured: it is read from the session's environment when the session starts. " + denyReason
+// could otherwise lift the refusal at will. A search of another worktree
+// than the session's is told the root to pass (#23).
+func reasonFor(command, top, repo string) string {
+	reason := denyReason
+	if top != repo {
+		reason = fmt.Sprintf("%s is a worktree of this repository: pass root=%q to mcp__alidade__search_text. ", top, top) + reason
 	}
-	return denyReason
+	if inlineEscapeRE.MatchString(command) {
+		return "ALIDADE_ALLOW_GREP=1 set inside a command is not honoured: it is read from the session's environment when the session starts. " + reason
+	}
+	return reason
 }
 
 type hookInput struct {
@@ -103,18 +111,32 @@ func (in hookInput) searchTargets() ([]string, bool) {
 	return nil, false
 }
 
-// served is the first target alidade serves: one inside the repository,
-// not under a directory search_text leaves out.
-func served(targets []string, repo string) (string, bool) {
+// served is the first target alidade serves, and the checkout it lies
+// in: one inside the repository, or inside another worktree of it, which
+// search_text's root searches (#23); not under a directory search_text
+// leaves out.
+func served(targets []string, repo string) (string, string, bool) {
 	if repo == "" {
-		return "", false
+		return "", "", false
 	}
 	for _, t := range targets {
-		if inside(t, repo) && !underSearchSkip(t, repo) {
-			return t, true
+		if top := checkoutOf(t, repo); top != "" && !underSearchSkip(t, top) {
+			return t, top, true
 		}
 	}
-	return "", false
+	return "", "", false
+}
+
+// checkoutOf is the checkout of the repository a target lies in: the
+// repository's own, or another worktree of it; "" for neither.
+func checkoutOf(target, repo string) string {
+	if inside(target, repo) {
+		return repo
+	}
+	if top := worktree.Top(target); top != "" && worktree.Same(top, repo) {
+		return top
+	}
+	return ""
 }
 
 func (in hookInput) resolve(p string) string {
@@ -438,19 +460,6 @@ func resolveFrom(dir, p string) string {
 		p = filepath.Join(dir, p)
 	}
 	return filepath.Clean(p)
-}
-
-// gitRoot is the work tree root holding dir, or "".
-func gitRoot(dir string) string {
-	for d := filepath.Clean(dir); d != "" && d != "/"; d = filepath.Dir(d) {
-		if _, err := os.Stat(filepath.Join(d, ".git")); err == nil {
-			return d
-		}
-		if d == filepath.Dir(d) {
-			break
-		}
-	}
-	return ""
 }
 
 func inside(p, root string) bool {

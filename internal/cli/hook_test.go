@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/belluikit/alidade/internal/worktree/gittest"
 )
 
 // hookRepo is a git work tree with a subdirectory, a testdata directory,
@@ -181,6 +183,45 @@ func TestHookSaysTheEscapeIsTheSessions(t *testing.T) {
 		}
 		if got := strings.Contains(reason, "not honoured"); got != c.inline {
 			t.Errorf("%q: says the inline escape is not honoured: %v, want %v", c.command, got, c.inline)
+		}
+	}
+}
+
+// TestHookCoversWorktrees pins #23: a search in another worktree of the
+// session's repository is refused as one in the repository is, and told
+// the root to pass, from the main checkout or from the worktree; a
+// search in another repository, or under a directory search_text leaves
+// out, is not. Before, the worktree lay outside the session's repository
+// and every search there went through without a word.
+func TestHookCoversWorktrees(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	t.Setenv("ALIDADE_ALLOW_GREP", "")
+	base := gittest.TempDir(t)
+	main, wt, other := filepath.Join(base, "main"), filepath.Join(base, "wt"), filepath.Join(base, "other")
+	gittest.Init(t, main, map[string]string{"a.go": "package a\n", "vendor/v/v.go": "package v\n"})
+	gittest.Git(t, main, "worktree", "add", "-q", "-b", "feature", wt)
+	gittest.Init(t, other, map[string]string{"a.go": "package a\n"})
+	for _, c := range []struct {
+		name, cwd, tool string
+		input           map[string]any
+		root            string // the root the refusal names; "" when let through
+	}{
+		{"Grep in the worktree", main, "Grep", map[string]any{"pattern": "Foo", "path": wt}, wt},
+		{"cd to the worktree, git grep", main, "Bash", map[string]any{"command": "cd " + wt + " && git grep -n -E 'a|b' -- .github"}, wt},
+		{"grep a worktree file", main, "Bash", map[string]any{"command": "grep -n Foo " + wt + "/a.go"}, wt},
+		{"from the worktree, grep the main checkout", wt, "Bash", map[string]any{"command": "grep -rn Foo " + main}, main},
+		{"from the worktree, its own files", wt, "Bash", map[string]any{"command": "grep -rn Foo ."}, ""},
+		{"another repository", main, "Bash", map[string]any{"command": "grep -rn Foo " + other}, "-"},
+		{"under vendor in the worktree", main, "Bash", map[string]any{"command": "grep -rn Foo " + wt + "/vendor"}, "-"},
+		{"reading a worktree file", main, "Bash", map[string]any{"command": "sed -n 1,20p " + wt + "/a.go"}, "-"},
+	} {
+		denied, reason := runHook(t, c.cwd, c.tool, c.input)
+		if denied != (c.root != "-") {
+			t.Errorf("%s: denied %v", c.name, denied)
+			continue
+		}
+		if names := c.root != "" && c.root != "-"; names != strings.Contains(reason, "root=\""+c.root+"\"") {
+			t.Errorf("%s: reason %q, want it to name root %q: %v", c.name, reason, c.root, names)
 		}
 	}
 }
