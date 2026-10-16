@@ -8,6 +8,22 @@ tracker's. From v0.12.1 on, every number is this repository's.
 
 ## Unreleased
 
+- **Added: `search_text` answers for another worktree, a commit, or all
+  but some paths** (#23). `root` searches another `git worktree` of the
+  repository, by its top directory, and `ref` searches a commit's files
+  (`origin/main`, a pull request's head) without checking it out. Their
+  hits name no declaration, since the graph is built from the session's
+  own checkout. `exclude` leaves out every file under any of several path
+  prefixes, such as `api/`.
+- **Changed: the grep hook covers every worktree of the repository**
+  (#23). A search in another worktree of the session's repository is
+  refused as one in the repository is, and the refusal names the `root`
+  to pass. `git -C <dir> grep`, `git --no-pager grep` and
+  `git -c key=value grep` are recognised as searches.
+- **Fixed: continuing a cut `search_text` answer could skip files**
+  (#23). Files were searched in directory order, `a/` before `a-c/`,
+  while `after` compares paths as strings, so a page that ended in `a/`
+  lost `a-c/` and `a.md`. Files are now searched in string order.
 - **Changed: Homebrew installs from `belluikit/tap`.** The tap moved with
   alidade: `brew install belluikit/tap/alidade`. A tap already added as
   `trendvidia/tap` keeps updating through GitHub's redirect (#16).
