@@ -130,7 +130,7 @@ answer (`after`/`next`).
 `TestSearchStaysOutsideTheGraph` fails the day a search changes the graph or a
 hit names a node the graph does not hold.
 
-## Amended 2026-10-16: the same search, of another worktree or a commit (#23)
+## Amended 2026-10-16: the same search, of another worktree or a commit (#23, the owner's decision)
 
 The search above read the files the layers read, and nothing else. An agent
 whose work happens in a `git worktree` the server does not index, or that needs
