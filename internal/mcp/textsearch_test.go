@@ -22,6 +22,7 @@ import (
 	"github.com/belluikit/alidade/internal/adapter/ts/svelte"
 	"github.com/belluikit/alidade/internal/build"
 	"github.com/belluikit/alidade/internal/graph"
+	"github.com/belluikit/alidade/internal/worktree/gittest"
 )
 
 // search_text (#178) finds text the graph does not hold and names the
@@ -426,5 +427,59 @@ func TestSearchTextPagesInPathOrder(t *testing.T) {
 	}
 	if len(seen) != 160 {
 		t.Errorf("pages reached %d of 160 hits", len(seen))
+	}
+}
+
+// TestSearchTextInAWorktree pins #23: from a session whose graph is the
+// main checkout, root searches another worktree of the repository — a
+// string only that worktree holds is found there and not in the main
+// checkout — without building the graph, and its hits name no
+// declaration, since the graph is another tree's. A directory that is
+// not a worktree's top, or a checkout of another repository, is refused.
+func TestSearchTextInAWorktree(t *testing.T) {
+	base := gittest.TempDir(t)
+	main, wt, other := filepath.Join(base, "main"), filepath.Join(base, "wt"), filepath.Join(base, "other")
+	gittest.Init(t, main, map[string]string{"go.mod": "module example.com/m\n\ngo 1.26\n", "a/a.go": "package a\n\n// F is old.\nfunc F() {}\n"})
+	gittest.Git(t, main, "worktree", "add", "-q", "-b", "feature", wt)
+	gittest.Commit(t, wt, map[string]string{"docs/new.md": "# New\n\nlinked externally since the merge\n"}, "new doc")
+	gittest.Init(t, other, map[string]string{"README.md": "linked externally\n"})
+	builds := 0
+	s := New(func() (*graph.Graph, BuildInfo, error) {
+		builds++
+		return graph.NewBuilder(main).Build(), BuildInfo{Root: main}, nil
+	}).Root(main)
+	h := &harness{t: t, c: connect(t, s)}
+	for _, root := range []string{wt, "../wt"} {
+		checkWorktreeHit(t, h.callJSON("search_text", map[string]any{"pattern": "linked externally", "root": root}), root, wt)
+	}
+	if builds != 0 {
+		t.Errorf("a search of another worktree built the graph %d times", builds)
+	}
+	r := h.callJSON("search_text", map[string]any{"pattern": "linked externally"})
+	if r["total"] != 0.0 || r["root"] != nil {
+		t.Errorf("the main checkout holds the worktree's text: %v", r)
+	}
+	r = h.callJSON("search_text", map[string]any{"pattern": "F is old", "root": main})
+	if r["total"] != 1.0 || r["root"] != nil {
+		t.Errorf("root naming the graph's own checkout: %v", r)
+	}
+	for _, bad := range []string{other, filepath.Join(wt, "docs"), filepath.Join(base, "nowhere")} {
+		if text, isErr := h.call("search_text", map[string]any{"pattern": "x", "root": bad}); !isErr {
+			t.Errorf("root %s was not refused: %s", bad, text)
+		}
+	}
+}
+
+// checkWorktreeHit: the worktree's one hit, under its root, in no
+// declaration.
+func checkWorktreeHit(t *testing.T, r map[string]any, root, wt string) {
+	t.Helper()
+	hits, _ := r["hits"].([]any)
+	if len(hits) != 1 || hits[0].(map[string]any)["at"] != "docs/new.md:3" || r["root"] != wt {
+		t.Errorf("root %s: %v, want docs/new.md:3 under root %s", root, r, wt)
+		return
+	}
+	if hits[0].(map[string]any)["in"] != nil {
+		t.Errorf("root %s: a worktree's hit names a declaration of another tree's graph: %v", root, hits[0])
 	}
 }

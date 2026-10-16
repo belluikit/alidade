@@ -349,7 +349,13 @@ func serve(root string, opts build.Options, stderr io.Writer) int {
 	}
 	buildFn, fingerprint, pending, refresh, closeFn := sessionFuncs(root, opts)
 	defer closeFn()
-	if err := mcp.New(buildFn).WatchFiles(fingerprint).WatchProgress(pending, refresh).ServeStdio(); err != nil {
+	s := mcp.New(buildFn).WatchFiles(fingerprint).WatchProgress(pending, refresh)
+	if abs, err := filepath.Abs(root); err == nil {
+		// A search of another worktree of the repository then answers
+		// without building this one's graph first (#23).
+		s.Root(abs)
+	}
+	if err := s.ServeStdio(); err != nil {
 		fmt.Fprintf(stderr, "alidade: %v\n", err)
 		return 1
 	}
