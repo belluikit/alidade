@@ -34,7 +34,7 @@ fi
 # list does not name would never be measured, and gocyclo given a path
 # that does not exist prints to stderr and exits 0, so a renamed
 # directory would pass silently too.
-domains="internal/mcp cmd internal/adapter internal/python internal/graph internal/scope internal/build internal/cli internal/oracle internal/bench internal/e2e internal/version"
+domains="internal/mcp cmd internal/adapter internal/python internal/graph internal/scope internal/worktree internal/build internal/cli internal/oracle internal/bench internal/e2e internal/version"
 for d in internal/*/ cmd/; do
   d=${d%/}
   case " $domains " in
@@ -67,6 +67,6 @@ check() {
   fi
 }
 check 10 internal/mcp cmd
-check 12 internal/adapter internal/python internal/graph internal/scope
+check 12 internal/adapter internal/python internal/graph internal/scope internal/worktree
 check 15 internal/build internal/cli internal/oracle internal/bench internal/e2e internal/version
 exit $status

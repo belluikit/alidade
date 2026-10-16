@@ -15,6 +15,7 @@ import (
 
 	"github.com/belluikit/alidade/internal/mcp"
 	"github.com/belluikit/alidade/internal/scope"
+	"github.com/belluikit/alidade/internal/worktree"
 )
 
 // hook is a Claude Code PreToolUse hook (#208, the owner's decision):
@@ -39,7 +40,8 @@ func hook(stdin io.Reader, stdout, stderr io.Writer) int {
 	if !ok {
 		return 0
 	}
-	target, ok := served(targets, gitRoot(in.Cwd))
+	repo := worktree.Top(in.sessionDir())
+	target, top, ok := served(targets, repo)
 	if !ok {
 		return 0
 	}
@@ -47,7 +49,7 @@ func hook(stdin io.Reader, stdout, stderr io.Writer) int {
 	out := map[string]any{"hookSpecificOutput": map[string]any{
 		"hookEventName":            "PreToolUse",
 		"permissionDecision":       "deny",
-		"permissionDecisionReason": reasonFor(in.ToolInput.Command),
+		"permissionDecisionReason": reasonFor(in.ToolInput.Command, top, repo),
 	}}
 	if err := json.NewEncoder(stdout).Encode(out); err != nil {
 		fmt.Fprintf(stderr, "alidade hook: %v\n", err)
@@ -58,6 +60,7 @@ func hook(stdin io.Reader, stdout, stderr io.Writer) int {
 const denyReason = "Text search is off in this repository: alidade serves it (and answered every benchmark question correctly without grep). " +
 	"For text — a literal, a regular expression, a log message — use mcp__alidade__search_text: every hit comes with the declaration holding it. " +
 	"For how code relates — callers, implementations, uses, schema to code — use mcp__alidade__find_nodes, then neighbors or shortest_path. " +
+	"search_text also searches another git worktree of the repository (root, its top directory) and a commit's files (ref, such as origin/main). " +
 	escapeNote
 
 // escapeNote says how a session gets grep back: by its environment when
@@ -74,12 +77,17 @@ var inlineEscapeRE = regexp.MustCompile(`(^|[\s;&|(])(export\s+)?ALIDADE_ALLOW_G
 
 // reasonFor is the refusal's reason, saying so when the command set
 // ALIDADE_ALLOW_GREP=1 itself: it is not honoured there, since an agent
-// could otherwise lift the refusal at will.
-func reasonFor(command string) string {
-	if inlineEscapeRE.MatchString(command) {
-		return "ALIDADE_ALLOW_GREP=1 set inside a command is not honoured: it is read from the session's environment when the session starts. " + denyReason
+// could otherwise lift the refusal at will. A search of another worktree
+// than the session's is told the root to pass (#23).
+func reasonFor(command, top, repo string) string {
+	reason := denyReason
+	if top != repo {
+		reason = fmt.Sprintf("%s is a worktree of this repository: pass root=%q to mcp__alidade__search_text. ", top, top) + reason
 	}
-	return denyReason
+	if inlineEscapeRE.MatchString(command) {
+		return "ALIDADE_ALLOW_GREP=1 set inside a command is not honoured: it is read from the session's environment when the session starts. " + reason
+	}
+	return reason
 }
 
 type hookInput struct {
@@ -103,18 +111,48 @@ func (in hookInput) searchTargets() ([]string, bool) {
 	return nil, false
 }
 
-// served is the first target alidade serves: one inside the repository,
-// not under a directory search_text leaves out.
-func served(targets []string, repo string) (string, bool) {
+// served is the first target alidade serves, and the checkout it lies
+// in: one inside the repository, or inside another worktree of it, which
+// search_text's root searches (#23); not under a directory search_text
+// leaves out.
+func served(targets []string, repo string) (string, string, bool) {
 	if repo == "" {
-		return "", false
+		return "", "", false
 	}
 	for _, t := range targets {
-		if inside(t, repo) && !underSearchSkip(t, repo) {
-			return t, true
+		if top := checkoutOf(t, repo); top != "" && !underSearchSkip(t, top) {
+			return t, top, true
 		}
 	}
-	return "", false
+	return "", "", false
+}
+
+// checkoutOf is the checkout of the repository a target lies in: the
+// repository's own, or another worktree of it; "" for neither. The
+// nearest checkout is asked first, since a worktree can lie inside the
+// repository's own, as Claude Code's .claude/worktrees/<name> does, and
+// a search there is one of that worktree.
+func checkoutOf(target, repo string) string {
+	if top := worktree.Top(target); top != "" && worktree.Same(top, repo) {
+		return top
+	}
+	if inside(target, repo) {
+		return repo
+	}
+	return ""
+}
+
+// sessionDir is the directory the session started in, which alidade
+// serves (setup registers `serve -root .` there): CLAUDE_PROJECT_DIR,
+// which Claude Code gives its hooks and its MCP servers alike. The
+// input's cwd follows the Bash tool's cd, so after cd into a worktree it
+// names that worktree, and a search there would not be told its root. A
+// hook run without the variable falls back to cwd.
+func (in hookInput) sessionDir() string {
+	if dir := os.Getenv("CLAUDE_PROJECT_DIR"); dir != "" {
+		return dir
+	}
+	return in.Cwd
 }
 
 func (in hookInput) resolve(p string) string {
@@ -177,6 +215,17 @@ func placeSearch(dir string, words []string, prog int) ([]string, bool) {
 	if !placed {
 		return nil, false
 	}
+	if filepath.Base(words[prog]) == "git" {
+		// git -C dir grep searches dir, and its paths are dir's; git
+		// --work-tree dir grep searches dir.
+		_, cdirs, _ := gitGrep(words[prog+1:])
+		for _, c := range cdirs {
+			if strings.ContainsAny(c, "$`") {
+				return nil, false
+			}
+			dir = resolveFrom(dir, c)
+		}
+	}
 	if lead := filepath.Base(words[0]); len(operands) == 0 || lead == "xargs" || lead == "find" {
 		return []string{dir}, true
 	}
@@ -197,12 +246,43 @@ func runsSearch(words []string) (int, bool) {
 		switch {
 		case searchCommands[base] && lead:
 			return i, true
-		case base == "git" && lead && i+1 < len(words) && words[i+1] == "grep":
-			return i, true
+		case base == "git" && lead:
+			if _, _, ok := gitGrep(words[i+1:]); ok {
+				return i, true
+			}
 		}
 	}
 	return 0, false
 }
+
+// gitGrep reads the words after git: its own options before the command
+// — -C dir, -c key=value, --no-pager — and reports whether the command is
+// grep, how many words that took, grep's included, and the directories
+// -C and --work-tree move it to, in order.
+func gitGrep(words []string) (int, []string, bool) {
+	var cdirs []string
+	for i := 0; i < len(words); i++ {
+		w := words[i]
+		switch {
+		case w == "grep":
+			return i + 1, cdirs, true
+		case !strings.HasPrefix(w, "-"):
+			return 0, nil, false
+		case (w == "-C" || w == "--work-tree") && i+1 < len(words):
+			i++
+			cdirs = append(cdirs, words[i])
+		case strings.HasPrefix(w, "--work-tree="):
+			cdirs = append(cdirs, strings.TrimPrefix(w, "--work-tree="))
+		case gitValueOptions[w]:
+			i++
+		}
+	}
+	return 0, nil, false
+}
+
+// gitValueOptions are git's own options that take the next word as
+// their value.
+var gitValueOptions = map[string]bool{"-c": true, "--git-dir": true, "--work-tree": true, "--namespace": true, "--config-env": true}
 
 // valueFlags are each search program's one-letter options that take a
 // value: grep -A 3, rg -g '*.go'.
@@ -221,7 +301,8 @@ func searchOperands(words []string) ([]string, bool) {
 	prog := filepath.Base(words[0])
 	words = words[1:]
 	if prog == "git" {
-		words = words[1:] // grep
+		n, _, _ := gitGrep(words)
+		words = words[n:] // git's own options, and grep
 	}
 	r := &operandReader{prog: prog, values: valueFlags[prog]}
 	for i := 0; i < len(words); i++ {
@@ -438,19 +519,6 @@ func resolveFrom(dir, p string) string {
 		p = filepath.Join(dir, p)
 	}
 	return filepath.Clean(p)
-}
-
-// gitRoot is the work tree root holding dir, or "".
-func gitRoot(dir string) string {
-	for d := filepath.Clean(dir); d != "" && d != "/"; d = filepath.Dir(d) {
-		if _, err := os.Stat(filepath.Join(d, ".git")); err == nil {
-			return d
-		}
-		if d == filepath.Dir(d) {
-			break
-		}
-	}
-	return ""
 }
 
 func inside(p, root string) bool {

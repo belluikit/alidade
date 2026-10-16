@@ -130,6 +130,26 @@ answer (`after`/`next`).
 `TestSearchStaysOutsideTheGraph` fails the day a search changes the graph or a
 hit names a node the graph does not hold.
 
+## Amended 2026-10-16: the same search, of another worktree or a commit (#23, the owner's decision)
+
+The search above read the files the layers read, and nothing else. An agent
+whose work happens in a `git worktree` the server does not index, or that needs
+what a commit held, went back to grep for both (#23). `search_text` now also
+reads another worktree of the repository (`root`) and a commit's files (`ref`).
+That widens what it searches, not what it is, and each bound still holds:
+
+1. **Outside the graph.** The graph is still the session's checkout's. A hit in
+   another worktree or a commit names no declaration: its line numbers belong
+   to another tree, and placing them in this graph's declarations would give a
+   wrong answer that looks right. The graph is not built to answer them.
+2. **No parser.** It still matches bytes. A commit's files come from git itself
+   (`ls-tree`, `cat-file --batch`), an existing tool, and a worktree is
+   recognised from the files git writes (`.git`, `commondir`).
+3. **Still the only one.** It is the same analysis over another set of files.
+
+`TestSearchTextInAWorktree` and `TestSearchTextAtACommit` fail the day such a
+hit names a declaration, or the graph is built to answer one.
+
 ## Amended 2026-10-08: a library's internal packages, through a shim (#215, the owner's decision)
 
 typescript-go, TypeScript 7's compiler, is consumed in process as a typed Go

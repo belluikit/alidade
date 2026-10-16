@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/belluikit/alidade/internal/worktree/gittest"
 )
 
 // hookRepo is a git work tree with a subdirectory, a testdata directory,
@@ -60,6 +62,7 @@ func runHook(t *testing.T, cwd, tool string, input map[string]any) (denied bool,
 func TestHookDeniesGrepInTheRepository(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	t.Setenv("ALIDADE_ALLOW_GREP", "")
+	t.Setenv("CLAUDE_PROJECT_DIR", "")
 	repo, outside := hookRepo(t)
 	sub := filepath.Join(repo, "internal", "x")
 	for _, c := range []struct {
@@ -108,6 +111,13 @@ func TestHookDeniesGrepInTheRepository(t *testing.T) {
 		{"grep from a redirect inside", repo, "Bash", map[string]any{"command": "grep Foo < internal/x/a.go"}, true},
 		{"grep -c, output redirected", repo, "Bash", map[string]any{"command": "grep -rc Foo . > " + outside + "/count"}, true},
 		{"git grep -- a path", repo, "Bash", map[string]any{"command": "git grep -n Foo -- internal"}, true},
+		{"git -C a directory of the repository grep", repo, "Bash", map[string]any{"command": "cd " + outside + " && git -C " + repo + "/internal grep -n Foo"}, true},
+		{"git -C a relative directory grep", repo, "Bash", map[string]any{"command": "git -C internal grep Foo"}, true},
+		{"git -C elsewhere grep", repo, "Bash", map[string]any{"command": "git -C " + outside + " grep -n Foo"}, false},
+		{"git -C a variable grep", repo, "Bash", map[string]any{"command": "git -C $D grep Foo"}, false},
+		{"git --no-pager grep", repo, "Bash", map[string]any{"command": "git --no-pager grep -n Foo"}, true},
+		{"git -c key=value grep", repo, "Bash", map[string]any{"command": "git -c core.quotepath=off grep Foo -- internal"}, true},
+		{"git log --grep, not a search of files", repo, "Bash", map[string]any{"command": "git log --grep Foo"}, false},
 		{"cd outside, grep a path back in", outside, "Bash", map[string]any{"command": "grep Foo " + repo + "/internal"}, false},
 		{"a variable operand", repo, "Bash", map[string]any{"command": "grep ERROR $LOG"}, false},
 		// A here-document's body is a command's input, not commands.
@@ -140,6 +150,7 @@ func TestHookLetsThrough(t *testing.T) {
 		t.Error("ALIDADE_ALLOW_GREP=1 still denied")
 	}
 	t.Setenv("ALIDADE_ALLOW_GREP", "")
+	t.Setenv("CLAUDE_PROJECT_DIR", "")
 	var out bytes.Buffer
 	if code := hook(strings.NewReader("not json"), &out, &out); code != 0 || out.Len() != 0 {
 		t.Errorf("unreadable input: exit %d, output %q", code, out.String())
@@ -160,6 +171,7 @@ func TestHookLetsThrough(t *testing.T) {
 func TestHookSaysTheEscapeIsTheSessions(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	t.Setenv("ALIDADE_ALLOW_GREP", "")
+	t.Setenv("CLAUDE_PROJECT_DIR", "")
 	repo, _ := hookRepo(t)
 	for _, c := range []struct {
 		command string
@@ -182,5 +194,68 @@ func TestHookSaysTheEscapeIsTheSessions(t *testing.T) {
 		if got := strings.Contains(reason, "not honoured"); got != c.inline {
 			t.Errorf("%q: says the inline escape is not honoured: %v, want %v", c.command, got, c.inline)
 		}
+	}
+}
+
+// TestHookCoversWorktrees pins #23: a search in another worktree of the
+// session's repository is refused as one in the repository is, and told
+// the root to pass, from the main checkout or from the worktree; a
+// search in another repository, or under a directory search_text leaves
+// out, is not. Before, the worktree lay outside the session's repository
+// and every search there went through without a word.
+func TestHookCoversWorktrees(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	t.Setenv("ALIDADE_ALLOW_GREP", "")
+	t.Setenv("CLAUDE_PROJECT_DIR", "")
+	base := gittest.TempDir(t)
+	main, wt, other := filepath.Join(base, "main"), filepath.Join(base, "wt"), filepath.Join(base, "other")
+	gittest.Init(t, main, map[string]string{"a.go": "package a\n", "vendor/v/v.go": "package v\n"})
+	gittest.Git(t, main, "worktree", "add", "-q", "-b", "feature", wt)
+	// Worktrees inside the main checkout: where Claude Code puts them,
+	// and under .tmp, which a search of the main checkout leaves out.
+	nested, hidden := filepath.Join(main, ".claude", "worktrees", "n"), filepath.Join(main, ".tmp", "h")
+	gittest.Git(t, main, "worktree", "add", "-q", "-b", "nested", nested)
+	gittest.Git(t, main, "worktree", "add", "-q", "-b", "hidden", hidden)
+	gittest.Init(t, other, map[string]string{"a.go": "package a\n"})
+	for _, c := range []struct {
+		name, cwd, tool string
+		input           map[string]any
+		root            string // the root the refusal names; "" when let through
+	}{
+		{"Grep in the worktree", main, "Grep", map[string]any{"pattern": "Foo", "path": wt}, wt},
+		{"cd to the worktree, git grep", main, "Bash", map[string]any{"command": "cd " + wt + " && git grep -n -E 'a|b' -- .github"}, wt},
+		{"git -C the worktree grep", main, "Bash", map[string]any{"command": "git -C " + wt + " grep -n -E 'go#56|linked externally'"}, wt},
+		{"grep a worktree file", main, "Bash", map[string]any{"command": "grep -n Foo " + wt + "/a.go"}, wt},
+		{"from the worktree, grep the main checkout", wt, "Bash", map[string]any{"command": "grep -rn Foo " + main}, main},
+		{"from the worktree, its own files", wt, "Bash", map[string]any{"command": "grep -rn Foo ."}, ""},
+		{"another repository", main, "Bash", map[string]any{"command": "grep -rn Foo " + other}, "-"},
+		{"under vendor in the worktree", main, "Bash", map[string]any{"command": "grep -rn Foo " + wt + "/vendor"}, "-"},
+		{"reading a worktree file", main, "Bash", map[string]any{"command": "sed -n 1,20p " + wt + "/a.go"}, "-"},
+		{"a worktree inside the main checkout", main, "Bash", map[string]any{"command": "grep -rn Foo .claude/worktrees/n"}, nested},
+		{"a worktree under a directory the main checkout's search leaves out", main, "Grep", map[string]any{"pattern": "Foo", "path": hidden}, hidden},
+		{"git --work-tree the worktree grep", main, "Bash", map[string]any{"command": "git --git-dir " + main + "/.git --work-tree " + wt + " grep Foo"}, wt},
+		{"git --work-tree= the repository, from elsewhere", main, "Bash", map[string]any{"command": "cd " + other + " && git --work-tree=" + main + " grep Foo"}, ""},
+		{"git --work-tree another repository", main, "Bash", map[string]any{"command": "git --git-dir " + other + "/.git --work-tree " + other + " grep Foo"}, "-"},
+	} {
+		checkHookRoot(t, c.name, c.cwd, c.tool, c.input, c.root)
+	}
+	// The session started in main, and the Bash tool's cd moved its cwd:
+	// the session's repository is still the one alidade serves.
+	t.Setenv("CLAUDE_PROJECT_DIR", main)
+	checkHookRoot(t, "cd into the worktree, then grep", wt, "Bash", map[string]any{"command": "grep -rn Foo ."}, wt)
+	checkHookRoot(t, "cd into another repository, then grep", other, "Bash", map[string]any{"command": "grep -rn Foo ."}, "-")
+}
+
+// checkHookRoot runs the hook and checks the root its refusal names: ""
+// for a refusal naming none, "-" for a call let through.
+func checkHookRoot(t *testing.T, name, cwd, tool string, input map[string]any, root string) {
+	t.Helper()
+	denied, reason := runHook(t, cwd, tool, input)
+	if denied != (root != "-") {
+		t.Errorf("%s: denied %v", name, denied)
+		return
+	}
+	if names := root != "" && root != "-"; names != strings.Contains(reason, "root=\""+root+"\"") {
+		t.Errorf("%s: reason %q, want it to name root %q: %v", name, reason, root, names)
 	}
 }

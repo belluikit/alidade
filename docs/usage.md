@@ -53,7 +53,12 @@ session in our benchmark ever reached for alidade (#156). That costs about
 model is told what to use instead:
 
 - the Grep tool;
-- Bash's `grep`, `egrep`, `fgrep`, `rg`, `ag`, `ack` and `git grep`.
+- Bash's `grep`, `egrep`, `fgrep`, `rg`, `ag`, `ack` and `git grep`
+  (`git -C <dir> grep` and `git --work-tree <dir> grep` included).
+
+Every worktree of the repository counts as the repository: a search in
+another `git worktree` of it is refused too, and the model is told to
+pass that worktree as `search_text`'s `root`.
 
 The model is pointed to `search_text` for text, and to `find_nodes`,
 `neighbors` and `shortest_path` for code. Measured, an agent with alidade
@@ -201,7 +206,7 @@ skip = ["vendor", "third_party", "web/legacy"]
 | `shortest_path` | how two nodes connect |
 | `subgraph_for_question` | the neighbourhood of what a question names, across layers |
 | `graph_issues` | what the graph left out (dropped edges, folded by cause) or had to decide (conflicts) |
-| `search_text` | text the graph does not hold: a string literal, a log message, a comment. Each hit comes with the declaration holding it, as a node for the tools above. `files_only`, `exclude_tests`, and `after` to continue a cut answer |
+| `search_text` | text the graph does not hold: a string literal, a log message, a comment. Each hit comes with the declaration holding it, as a node for the tools above. `path` and `exclude` to narrow it by path prefix, `files_only`, `exclude_tests`, and `after` to continue a cut answer. `root` searches another `git worktree` of the repository and `ref` a commit's files; their hits name no declaration |
 | `rebuild` | build again now. Rarely needed, since every tool rebuilds the changed layers first |
 
 **The usual shape of a question:** `subgraph_for_question` with the names

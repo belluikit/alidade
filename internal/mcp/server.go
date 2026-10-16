@@ -91,6 +91,9 @@ type BuildFunc func() (*graph.Graph, BuildInfo, error)
 type Server struct {
 	build BuildFunc
 	mcp   *server.MCPServer
+	// root is the directory the graph is built from, when known before
+	// a build: a search of another worktree needs it, and not the graph.
+	root string
 
 	mu    sync.Mutex
 	g     *graph.Graph
@@ -128,6 +131,23 @@ func (s *Server) WatchFiles(fingerprint func() (string, error)) *Server {
 func (s *Server) WatchProgress(pending func() (int64, string), refresh BuildFunc) *Server {
 	s.pending, s.refresh = pending, refresh
 	return s
+}
+
+// Root says which directory build builds the graph from, so a tool that
+// needs only that does not wait for a build (#23).
+func (s *Server) Root(dir string) *Server {
+	s.root = dir
+	return s
+}
+
+// servedRoot is the directory the graph is built from: as Root said, or
+// as a build reports.
+func (s *Server) servedRoot(ctx contextT) (string, error) {
+	if s.root != "" {
+		return s.root, nil
+	}
+	_, info, err := s.graph(ctx)
+	return info.Root, err
 }
 
 // New returns a server over the graph build produces. Nothing is built
