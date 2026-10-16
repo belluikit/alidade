@@ -56,6 +56,7 @@ func (s *Server) registerTextSearch() {
 		mcpsdk.WithString("pattern", mcpsdk.Required(), mcpsdk.Description("The text to find; a regular expression with regex.")),
 		mcpsdk.WithBoolean("regex", mcpsdk.DefaultBool(false), mcpsdk.Description("Read pattern as a Go regular expression.")),
 		mcpsdk.WithString("path", mcpsdk.Description("Only files whose repo-relative path starts with this.")),
+		mcpsdk.WithArray("exclude", mcpsdk.WithStringItems(), mcpsdk.Description("Leave out files whose repo-relative path starts with any of these: [\"api/\", \"docs/old\"].")),
 		mcpsdk.WithBoolean("files_only", mcpsdk.DefaultBool(false), mcpsdk.Description("List the matching files with their hit counts, not the hits.")),
 		mcpsdk.WithBoolean("exclude_tests", mcpsdk.DefaultBool(false), mcpsdk.Description("Leave out test files: _test.go, *.test.*, *.spec.*.")),
 		mcpsdk.WithString("after", mcpsdk.Description("Continue after this file:line, the next of a cut answer.")),
@@ -105,12 +106,16 @@ func (s *Server) handleSearchText(ctx context.Context, req mcpsdk.CallToolReques
 	if err != nil {
 		return mcpsdk.NewToolResultError(err.Error()), nil
 	}
+	exclude, err := stringsParam(req, "exclude")
+	if err != nil {
+		return mcpsdk.NewToolResultError(err.Error()), nil
+	}
 	skip, err := scope.Load(info.Root)
 	if err != nil {
 		return mcpsdk.NewToolResultError(err.Error()), nil
 	}
 	ts := &textSearch{g: g, root: info.Root, byFile: nodesByFile(g), index: map[graph.ID]int{}, match: match,
-		excludeTests: req.GetBool("exclude_tests", false), skip: skip}
+		prefix: req.GetString("path", ""), exclude: exclude, excludeTests: req.GetBool("exclude_tests", false), skip: skip}
 	afterFile, afterLine := splitAt(req.GetString("after", ""))
 	c := &textPage{ts: ts, budget: budget, used: envelope, filesOnly: req.GetBool("files_only", false), matched: map[string]int{}}
 	visit := func(rel string, line int, text string, src []byte) bool {
@@ -119,7 +124,7 @@ func (s *Server) handleSearchText(ctx context.Context, req mcpsdk.CallToolReques
 		}
 		return c.add(rel, line, text, src)
 	}
-	if err := ts.walk(req.GetString("path", ""), visit); err != nil {
+	if err := ts.walk(visit); err != nil {
 		return nil, err
 	}
 	c.finish()
@@ -259,7 +264,10 @@ type textSearch struct {
 	index  map[graph.ID]int
 	files  int
 	match  func([]byte) bool
-	// excludeTests leaves test files out of the search.
+	// prefix is the path a file's must start with, and exclude the ones
+	// it must not; excludeTests leaves test files out.
+	prefix       string
+	exclude      []string
 	excludeTests bool
 	goDecl       map[string][]declRange
 	// skip are the directories the build leaves out (.alidade.pxf).
@@ -270,8 +278,8 @@ type textSearch struct {
 // root, in the string order of their paths, which a cut answer's next
 // relies on to continue: "a-c/x" comes before "a/x", as git orders a
 // tree, though a directory walk enters a/ first.
-func (ts *textSearch) walk(prefix string, visit func(rel string, line int, text string, src []byte) bool) error {
-	err := ts.walkDir(ts.root, prefix, visit)
+func (ts *textSearch) walk(visit func(rel string, line int, text string, src []byte) bool) error {
+	err := ts.walkDir(ts.root, visit)
 	if err == filepath.SkipAll {
 		return nil
 	}
@@ -280,7 +288,7 @@ func (ts *textSearch) walk(prefix string, visit func(rel string, line int, text 
 
 // walkDir walks one directory, its entries in path order: a directory
 // sorts as its name with a slash after it.
-func (ts *textSearch) walkDir(dir, prefix string, visit func(rel string, line int, text string, src []byte) bool) error {
+func (ts *textSearch) walkDir(dir string, visit func(rel string, line int, text string, src []byte) bool) error {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return nil
@@ -295,15 +303,15 @@ func (ts *textSearch) walkDir(dir, prefix string, visit func(rel string, line in
 	for _, d := range entries {
 		p := filepath.Join(dir, d.Name())
 		if d.IsDir() {
-			if textSkipDirs[d.Name()] || ts.skip.SkipsDir(ts.root, p) {
+			if textSkipDirs[d.Name()] || ts.skip.SkipsDir(ts.root, p) || ts.excluded(ts.rel(p)+"/") {
 				continue
 			}
-			if err := ts.walkDir(p, prefix, visit); err != nil {
+			if err := ts.walkDir(p, visit); err != nil {
 				return err
 			}
 			continue
 		}
-		if err := ts.searchFile(p, d, prefix, visit); err != nil {
+		if err := ts.searchFile(p, d, visit); err != nil {
 			return err
 		}
 	}
@@ -311,8 +319,8 @@ func (ts *textSearch) walkDir(dir, prefix string, visit func(rel string, line in
 }
 
 // searchFile calls visit for every matching line of one file.
-func (ts *textSearch) searchFile(p string, d fs.DirEntry, prefix string, visit func(rel string, line int, text string, src []byte) bool) error {
-	rel, src, ok := ts.read(p, d, prefix)
+func (ts *textSearch) searchFile(p string, d fs.DirEntry, visit func(rel string, line int, text string, src []byte) bool) error {
+	rel, src, ok := ts.read(p, d)
 	if !ok {
 		return nil
 	}
@@ -325,12 +333,28 @@ func (ts *textSearch) searchFile(p string, d fs.DirEntry, prefix string, visit f
 	return nil
 }
 
-// read returns a file's repo-relative path and contents when it is one
-// to search: under prefix, not too large, and text.
-func (ts *textSearch) read(p string, d fs.DirEntry, prefix string) (string, []byte, bool) {
+// rel is a path's repo-relative form, with forward slashes.
+func (ts *textSearch) rel(p string) string {
 	rel, _ := filepath.Rel(ts.root, p)
-	rel = filepath.ToSlash(rel)
-	if prefix != "" && !strings.HasPrefix(rel, prefix) || ts.excludeTests && testFile(rel) {
+	return filepath.ToSlash(rel)
+}
+
+// excluded reports whether a repo-relative path starts with one of
+// exclude's prefixes.
+func (ts *textSearch) excluded(rel string) bool {
+	for _, x := range ts.exclude {
+		if x != "" && strings.HasPrefix(rel, x) {
+			return true
+		}
+	}
+	return false
+}
+
+// read returns a file's repo-relative path and contents when it is one
+// to search: under prefix, not excluded, not too large, and text.
+func (ts *textSearch) read(p string, d fs.DirEntry) (string, []byte, bool) {
+	rel := ts.rel(p)
+	if !strings.HasPrefix(rel, ts.prefix) || ts.excluded(rel) || ts.excludeTests && testFile(rel) {
 		return "", nil, false
 	}
 	if info, err := d.Info(); err != nil || info.Size() > maxTextFile {

@@ -39,9 +39,35 @@ func TestSearchText(t *testing.T) {
 	if hits := r["hits"].([]any); len(hits) != 1 || end(r, hits[0].(map[string]any)["in"]) != "go://example.com/m/a#T.M" {
 		t.Errorf("method hit %v", r)
 	}
+	checkExclude(t, h)
 	r = h.callJSON("search_text", map[string]any{"pattern": "a", "max_tokens": 200})
 	if r["truncated"] != true {
 		t.Errorf("a broad search under a small budget is not cut: %v", r)
+	}
+}
+
+// checkExclude (#23): exclude leaves out every file under any of its
+// prefixes, a directory's whole subtree with it, and is refused when it
+// is not a list of strings.
+func checkExclude(t *testing.T, h *harness) {
+	t.Helper()
+	ats := func(r map[string]any) []string {
+		var out []string
+		for _, x := range r["hits"].([]any) {
+			out = append(out, x.(map[string]any)["at"].(string))
+		}
+		return out
+	}
+	r := h.callJSON("search_text", map[string]any{"pattern": "not in the active allowlist", "exclude": []any{"docs/"}})
+	if got := ats(r); len(got) != 2 || got[0] != "a/a.go:8" || got[1] != "a/a_test.go:3" {
+		t.Errorf("exclude docs/: hits %v, want a/a.go:8 and a/a_test.go:3", got)
+	}
+	r = h.callJSON("search_text", map[string]any{"pattern": "not in the active allowlist", "exclude": []any{"a/a_test", "docs"}})
+	if got := ats(r); len(got) != 1 || got[0] != "a/a.go:8" {
+		t.Errorf("exclude a/a_test and docs: hits %v, want a/a.go:8", got)
+	}
+	if _, isErr := h.call("search_text", map[string]any{"pattern": "x", "exclude": "docs/"}); !isErr {
+		t.Error("exclude given as a string, not a list, was not refused")
 	}
 }
 
