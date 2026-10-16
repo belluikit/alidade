@@ -58,6 +58,10 @@ type Options struct {
 	// dependency implementations, and the load is 3–4× cheaper. On by
 	// default since 2026-09-12 (#58); DepsFromSource is the way back.
 	DepsFromExportData bool
+
+	// patterns, keyed by module directory, loads only those packages of
+	// each module, and no module absent from it. SPIKE (#25) only.
+	patterns *map[string][]string
 }
 
 // DefaultOptions returns the options ADR 004 asks for: tests out, module
