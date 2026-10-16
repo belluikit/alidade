@@ -59,7 +59,7 @@ func (s *Server) registerTextSearch() {
 		mcpsdk.WithBoolean("regex", mcpsdk.DefaultBool(false), mcpsdk.Description("Read pattern as a Go regular expression.")),
 		mcpsdk.WithString("path", mcpsdk.Description("Only files whose repo-relative path starts with this.")),
 		mcpsdk.WithArray("exclude", mcpsdk.WithStringItems(), mcpsdk.Description("Leave out files whose repo-relative path starts with any of these: [\"api/\", \"docs/old\"].")),
-		mcpsdk.WithBoolean("files_only", mcpsdk.DefaultBool(false), mcpsdk.Description("List the matching files with their hit counts, not the hits.")),
+		mcpsdk.WithBoolean("files_only", mcpsdk.DefaultBool(false), mcpsdk.Description("List the matching files with their hit counts, not the hits. Cut, the answer also counts hits per directory (dirs), to choose path or exclude.")),
 		mcpsdk.WithBoolean("exclude_tests", mcpsdk.DefaultBool(false), mcpsdk.Description("Leave out test files: _test.go, *.test.*, *.spec.*.")),
 		mcpsdk.WithString("after", mcpsdk.Description("Continue after this file:line, the next of a cut answer.")),
 		mcpsdk.WithString("root", mcpsdk.Description("Search this git worktree of the repository instead of the checkout the graph is built from: its top directory, absolute or relative to the repository. Its hits name no declaration.")),
@@ -84,7 +84,12 @@ type textResult struct {
 	Ref     string      `json:"ref,omitempty"`
 	Hits    []textHit   `json:"hits,omitempty"`
 	Matches []fileCount `json:"matches,omitempty"`
-	Nodes   []nodeOut   `json:"nodes,omitempty"`
+	// Dirs rolls a cut files_only answer's hits up by directory, two
+	// levels deep, most hits first: where the files not listed are.
+	Dirs []dirCount `json:"dirs,omitempty"`
+	// DirsOmitted counts the directories dirs had no room for.
+	DirsOmitted int       `json:"dirs_omitted,omitempty"`
+	Nodes       []nodeOut `json:"nodes,omitempty"`
 	// Files counts the files searched; Total the hits and Matched the
 	// files with one, all of them, on the page or not.
 	Files     int    `json:"files"`
@@ -232,11 +237,15 @@ type textPage struct {
 	last    string // the last hit on the page, for next
 }
 
-// finish lays out a files_only answer and the totals.
+// finish lays out a files_only answer and the totals. When the files
+// will not all fit, the answer leads with where they are (#26).
 func (c *textPage) finish() {
 	c.r.Matched = len(c.matched)
 	if !c.filesOnly {
 		return
+	}
+	if !c.filesFit() {
+		c.rollUp()
 	}
 	for _, f := range c.order {
 		fc := fileCount{File: f, Count: c.matched[f]}
@@ -253,6 +262,70 @@ func (c *textPage) finish() {
 			}
 		}
 	}
+}
+
+// A dirCount is a directory and the hits of the matching files under it,
+// for a cut files_only answer.
+type dirCount struct {
+	Dir   string `json:"dir"`
+	Count int    `json:"count"`
+	Files int    `json:"files"`
+}
+
+// rollupDepth is how many path segments a directory of dirs keeps:
+// src/cmd, not src: on trendvidia/go, src/cmd held 1,277 of 2,780 TODOs,
+// and src alone would have named every one of them.
+const rollupDepth = 2
+
+// filesFit reports whether every matching file fits the budget.
+func (c *textPage) filesFit() bool {
+	used := c.used
+	for _, f := range c.order {
+		used += estimate(fileCount{File: f, Count: c.matched[f]})
+		if used > c.budget {
+			return false
+		}
+	}
+	return true
+}
+
+// rollUp adds dirs: the matching files' hits by directory, most first,
+// as many as fit half the budget, so files still get the rest.
+func (c *textPage) rollUp() {
+	by := map[string]*dirCount{}
+	var dirs []*dirCount
+	for _, f := range c.order {
+		d := rollupDir(f)
+		if by[d] == nil {
+			by[d] = &dirCount{Dir: d}
+			dirs = append(dirs, by[d])
+		}
+		by[d].Count += c.matched[f]
+		by[d].Files++
+	}
+	slices.SortStableFunc(dirs, func(a, b *dirCount) int { return b.Count - a.Count })
+	room := (c.budget - c.used) / 2
+	for i, d := range dirs {
+		cost := estimate(*d)
+		if cost > room {
+			c.r.DirsOmitted = len(dirs) - i
+			return
+		}
+		room -= cost
+		c.used += cost
+		c.r.Dirs = append(c.r.Dirs, *d)
+	}
+}
+
+// rollupDir is a file's directory, cut to rollupDepth segments; "." for
+// a file at the root.
+func rollupDir(rel string) string {
+	parts := strings.Split(rel, "/")
+	parts = parts[:len(parts)-1]
+	if len(parts) == 0 {
+		return "."
+	}
+	return strings.Join(parts[:min(len(parts), rollupDepth)], "/")
 }
 
 // splitAt reads an after value, "file:line".

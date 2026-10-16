@@ -5,6 +5,7 @@ package mcp
 
 import (
 	"context"
+	"fmt"
 	"maps"
 	"os"
 	"path/filepath"
@@ -644,5 +645,60 @@ func TestSearchTextLeavesNestedWorktreesOut(t *testing.T) {
 	}
 	if r := h.callJSON("search_text", map[string]any{"pattern": "marker", "root": nested}); r["total"] != 1.0 || r["root"] != nested {
 		t.Errorf("root at the nested worktree: %v", r)
+	}
+}
+
+// TestSearchTextRollsUpACutFileList pins #26: a files_only answer too
+// long for its budget leads with hits per directory, two levels deep,
+// most first — the noisy directory is visible before any paging — and
+// one that fits carries no rollup.
+func TestSearchTextRollsUpACutFileList(t *testing.T) {
+	dir := t.TempDir()
+	for i := range 60 {
+		writeFile(t, filepath.Join(dir, fmt.Sprintf("api/go1.%02d.txt", i)), "#56088 marker\n")
+	}
+	writeFile(t, filepath.Join(dir, "src/cmd/dist/build.go"), "package dist // marker\n")
+	writeFile(t, filepath.Join(dir, "README.md"), "marker\n")
+	s := New(func() (*graph.Graph, BuildInfo, error) {
+		return graph.NewBuilder(dir).Build(), BuildInfo{Root: dir}, nil
+	})
+	h := &harness{t: t, c: connect(t, s)}
+	r := h.callJSON("search_text", map[string]any{"pattern": "marker", "files_only": true, "max_tokens": 400})
+	dirs, _ := r["dirs"].([]any)
+	if r["truncated"] != true || len(dirs) != 3 {
+		t.Fatalf("a cut answer: truncated %v, dirs %v; want three directories", r["truncated"], r["dirs"])
+	}
+	want := []string{"api 60 60", ". 1 1", "src/cmd 1 1"}
+	for i, d := range dirs {
+		m := d.(map[string]any)
+		if got := fmt.Sprintf("%s %v %v", m["dir"], m["count"], m["files"]); got != want[i] {
+			t.Errorf("dirs[%d] = %s, want %s", i, got, want[i])
+		}
+	}
+	if m, _ := r["matches"].([]any); len(m) == 0 {
+		t.Error("the rollup left no room for files")
+	}
+
+	if r := h.callJSON("search_text", map[string]any{"pattern": "marker", "files_only": true, "path": "src/"}); r["dirs"] != nil {
+		t.Errorf("an answer that fits carries dirs: %v", r["dirs"])
+	}
+}
+
+// TestSearchTextSaysARollupWasCut: a rollup with more directories than
+// fit says how many it left out, so its counts are never read as all.
+func TestSearchTextSaysARollupWasCut(t *testing.T) {
+	dir := t.TempDir()
+	for i := range 80 {
+		writeFile(t, filepath.Join(dir, fmt.Sprintf("d%02d/x.md", i)), "marker\n")
+	}
+	s := New(func() (*graph.Graph, BuildInfo, error) {
+		return graph.NewBuilder(dir).Build(), BuildInfo{Root: dir}, nil
+	})
+	h := &harness{t: t, c: connect(t, s)}
+	r := h.callJSON("search_text", map[string]any{"pattern": "marker", "files_only": true, "max_tokens": 400})
+	d, _ := r["dirs"].([]any)
+	omitted, _ := r["dirs_omitted"].(float64)
+	if len(d) == 0 || omitted == 0 || len(d)+int(omitted) != 80 {
+		t.Errorf("dirs %d listed, %v omitted; want some of each, adding up to 80", len(d), r["dirs_omitted"])
 	}
 }

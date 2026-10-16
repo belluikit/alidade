@@ -206,7 +206,7 @@ skip = ["vendor", "third_party", "web/legacy"]
 | `shortest_path` | how two nodes connect |
 | `subgraph_for_question` | the neighbourhood of what a question names, across layers |
 | `graph_issues` | what the graph left out (dropped edges, folded by cause) or had to decide (conflicts) |
-| `search_text` | text the graph does not hold: a string literal, a log message, a comment. Each hit comes with the declaration holding it, as a node for the tools above. `path` and `exclude` to narrow it by path prefix, `files_only`, `exclude_tests`, and `after` to continue a cut answer. `root` searches another `git worktree` of the repository and `ref` a commit's files; their hits name no declaration |
+| `search_text` | text the graph does not hold: a string literal, a log message, a comment. Each hit comes with the declaration holding it, as a node for the tools above. `path` and `exclude` to narrow it by path prefix, `files_only` (cut, it also counts hits per directory), `exclude_tests`, and `after` to continue a cut answer. `root` searches another `git worktree` of the repository and `ref` a commit's files; their hits name no declaration |
 | `rebuild` | build again now. Rarely needed, since every tool rebuilds the changed layers first |
 
 **The usual shape of a question:** `subgraph_for_question` with the names
