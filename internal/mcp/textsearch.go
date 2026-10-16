@@ -63,6 +63,7 @@ func (s *Server) registerTextSearch() {
 		mcpsdk.WithBoolean("exclude_tests", mcpsdk.DefaultBool(false), mcpsdk.Description("Leave out test files: _test.go, *.test.*, *.spec.*.")),
 		mcpsdk.WithString("after", mcpsdk.Description("Continue after this file:line, the next of a cut answer.")),
 		mcpsdk.WithString("root", mcpsdk.Description("Search this git worktree of the repository instead of the checkout the graph is built from: its top directory, absolute or relative to the repository. Its hits name no declaration.")),
+		mcpsdk.WithString("ref", mcpsdk.Description("Search the files of this commit instead of the files on disk: a branch, tag, SHA or expression git takes (origin/main, HEAD~2), resolved in root's checkout. Its hits name no declaration.")),
 		withBudget(),
 		mcpsdk.WithReadOnlyHintAnnotation(true),
 	), s.handleSearchText)
@@ -77,8 +78,10 @@ type textHit struct {
 }
 
 type textResult struct {
-	// Root is the worktree searched, when it is not the graph's.
+	// Root is the worktree searched, when it is not the graph's; Ref
+	// the commit searched, when it is not the files on disk.
 	Root    string      `json:"root,omitempty"`
+	Ref     string      `json:"ref,omitempty"`
 	Hits    []textHit   `json:"hits,omitempty"`
 	Matches []fileCount `json:"matches,omitempty"`
 	Nodes   []nodeOut   `json:"nodes,omitempty"`
@@ -127,6 +130,7 @@ func (s *Server) handleSearchText(ctx context.Context, req mcpsdk.CallToolReques
 	if ts.other {
 		c.r.Root = ts.root
 	}
+	c.r.Ref = ts.ref
 	return jsonResult(c.r), nil
 }
 
@@ -148,14 +152,10 @@ func (s *Server) textSearch(ctx context.Context, req mcpsdk.CallToolRequest) (*t
 	}
 	ts := &textSearch{byFile: map[string][]graph.Node{}, index: map[graph.ID]int{}, match: match,
 		prefix: req.GetString("path", ""), exclude: exclude, excludeTests: req.GetBool("exclude_tests", false)}
-	served, err := s.servedRoot(ctx)
-	if err != nil {
+	if err := s.placeSearch(ctx, ts, req.GetString("root", ""), req.GetString("ref", "")); err != nil {
 		return nil, err
 	}
-	if ts.root, ts.other, err = treeParam(req.GetString("root", ""), served); err != nil {
-		return nil, badParam{err}
-	}
-	if !ts.other {
+	if !ts.other && ts.ref == "" {
 		g, _, err := s.graph(ctx)
 		if err != nil {
 			return nil, err
@@ -166,6 +166,24 @@ func (s *Server) textSearch(ctx context.Context, req mcpsdk.CallToolRequest) (*t
 		return nil, badParam{err}
 	}
 	return ts, nil
+}
+
+// placeSearch settles which tree a search reads: root's worktree, and
+// ref's commit in it.
+func (s *Server) placeSearch(ctx context.Context, ts *textSearch, root, ref string) error {
+	served, err := s.servedRoot(ctx)
+	if err != nil {
+		return err
+	}
+	if ts.root, ts.other, err = treeParam(root, served); err != nil {
+		return badParam{err}
+	}
+	if ref != "" {
+		if ts.ref, err = refParam(ts.root, ref); err != nil {
+			return badParam{err}
+		}
+	}
+	return nil
 }
 
 // treeParam reads root: the worktree to search, and whether it is
@@ -323,9 +341,11 @@ func clip(s string, n int) string {
 
 type textSearch struct {
 	root string
-	// other says root is a worktree other than the graph's, whose hits
-	// name no declaration.
+	// other says root is a worktree other than the graph's, and ref
+	// that the search reads a commit rather than the files on disk:
+	// either way, its hits name no declaration.
 	other  bool
+	ref    string
 	byFile map[string][]graph.Node
 	index  map[graph.ID]int
 	files  int
@@ -345,7 +365,12 @@ type textSearch struct {
 // relies on to continue: "a-c/x" comes before "a/x", as git orders a
 // tree, though a directory walk enters a/ first.
 func (ts *textSearch) walk(visit func(rel string, line int, text string, src []byte) bool) error {
-	err := ts.walkDir(ts.root, visit)
+	var err error
+	if ts.ref != "" {
+		err = ts.walkRef(visit)
+	} else {
+		err = ts.walkDir(ts.root, visit)
+	}
 	if err == filepath.SkipAll {
 		return nil
 	}
@@ -390,6 +415,11 @@ func (ts *textSearch) searchFile(p string, d fs.DirEntry, visit func(rel string,
 	if !ok {
 		return nil
 	}
+	return ts.searchSrc(rel, src, visit)
+}
+
+// searchSrc calls visit for every matching line of one file's contents.
+func (ts *textSearch) searchSrc(rel string, src []byte, visit func(rel string, line int, text string, src []byte) bool) error {
 	ts.files++
 	for i, line := range bytes.Split(src, []byte("\n")) {
 		if ts.match(line) && !visit(rel, i+1, string(line), src) {
@@ -420,17 +450,29 @@ func (ts *textSearch) excluded(rel string) bool {
 // to search: under prefix, not excluded, not too large, and text.
 func (ts *textSearch) read(p string, d fs.DirEntry) (string, []byte, bool) {
 	rel := ts.rel(p)
-	if !strings.HasPrefix(rel, ts.prefix) || ts.excluded(rel) || ts.excludeTests && testFile(rel) {
+	if !ts.wanted(rel) {
 		return "", nil, false
 	}
 	if info, err := d.Info(); err != nil || info.Size() > maxTextFile {
 		return "", nil, false
 	}
 	src, err := os.ReadFile(p)
-	if err != nil || bytes.IndexByte(src[:min(len(src), 8000)], 0) >= 0 {
-		return "", nil, false // unreadable, or binary
+	if err != nil || binary(src) {
+		return "", nil, false
 	}
 	return rel, src, true
+}
+
+// wanted reports whether a repo-relative file is one the call asks for:
+// under prefix, not excluded, and not a test when tests are left out.
+func (ts *textSearch) wanted(rel string) bool {
+	return strings.HasPrefix(rel, ts.prefix) && !ts.excluded(rel) && (!ts.excludeTests || !testFile(rel))
+}
+
+// binary reports whether a file's contents are not text: a NUL byte in
+// its first 8000, as git decides.
+func binary(src []byte) bool {
+	return bytes.IndexByte(src[:min(len(src), 8000)], 0) >= 0
 }
 
 // testFile reports whether a file is a test: a Go _test.go, or a

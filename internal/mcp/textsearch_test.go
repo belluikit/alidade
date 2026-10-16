@@ -483,3 +483,68 @@ func checkWorktreeHit(t *testing.T, r map[string]any, root, wt string) {
 		t.Errorf("root %s: a worktree's hit names a declaration of another tree's graph: %v", root, hits[0])
 	}
 }
+
+// TestSearchTextAtACommit pins #23's second case: ref searches a commit's
+// files rather than the ones on disk — an older commit's wording, a
+// branch's, another worktree's HEAD — in path order, leaving out what a
+// search on disk leaves out, without building the graph. A name git does
+// not resolve, or an option in its place, is refused.
+func TestSearchTextAtACommit(t *testing.T) {
+	base := gittest.TempDir(t)
+	main, wt := filepath.Join(base, "main"), filepath.Join(base, "wt")
+	gittest.Init(t, main, map[string]string{"docs/a.md": "first wording\n", "vendor/v.md": "first wording\n",
+		"a/x.md": "wording\n", "a-c/x.md": "wording\n", "bin.dat": "wording\x00\n"})
+	gittest.Commit(t, main, map[string]string{"docs/a.md": "second wording\n"}, "second")
+	writeFile(t, filepath.Join(main, "docs/a.md"), "third wording\n") // not committed
+	gittest.Git(t, main, "worktree", "add", "-q", "-b", "feature", wt)
+	gittest.Commit(t, wt, map[string]string{"docs/a.md": "feature wording\n"}, "feature")
+	builds := 0
+	s := New(func() (*graph.Graph, BuildInfo, error) {
+		builds++
+		return graph.NewBuilder(main).Build(), BuildInfo{Root: main}, nil
+	}).Root(main)
+	h := &harness{t: t, c: connect(t, s)}
+	for _, c := range []struct{ ref, root, want string }{
+		{"HEAD~1", "", "first wording"},
+		{"HEAD", "", "second wording"},
+		{"feature", "", "feature wording"},
+		{"HEAD", wt, "feature wording"},
+	} {
+		r := h.callJSON("search_text", map[string]any{"pattern": "wording", "ref": c.ref, "root": c.root})
+		checkAtCommit(t, r, c.ref, c.want)
+	}
+	if builds != 0 {
+		t.Errorf("a search at a commit built the graph %d times", builds)
+	}
+	r := h.callJSON("search_text", map[string]any{"pattern": "wording", "ref": "HEAD", "exclude": []any{"a"}, "path": "docs/"})
+	if r["total"] != 1.0 {
+		t.Errorf("path and exclude at a commit: %v", r)
+	}
+	for _, bad := range []string{"nope", "--output=x", "HEAD:docs"} {
+		if text, isErr := h.call("search_text", map[string]any{"pattern": "x", "ref": bad}); !isErr {
+			t.Errorf("ref %q was not refused: %s", bad, text)
+		}
+	}
+}
+
+// checkAtCommit: the commit's three text hits, in path order — a-c/
+// before a/, as strings sort — none in vendor/ or a binary file, none
+// naming a declaration, and the commit named.
+func checkAtCommit(t *testing.T, r map[string]any, ref, want string) {
+	t.Helper()
+	var got []string
+	for _, x := range r["hits"].([]any) {
+		m := x.(map[string]any)
+		got = append(got, m["at"].(string)+" "+m["text"].(string))
+		if m["in"] != nil {
+			t.Errorf("ref %s: a commit's hit names a declaration: %v", ref, m)
+		}
+	}
+	wantHits := []string{"a-c/x.md:1 wording", "a/x.md:1 wording", "docs/a.md:1 " + want}
+	if strings.Join(got, "|") != strings.Join(wantHits, "|") {
+		t.Errorf("ref %s: hits %q, want %q", ref, got, wantHits)
+	}
+	if sha, _ := r["ref"].(string); len(sha) != 40 {
+		t.Errorf("ref %s: the answer names commit %q", ref, r["ref"])
+	}
+}
