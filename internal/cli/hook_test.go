@@ -110,6 +110,13 @@ func TestHookDeniesGrepInTheRepository(t *testing.T) {
 		{"grep from a redirect inside", repo, "Bash", map[string]any{"command": "grep Foo < internal/x/a.go"}, true},
 		{"grep -c, output redirected", repo, "Bash", map[string]any{"command": "grep -rc Foo . > " + outside + "/count"}, true},
 		{"git grep -- a path", repo, "Bash", map[string]any{"command": "git grep -n Foo -- internal"}, true},
+		{"git -C a directory of the repository grep", repo, "Bash", map[string]any{"command": "cd " + outside + " && git -C " + repo + "/internal grep -n Foo"}, true},
+		{"git -C a relative directory grep", repo, "Bash", map[string]any{"command": "git -C internal grep Foo"}, true},
+		{"git -C elsewhere grep", repo, "Bash", map[string]any{"command": "git -C " + outside + " grep -n Foo"}, false},
+		{"git -C a variable grep", repo, "Bash", map[string]any{"command": "git -C $D grep Foo"}, false},
+		{"git --no-pager grep", repo, "Bash", map[string]any{"command": "git --no-pager grep -n Foo"}, true},
+		{"git -c key=value grep", repo, "Bash", map[string]any{"command": "git -c core.quotepath=off grep Foo -- internal"}, true},
+		{"git log --grep, not a search of files", repo, "Bash", map[string]any{"command": "git log --grep Foo"}, false},
 		{"cd outside, grep a path back in", outside, "Bash", map[string]any{"command": "grep Foo " + repo + "/internal"}, false},
 		{"a variable operand", repo, "Bash", map[string]any{"command": "grep ERROR $LOG"}, false},
 		// A here-document's body is a command's input, not commands.
@@ -208,6 +215,7 @@ func TestHookCoversWorktrees(t *testing.T) {
 	}{
 		{"Grep in the worktree", main, "Grep", map[string]any{"pattern": "Foo", "path": wt}, wt},
 		{"cd to the worktree, git grep", main, "Bash", map[string]any{"command": "cd " + wt + " && git grep -n -E 'a|b' -- .github"}, wt},
+		{"git -C the worktree grep", main, "Bash", map[string]any{"command": "git -C " + wt + " grep -n -E 'go#56|linked externally'"}, wt},
 		{"grep a worktree file", main, "Bash", map[string]any{"command": "grep -n Foo " + wt + "/a.go"}, wt},
 		{"from the worktree, grep the main checkout", wt, "Bash", map[string]any{"command": "grep -rn Foo " + main}, main},
 		{"from the worktree, its own files", wt, "Bash", map[string]any{"command": "grep -rn Foo ."}, ""},

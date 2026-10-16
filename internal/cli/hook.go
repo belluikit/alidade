@@ -199,6 +199,16 @@ func placeSearch(dir string, words []string, prog int) ([]string, bool) {
 	if !placed {
 		return nil, false
 	}
+	if filepath.Base(words[prog]) == "git" {
+		// git -C dir grep searches dir, and its paths are dir's.
+		_, cdirs, _ := gitGrep(words[prog+1:])
+		for _, c := range cdirs {
+			if strings.ContainsAny(c, "$`") {
+				return nil, false
+			}
+			dir = resolveFrom(dir, c)
+		}
+	}
 	if lead := filepath.Base(words[0]); len(operands) == 0 || lead == "xargs" || lead == "find" {
 		return []string{dir}, true
 	}
@@ -219,12 +229,41 @@ func runsSearch(words []string) (int, bool) {
 		switch {
 		case searchCommands[base] && lead:
 			return i, true
-		case base == "git" && lead && i+1 < len(words) && words[i+1] == "grep":
-			return i, true
+		case base == "git" && lead:
+			if _, _, ok := gitGrep(words[i+1:]); ok {
+				return i, true
+			}
 		}
 	}
 	return 0, false
 }
+
+// gitGrep reads the words after git: its own options before the command
+// — -C dir, -c key=value, --no-pager — and reports whether the command is
+// grep, how many words that took, grep's included, and the directories
+// -C moves it to, in order.
+func gitGrep(words []string) (int, []string, bool) {
+	var cdirs []string
+	for i := 0; i < len(words); i++ {
+		w := words[i]
+		switch {
+		case w == "grep":
+			return i + 1, cdirs, true
+		case !strings.HasPrefix(w, "-"):
+			return 0, nil, false
+		case w == "-C" && i+1 < len(words):
+			i++
+			cdirs = append(cdirs, words[i])
+		case gitValueOptions[w]:
+			i++
+		}
+	}
+	return 0, nil, false
+}
+
+// gitValueOptions are git's own options that take the next word as
+// their value.
+var gitValueOptions = map[string]bool{"-c": true, "--git-dir": true, "--work-tree": true, "--namespace": true, "--config-env": true}
 
 // valueFlags are each search program's one-letter options that take a
 // value: grep -A 3, rg -g '*.go'.
@@ -243,7 +282,8 @@ func searchOperands(words []string) ([]string, bool) {
 	prog := filepath.Base(words[0])
 	words = words[1:]
 	if prog == "git" {
-		words = words[1:] // grep
+		n, _, _ := gitGrep(words)
+		words = words[n:] // git's own options, and grep
 	}
 	r := &operandReader{prog: prog, values: valueFlags[prog]}
 	for i := 0; i < len(words); i++ {
