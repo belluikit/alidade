@@ -402,7 +402,7 @@ func (ts *textSearch) walkDir(dir string, visit func(rel string, line int, text 
 	for _, d := range entries {
 		p := filepath.Join(dir, d.Name())
 		if d.IsDir() {
-			if rel := ts.rel(p) + "/"; textSkipDirs[d.Name()] || !ts.mayHold(rel) || ts.excluded(rel) || ts.skip.SkipsDir(ts.root, p) {
+			if !ts.entered(p) {
 				continue
 			}
 			if err := ts.walkDir(p, visit); err != nil {
@@ -415,6 +415,13 @@ func (ts *textSearch) walkDir(dir string, visit func(rel string, line int, text 
 		}
 	}
 	return nil
+}
+
+// entered reports whether the walk enters a directory: one no layer
+// skips, not excluded, and able to hold a file the call asks for.
+func (ts *textSearch) entered(p string) bool {
+	rel := ts.rel(p) + "/"
+	return !textSkipDirs[filepath.Base(p)] && ts.mayHold(rel) && !ts.excluded(rel) && !ts.skip.SkipsDir(ts.root, p)
 }
 
 // searchFile calls visit for every matching line of one file.
