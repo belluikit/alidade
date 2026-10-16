@@ -174,6 +174,19 @@ installed packages. A name only one layer skips as its build output (`build`,
 `dist`, `out`) is a Go package or a Markdown directory to another layer, and
 skipping it hid `internal/build` from search.
 
+*Amended 2026-10-16 (#24):* another checkout of the
+same repository nested inside it is left out by every layer, `search_text`,
+the fingerprint and the hook's skip check, whatever the list says. Claude
+Code puts its worktrees under `.claude/worktrees/<name>`, and reading one
+loaded the repository's Go module a second time and returned every search hit
+once per worktree. A checkout is "the same repository" when it shares the
+repository's git directory, which a `git worktree` does and a submodule or a
+nested clone does not, so those are still read as the rule above says. The
+check is one `lstat` of `.git` per directory entered, and only a directory
+holding one reads further. `TestNestedWorktreeIsLeftOut` fails the day a
+nested worktree's module or files come back, or a nested repository of its
+own stops being read.
+
 ## Amended 2026-10-09: Python is read (#237, the owner's decision; ADR 008)
 
 **Python is a layer, although by this ADR's own test the in-house stack did

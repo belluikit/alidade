@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/belluikit/alidade/internal/worktree/gittest"
 )
 
 func TestSkips(t *testing.T) {
@@ -110,5 +112,23 @@ func TestInstalledPackages(t *testing.T) {
 	}
 	if empty.SkipsDir(root, root) {
 		t.Error("the root is never skipped")
+	}
+}
+
+// TestOtherCheckout pins #24: a worktree of root's repository nested in
+// it is skipped, a repository of its own nested the same way is not.
+func TestOtherCheckout(t *testing.T) {
+	root := gittest.TempDir(t)
+	gittest.Init(t, root, map[string]string{"README.md": "# x\n"})
+	gittest.Git(t, root, "worktree", "add", "-q", "-b", "f", filepath.Join(root, "wt"))
+	gittest.Init(t, filepath.Join(root, "own"), map[string]string{"README.md": "# own\n"})
+	d := New(nil)
+	for rel, want := range map[string]bool{"wt": true, "own": false, "wt/sub": false} {
+		if got := d.SkipsDir(root, filepath.Join(root, rel)); got != want {
+			t.Errorf("SkipsDir(%s) = %v, want %v", rel, got, want)
+		}
+	}
+	if !d.SkipsUnder(root, filepath.Join(root, "wt", "README.md")) || d.SkipsUnder(root, filepath.Join(root, "own", "README.md")) {
+		t.Error("SkipsUnder: a file of the nested worktree is skipped, one of the nested repository is not")
 	}
 }
