@@ -166,15 +166,16 @@ func writeGraph(root string, opts build.Options, stdout, stderr io.Writer) int {
 // Session for the server's life, so a rebuild keeps the layers whose
 // files did not change (#56).
 func buildFunc(root string, opts build.Options) mcp.BuildFunc {
-	fn, _, _, _, _ := sessionFuncs(root, opts)
+	fn, _, _, _, _, _ := sessionFuncs(root, opts)
 	return fn
 }
 
 // sessionFuncs returns the build the server calls, the fingerprint it
 // checks before each tool (#204), what is pending in the background with
 // the refresh that folds it in (#269), and the close that ends the
-// session (#279), over one build session made on first use.
-func sessionFuncs(root string, opts build.Options) (mcp.BuildFunc, func() (string, error), func() (int64, string), mcp.BuildFunc, func()) {
+// session (#279), over one build session made on first use; and how to
+// open another worktree's graph, laid over that session's (#25).
+func sessionFuncs(root string, opts build.Options) (mcp.BuildFunc, func() (string, error), func() (int64, string), mcp.BuildFunc, func(), func(string) (mcp.Tree, error)) {
 	var session *build.Session
 	open := func() (*build.Session, error) {
 		if session == nil {
@@ -221,12 +222,51 @@ func sessionFuncs(root string, opts build.Options) (mcp.BuildFunc, func() (strin
 		}
 		return g, buildInfo(rep), nil
 	}
+	// overlays are the worktree sessions the server holds; one it lets go
+	// is closed then, and the rest when the session ends.
+	overlays := map[*build.Session]bool{}
 	closeFn := func() {
+		for o := range overlays {
+			o.Close()
+		}
 		if session != nil {
 			session.Close()
 		}
 	}
-	return buildFn, fingerprint, pending, refresh, closeFn
+	worktree := func(dir string) (mcp.Tree, error) {
+		s, err := open()
+		if err != nil {
+			return mcp.Tree{}, err
+		}
+		o, err := s.Overlay(dir)
+		if err != nil {
+			return mcp.Tree{}, err
+		}
+		overlays[o] = true
+		t := treeOf(o)
+		t.Close = func() {
+			delete(overlays, o)
+			o.Close()
+		}
+		return t, nil
+	}
+	return buildFn, fingerprint, pending, refresh, closeFn, worktree
+}
+
+// treeOf is a worktree session as the server holds it.
+func treeOf(o *build.Session) mcp.Tree {
+	built := func(g *graph.Graph, rep *build.Report, err error) (*graph.Graph, mcp.BuildInfo, error) {
+		if err != nil {
+			return nil, mcp.BuildInfo{}, err
+		}
+		return g, buildInfo(rep), nil
+	}
+	return mcp.Tree{
+		Build:       func() (*graph.Graph, mcp.BuildInfo, error) { return built(o.Build()) },
+		Refresh:     func() (*graph.Graph, mcp.BuildInfo, error) { return built(o.Refresh()) },
+		Fingerprint: o.Fingerprint,
+		Pending:     o.Pending,
+	}
 }
 
 // buildInfo is what both surfaces say about a build: graph_stats over
@@ -243,6 +283,9 @@ func buildInfo(rep *build.Report) mcp.BuildInfo {
 		info.GoTestsExact = rep.Go.ExactTests
 		info.GoPackagesFailed, info.GoPackagesWithoutCalls = rep.Go.FailedPackages, rep.Go.WithoutCalls
 		info.GoModuleEdges, info.GoTestModuleEdges = mcpEdges(rep.Go.ModuleEdges), mcpEdges(rep.Go.TestModuleEdges)
+	}
+	if o := rep.Overlay; o != nil {
+		info.Overlay = &mcp.OverlayInfo{Base: o.Base, Inherited: o.Inherited, Packages: o.Packages, Removed: o.Removed, Carried: o.Carried, GoWhole: o.GoWhole}
 	}
 	return info
 }
@@ -288,7 +331,29 @@ func buildBlock(info mcp.BuildInfo) pxf.Entry {
 		moduleEdges,
 		testModuleEdges,
 		skipped,
+		overlayBlock(info.Overlay),
 		num("build_ms", int(info.Elapsed.Milliseconds())),
+	)
+}
+
+// overlayBlock renders how a worktree's graph was laid over the base's
+// (#25), under graph_stats' keys; the graph command builds no worktree's
+// graph, so it is there for the surfaces to agree.
+func overlayBlock(o *mcp.OverlayInfo) pxf.Entry {
+	if o == nil {
+		return nil
+	}
+	whole := ""
+	if o.GoWhole {
+		whole = "true"
+	}
+	return block("overlay",
+		str("base", o.Base),
+		str("layers_from_base", strings.Join(o.Inherited, " ")),
+		str("go_packages_loaded", strings.Join(o.Packages, " ")),
+		str("go_packages_removed", strings.Join(o.Removed, " ")),
+		num("carried", o.Carried),
+		str("go_built_whole", whole),
 	)
 }
 
@@ -347,9 +412,9 @@ func serve(root string, opts build.Options, stderr io.Writer) int {
 	if dir, err := os.UserCacheDir(); err == nil {
 		opts.Py.Cache = filepath.Join(dir, "alidade", "py")
 	}
-	buildFn, fingerprint, pending, refresh, closeFn := sessionFuncs(root, opts)
+	buildFn, fingerprint, pending, refresh, closeFn, worktree := sessionFuncs(root, opts)
 	defer closeFn()
-	s := mcp.New(buildFn).WatchFiles(fingerprint).WatchProgress(pending, refresh)
+	s := mcp.New(buildFn).WatchFiles(fingerprint).WatchProgress(pending, refresh).Worktrees(worktree)
 	if abs, err := filepath.Abs(root); err == nil {
 		// A search of another worktree of the repository then answers
 		// without building this one's graph first (#23).
