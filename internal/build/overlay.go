@@ -214,14 +214,7 @@ func (s *Session) overlayGo(lb *graph.Builder, root string, opts golang.Options)
 		return nil, err
 	}
 	differ := differingGo(s.base.goFiles, s.goFilesNow())
-	present, gone, unbuilt := golang.PackagesOf(root, mods, opts.Skip, differ)
-	if len(unbuilt) > 0 {
-		// A load naming a package the host's configuration does not
-		// build fails its whole module; which configurations bring it in
-		// is chosen from the whole module. So the layer is built whole.
-		s.from["go"] = "own"
-		return extractGo(lb, root, opts)
-	}
+	present, gone := golang.PackagesOf(root, mods, opts.Skip, differ)
 	owned := ownedBy(append(slices.Clone(present), gone...))
 
 	nodes, edges := s.base.b.Contributions("go")
@@ -249,6 +242,12 @@ func (s *Session) overlayGo(lb *graph.Builder, root string, opts golang.Options)
 		scratch := graph.NewBuilder(root)
 		o := opts
 		o.Only = present
+		if opts.Configs != "" {
+			// The configurations the base's build chose, from the whole
+			// module, so a package another platform's brings in is read
+			// under the one a full build reads it under (#35).
+			o.Configs = strings.Join(s.base.rep.Go.Configs, ",")
+		}
 		if sub, err = extractGo(scratch, root, o); err != nil {
 			return nil, err
 		}

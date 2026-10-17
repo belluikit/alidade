@@ -30,7 +30,10 @@ tracker's. From v0.12.1 on, every number is this repository's.
   trendvidia/go a worktree's graph took 3.9–4.4 s against 21.7–22.4 s for
   a full build. `graph_stats` with `root` says what was reused under
   `overlay`. The server holds four worktrees' graphs at most. The grep
-  hook's refusal in a worktree names the graph tools too. `search_text`
+  hook's refusal in a worktree names the graph tools too. A worktree
+  that changes a package only another platform or a build tag brings in
+  is laid over the session's graph too, the package read under the
+  configuration a full build reads it under (#35). `search_text`
   with `root` still never waits for a build: its hits name their
   declarations when that worktree's graph is already built and current,
   and otherwise carry a `note` saying why they name none.

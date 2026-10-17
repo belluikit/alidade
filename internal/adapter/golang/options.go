@@ -66,7 +66,11 @@ type Options struct {
 	// modules is named by ID, as any is, and resolves against the base's
 	// node; a module none of them is in is not loaded, and is still of the
 	// graph, so a call into it lands on the declaration. The Report's
-	// counts are of the packages loaded.
+	// counts are of the packages loaded. A package the host's
+	// configuration builds no file of is left out of the host's load,
+	// which naming it would fail, and read under the further
+	// configurations; with Configs a list, those of them that bring in a
+	// file of the packages asked for (#35).
 	Only []string
 }
 

@@ -8,6 +8,7 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"sort"
 	"testing"
@@ -43,7 +44,15 @@ func worktreeOf(t *testing.T, files, change map[string]string) (main, wt string)
 // overlayOf builds the base's graph, then the worktree's laid over it.
 func overlayOf(t *testing.T, main, wt string) (*graph.Graph, *Report) {
 	t.Helper()
-	base := newSession(t, main)
+	return overlayWith(t, main, wt, DefaultOptions())
+}
+
+func overlayWith(t *testing.T, main, wt string, opts Options) (*graph.Graph, *Report) {
+	t.Helper()
+	base, err := NewSession(main, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
 	mustSessionBuild(t, base)
 	o, err := base.Overlay(wt)
 	if err != nil {
@@ -155,7 +164,7 @@ func TestOverlayFollowsTheBase(t *testing.T) {
 func nodeLines(g *graph.Graph) []string {
 	var out []string
 	for n := range g.Nodes() {
-		out = append(out, fmt.Sprintf("%s %s:%d", n.ID, n.Pos.File, n.Pos.Line))
+		out = append(out, fmt.Sprintf("%s %s:%d", n.ID, n.Pos.File, n.Pos.Line)+buildOf(n.Attrs))
 	}
 	sort.Strings(out)
 	return out
@@ -171,7 +180,7 @@ func edgeLines(g *graph.Graph) (all, carried []string) {
 			carried = append(carried, line)
 			d = graph.Resolved
 		}
-		all = append(all, fmt.Sprintf("%s %v", line, d))
+		all = append(all, fmt.Sprintf("%s %v", line, d)+buildOf(e.Attrs))
 	}
 	sort.Strings(all)
 	sort.Strings(carried)
@@ -198,10 +207,18 @@ func diffLines(got, want []string) string {
 // and edge for edge but for carried edges.
 func overlayEqualsFull(t *testing.T, main, wt string) *Report {
 	t.Helper()
-	g, rep := overlayOf(t, main, wt)
-	full, _, err := Build(wt, DefaultOptions())
+	return overlayEqualsFullWith(t, main, wt, DefaultOptions())
+}
+
+func overlayEqualsFullWith(t *testing.T, main, wt string, opts Options) *Report {
+	t.Helper()
+	g, rep := overlayWith(t, main, wt, opts)
+	full, frep, err := Build(wt, opts)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if !slices.Equal(rep.Go.Skipped, frep.Go.Skipped) {
+		t.Errorf("skipped %+v, a full build of the worktree %+v", rep.Go.Skipped, frep.Go.Skipped)
 	}
 	if got, want := nodeLines(g), nodeLines(full); !slices.Equal(got, want) {
 		t.Errorf("nodes differ from a full build of the worktree:\n%s", diffLines(got, want))
@@ -221,18 +238,63 @@ func with(files map[string]string) map[string]string {
 	return out
 }
 
-// TestOverlayBuildsGoWholeForAPackageTheHostDoesNotBuild: a load naming a
-// package whose files only a build tag brings in fails its whole module,
-// which a load of every package does not, so a worktree that changed one
-// builds its Go layer whole — here a's changes are in the graph too.
-func TestOverlayBuildsGoWholeForAPackageTheHostDoesNotBuild(t *testing.T) {
+// TestOverlayOfAPackageTheHostDoesNotBuild is #35, the owner's decision:
+// a load naming a package whose files only a build tag brings in fails
+// its whole module, so the host's load leaves it out. The worktree's
+// graph is still laid over the base's, and equals a full build of it,
+// a's changes and the tag-only package's skip both.
+func TestOverlayOfAPackageTheHostDoesNotBuild(t *testing.T) {
 	tools := "//go:build tools\n\npackage tools\n\nimport _ \"example.com/w/a\"\n"
 	main, wt := worktreeOf(t, with(map[string]string{"tools/tools.go": tools}), map[string]string{
 		"tools/tools.go": tools + "\n// changed\n",
-		"a/a.go":         "package a\n\ntype Shape interface{ Area() int }\n\nfunc Only() int { return 1 }\n\nfunc Total(ss []Shape) int { return 0 }\n",
+		"a/a.go":         overlayRepo["a/a.go"] + "\nfunc Only() int { return 1 }\n",
 	})
-	if rep := overlayEqualsFull(t, main, wt); !rep.Overlay.GoWhole {
-		t.Errorf("overlay %+v: want the Go layer built whole", rep.Overlay)
+	rep := overlayEqualsFull(t, main, wt)
+	if o := rep.Overlay; o.GoWhole || !slices.Equal(o.Packages, []string{"example.com/w/a", "example.com/w/tools"}) {
+		t.Errorf("overlay %+v: want a and tools laid over the base", o)
+	}
+}
+
+// TestOverlayOfAnotherPlatformsPackage is #35 for a package only another
+// platform builds: alone among the worktree's changes, so the host loads
+// nothing of its module, and beside one it does build. With -go-configs
+// auto it is read under the configuration a full build reads it under,
+// and without, it is skipped as a full build skips it.
+func TestOverlayOfAnotherPlatformsPackage(t *testing.T) {
+	other := "windows"
+	if runtime.GOOS == "windows" {
+		other = "linux"
+	}
+	file := "plat/plat_" + other + ".go"
+	files := with(map[string]string{file: "package plat\n\nfunc P() int { return 1 }\n"})
+	changes := map[string]map[string]string{
+		"alone":  {file: "package plat\n\nfunc P() int { return 2 }\n\nfunc Q() int { return P() }\n"},
+		"beside": {file: "package plat\n\nfunc Q() int { return 2 }\n", "c/c.go": overlayRepo["c/c.go"] + "\nfunc More() int { return 0 }\n"},
+	}
+	if other == "windows" {
+		// The base's build reads plat under windows/arm64, which its
+		// greedy choice takes for y as well; plat alone would be read
+		// under windows/amd64, the first candidate building it.
+		files["y/y_windows_arm64.go"] = "package y\n\nfunc Y() int { return 1 }\n"
+	}
+	for name, change := range changes {
+		for _, configs := range []string{"", "auto"} {
+			t.Run(name+"/"+configs, func(t *testing.T) {
+				main, wt := worktreeOf(t, files, change)
+				opts := DefaultOptions()
+				opts.Go.Configs = configs
+				rep := overlayEqualsFullWith(t, main, wt, opts)
+				if o := rep.Overlay; o.GoWhole || !slices.Contains(o.Packages, "example.com/w/plat") {
+					t.Errorf("overlay %+v: want plat laid over the base", o)
+				}
+				g, _ := overlayWith(t, main, wt, opts)
+				_, read := g.Node("go://example.com/w/plat#Q")
+				skipped := slices.ContainsFunc(rep.Go.Skipped, func(s graph.Skip) bool { return s.File == "plat" })
+				if read != (configs == "auto") || skipped == read {
+					t.Errorf("plat read %v, skipped %v: want it read under auto and skipped otherwise", read, skipped)
+				}
+			})
+		}
 	}
 }
 
@@ -367,6 +429,15 @@ func TestOverlaySkipsAreAWorktreeBuilds(t *testing.T) {
 	if !slices.Equal(rep.Go.Skipped, full.Go.Skipped) || len(full.Go.Skipped) != 2 {
 		t.Errorf("skipped %+v, a full build of the worktree %+v", rep.Go.Skipped, full.Go.Skipped)
 	}
+}
+
+// buildOf renders the configuration a node or edge was read under beyond
+// the host's, "" for the host's.
+func buildOf(attrs map[string]string) string {
+	if c := attrs["build"]; c != "" {
+		return " build=" + c
+	}
+	return ""
 }
 
 // TestOverlaidSkipsNameTheWorktree: a skip kept from the base whose
