@@ -72,7 +72,49 @@ type BuildInfo struct {
 	Rebuilt, Kept []string
 	// Elapsed is how long the build took.
 	Elapsed time.Duration
+	// Overlay says how a worktree's graph was laid over the base's (#25);
+	// nil for the graph of the checkout the server serves.
+	Overlay *OverlayInfo
 }
+
+// OverlayInfo is how a worktree's graph was made from the base's.
+type OverlayInfo struct {
+	// Base is the root of the graph it is laid over.
+	Base string
+	// Inherited are the layers taken whole from the base, their files
+	// being the base's.
+	Inherited []string
+	// Packages are the Go packages loaded again because a file of theirs
+	// differs from the base's, Removed those the worktree no longer has.
+	Packages, Removed []string
+	// Carried counts the base's calls and implements edges from those
+	// packages kept, INFERRED with carried=base: a call through an
+	// interface or a function value depends on code a load of fewer
+	// packages does not read.
+	Carried int
+	// GoWhole says the Go layer was built whole: the module files differ,
+	// or a package to load again is one the host does not build.
+	GoWhole bool
+}
+
+// A Tree is how the server builds and keeps fresh the graph of another
+// worktree of the repository, laid over the graph of the checkout it
+// serves (#25): the same hooks New, WatchFiles and WatchProgress give for
+// that one, and Close for when the server lets the graph go.
+type Tree struct {
+	Build       BuildFunc
+	Fingerprint func() (string, error)
+	Pending     func() (int64, string)
+	Refresh     BuildFunc
+	Close       func()
+}
+
+// maxWorktrees is how many worktrees' graphs the server holds besides
+// its own checkout's, the owner's decision on #25; the one used longest
+// ago goes first. A worktree's
+// graph shares the base's contributions, and what it holds of its own is
+// a copy of the graph's indexes: about the base graph's size again.
+const maxWorktrees = 4
 
 // A ModuleEdge is one count of GoModuleEdges: edges of one kind from a
 // module into another, or into packages outside the repository when To
@@ -86,16 +128,26 @@ type ModuleEdge struct {
 // lazily on the first tool that needs a graph, and again after rebuild.
 type BuildFunc func() (*graph.Graph, BuildInfo, error)
 
-// Server holds one graph for the session and the MCP server that
-// exposes it.
+// Server holds one graph for the session, and one for each other
+// worktree a tool asked about, and the MCP server that exposes them.
 type Server struct {
-	build BuildFunc
-	mcp   *server.MCPServer
+	mcp *server.MCPServer
 	// root is the directory the graph is built from, when known before
 	// a build: a search of another worktree needs it, and not the graph.
 	root string
 
-	mu    sync.Mutex
+	mu sync.Mutex
+	// base is the graph of the checkout the server serves.
+	base held
+	// worktrees are other worktrees' graphs, by top directory, opened
+	// through worktree (#25).
+	worktrees map[string]*held
+	worktree  func(root string) (Tree, error)
+}
+
+// held is one graph the server holds, and what keeps it fresh.
+type held struct {
+	build BuildFunc
 	g     *graph.Graph
 	info  BuildInfo
 	built time.Time
@@ -110,6 +162,9 @@ type Server struct {
 	pending func() (int64, string)
 	refresh BuildFunc
 	pv      int64
+	// close lets a worktree's graph go; used is when a tool last read it.
+	close func()
+	used  time.Time
 }
 
 // WatchFiles makes every tool answer from the files on disk at the time
@@ -119,7 +174,7 @@ type Server struct {
 // function reruns only the layers whose files' contents changed — and
 // the answer carries "rebuilt" with the layers it reran.
 func (s *Server) WatchFiles(fingerprint func() (string, error)) *Server {
-	s.fresh = fingerprint
+	s.base.fresh = fingerprint
 	return s
 }
 
@@ -129,7 +184,15 @@ func (s *Server) WatchFiles(fingerprint func() (string, error)) *Server {
 // folds the new answers in first, and while anything is pending the
 // answer says what, under "pending".
 func (s *Server) WatchProgress(pending func() (int64, string), refresh BuildFunc) *Server {
-	s.pending, s.refresh = pending, refresh
+	s.base.pending, s.base.refresh = pending, refresh
+	return s
+}
+
+// Worktrees lets the graph tools answer for another worktree of the
+// repository, named by root (#25): open makes its graph's Tree, laid over
+// the served checkout's graph, the first time a tool asks.
+func (s *Server) Worktrees(open func(root string) (Tree, error)) *Server {
+	s.worktree = open
 	return s
 }
 
@@ -153,7 +216,7 @@ func (s *Server) servedRoot(ctx contextT) (string, error) {
 // New returns a server over the graph build produces. Nothing is built
 // until a tool asks.
 func New(build BuildFunc) *Server {
-	s := &Server{build: build}
+	s := &Server{base: held{build: build}, worktrees: map[string]*held{}}
 	s.mcp = server.NewMCPServer("alidade", Version,
 		server.WithToolCapabilities(false),
 		server.WithInstructions(instructions),
@@ -198,7 +261,8 @@ absent, and at ":12" is a line of the ID's own file. It holds declarations and h
 relate, not text: for a string literal, a log message, a comment or prose,
 use search_text, which names the declaration holding each hit. A doc
 naming a declaration that shares its name with another is not linked to
-either; search_text finds it.`
+either; search_text finds it. Every tool takes root, another git worktree of
+the repository, to answer for that worktree's code.`
 
 // alwaysLoad asks the client to load a tool's schema up front rather than
 // defer it behind tool search (#156, the owner's decision). Claude Code
@@ -231,78 +295,179 @@ func (s *Server) ServeStdio() error {
 func (s *Server) graph(ctx contextT) (*graph.Graph, BuildInfo, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	stale := s.g != nil && s.changed()
+	return s.base.get(ctx)
+}
+
+// graphFor returns the graph a tool call asks about: the session's, or
+// with root another worktree's, laid over the session's (#25). An answer
+// about another worktree says which, under root.
+func (s *Server) graphFor(ctx contextT, req mcpsdk.CallToolRequest) (*graph.Graph, BuildInfo, error) {
+	return s.graphOf(ctx, req, false)
+}
+
+// graphOf is graphFor, dropping the graph first when rebuild says so. A
+// worktree's graph is looked up, opened and built under one hold of the
+// lock, so a call for another worktree cannot let it go in between.
+func (s *Server) graphOf(ctx contextT, req mcpsdk.CallToolRequest, rebuild bool) (*graph.Graph, BuildInfo, error) {
+	p, err := s.worktreeRoot(ctx, req.GetString("root", ""))
+	if err != nil {
+		return nil, BuildInfo{}, err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if p == "" {
+		if rebuild {
+			s.base.g = nil
+		}
+		return s.base.get(ctx)
+	}
+	h, err := s.tree(p)
+	if err != nil {
+		return nil, BuildInfo{}, err
+	}
+	if rebuild {
+		h.g = nil
+	}
+	g, info, err := h.get(ctx)
+	noteRoot(ctx, p)
+	return g, info, err
+}
+
+// worktreeRoot resolves root to another worktree's top directory, or ""
+// for the served checkout.
+func (s *Server) worktreeRoot(ctx contextT, root string) (string, error) {
+	if root == "" {
+		return "", nil
+	}
+	served, err := s.servedRoot(ctx)
+	if err != nil {
+		return "", err
+	}
+	p, other, err := treeParam(root, served)
+	if err != nil {
+		return "", badParam{err}
+	}
+	if !other {
+		return "", nil
+	}
+	if s.worktree == nil {
+		return "", badParam{fmt.Errorf("root: this server builds no graph of another worktree")}
+	}
+	return p, nil
+}
+
+// tree returns the held graph of the worktree at p, opening it on first
+// use, with s.mu held. The served checkout's graph is made fresh first:
+// the worktree's is laid over it. What that build notes is the served
+// checkout's, not the answer's, so it is noted nowhere.
+func (s *Server) tree(p string) (*held, error) {
+	if _, _, err := s.base.get(context.Background()); err != nil {
+		return nil, err
+	}
+	h := s.worktrees[p]
+	if h == nil {
+		t, err := s.worktree(p)
+		if err != nil {
+			return nil, err
+		}
+		h = &held{build: t.Build, fresh: t.Fingerprint, pending: t.Pending, refresh: t.Refresh, close: t.Close}
+		s.worktrees[p] = h
+	}
+	h.used = time.Now()
+	s.evict()
+	return h, nil
+}
+
+// evict lets go of the worktrees' graphs beyond maxWorktrees, the one
+// used longest ago first.
+func (s *Server) evict() {
+	for len(s.worktrees) > maxWorktrees {
+		var oldest string
+		for p, h := range s.worktrees {
+			if oldest == "" || h.used.Before(s.worktrees[oldest].used) {
+				oldest = p
+			}
+		}
+		if c := s.worktrees[oldest].close; c != nil {
+			c()
+		}
+		delete(s.worktrees, oldest)
+	}
+}
+
+// get returns the held graph, building it on first use, building it again
+// first when its files have changed since (#204), and folding in what a
+// layer completing in the background has learnt (#269).
+func (h *held) get(ctx contextT) (*graph.Graph, BuildInfo, error) {
+	stale := h.g != nil && h.changed()
 	if stale {
-		s.g = nil
+		h.g = nil
 	}
 	var pv int64
-	if s.pending != nil {
+	if h.pending != nil {
 		// Taken before the build or refresh, as the fingerprint is, so
 		// what jedi learns while it runs is folded in by the next call.
-		pv, _ = s.pending()
+		pv, _ = h.pending()
 	}
-	if s.g == nil {
-		if err := s.buildNow(pv); err != nil {
+	if h.g == nil {
+		if err := h.buildNow(pv); err != nil {
 			return nil, BuildInfo{}, err
 		}
 		if stale {
-			noteRebuilt(ctx, s.info.Rebuilt)
+			noteRebuilt(ctx, h.info.Rebuilt)
 		}
-	} else if err := s.foldIn(pv); err != nil {
+	} else if err := h.foldIn(pv); err != nil {
 		return nil, BuildInfo{}, err
 	}
-	if s.pending != nil {
-		_, note := s.pending()
+	if h.pending != nil {
+		_, note := h.pending()
 		notePending(ctx, note)
 	}
-	return s.g, s.info, nil
+	return h.g, h.info, nil
 }
 
 // changed reports whether the files may have changed since the build.
-func (s *Server) changed() bool {
-	if s.fresh == nil {
+func (h *held) changed() bool {
+	if h.fresh == nil {
 		return false
 	}
-	fp, err := s.fresh()
-	return err != nil || fp != s.fp
+	fp, err := h.fresh()
+	return err != nil || fp != h.fp
 }
 
 // buildNow builds the graph, pv being what was pending before it.
-func (s *Server) buildNow(pv int64) error {
+func (h *held) buildNow(pv int64) error {
 	var fp string
-	if s.fresh != nil {
+	if h.fresh != nil {
 		// Taken before the build, so a file changed while it runs is
 		// seen by the next call rather than lost.
-		fp, _ = s.fresh()
+		fp, _ = h.fresh()
 	}
-	g, info, err := s.build()
+	g, info, err := h.build()
 	if err != nil {
 		return err
 	}
-	s.g, s.info, s.built, s.fp, s.pv = g, info, time.Now(), fp, pv
+	h.g, h.info, h.built, h.fp, h.pv = g, info, time.Now(), fp, pv
 	return nil
 }
 
 // foldIn refreshes the graph when what is completing in the background
 // has moved past pv's state since the graph was made (#269).
-func (s *Server) foldIn(pv int64) error {
-	if s.pending == nil || pv == s.pv {
+func (h *held) foldIn(pv int64) error {
+	if h.pending == nil || pv == h.pv {
 		return nil
 	}
-	g, info, err := s.refresh()
+	g, info, err := h.refresh()
 	if err != nil {
 		return err
 	}
-	s.g, s.info, s.built, s.pv = g, info, time.Now(), pv
+	h.g, h.info, h.built, h.pv = g, info, time.Now(), pv
 	return nil
 }
 
-// rebuild drops the graph and builds it again.
-func (s *Server) rebuild(ctx contextT) (*graph.Graph, BuildInfo, error) {
-	s.mu.Lock()
-	s.g = nil
-	s.mu.Unlock()
-	return s.graph(ctx)
+// rebuild drops the graph a call asks about and builds it again.
+func (s *Server) rebuild(ctx contextT, req mcpsdk.CallToolRequest) (*graph.Graph, BuildInfo, error) {
+	return s.graphOf(ctx, req, true)
 }
 
 // A callNote carries, through one tool call's context, the layers a
@@ -310,6 +475,7 @@ func (s *Server) rebuild(ctx contextT) (*graph.Graph, BuildInfo, error) {
 type callNote struct {
 	rebuilt []string
 	pending string
+	root    string
 }
 
 type callNoteKey struct{}
@@ -320,6 +486,13 @@ func noteRebuilt(ctx contextT, layers []string) {
 		if n.rebuilt == nil {
 			n.rebuilt = []string{}
 		}
+	}
+}
+
+// noteRoot says which worktree's graph a call answered from (#25).
+func noteRoot(ctx contextT, root string) {
+	if n, ok := ctx.Value(callNoteKey{}).(*callNote); ok {
+		n.root = root
 	}
 }
 
@@ -377,6 +550,9 @@ func safe(fn server.ToolHandlerFunc) server.ToolHandlerFunc {
 		}
 		if note.rebuilt != nil {
 			result = withRebuilt(result, note.rebuilt)
+		}
+		if note.root != "" {
+			result = withField(result, "root", note.root)
 		}
 		return result, err
 	}

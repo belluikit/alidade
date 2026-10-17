@@ -95,11 +95,12 @@ func nestedNote(target, top string) string {
 // reasonFor is the refusal's reason, saying so when the command set
 // ALIDADE_ALLOW_GREP=1 itself: it is not honoured there, since an agent
 // could otherwise lift the refusal at will. A search of another worktree
-// than the session's is told the root to pass (#23).
+// than the session's is told the root to pass (#23), which the graph
+// tools take too (#25).
 func reasonFor(command, top, repo string) string {
 	reason := denyReason
 	if top != repo {
-		reason = fmt.Sprintf("%s is a worktree of this repository: pass root=%q to mcp__alidade__search_text. ", top, top) + reason
+		reason = fmt.Sprintf("%s is a worktree of this repository: pass root=%q to mcp__alidade__search_text, and to the graph tools for its code (#25). ", top, top) + reason
 	}
 	if inlineEscapeRE.MatchString(command) {
 		return "ALIDADE_ALLOW_GREP=1 set inside a command is not honoured: it is read from the session's environment when the session starts. " + reason

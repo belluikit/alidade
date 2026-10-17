@@ -50,3 +50,41 @@ func TestSessionBackground(t *testing.T) {
 	}
 	sameAsFresh(t, root, g)
 }
+
+// TestOverlayPythonFollowsTheBasesJedi: a worktree's Python layer taken
+// from the base is the base's as of the worktree's build, not as of when
+// it was first taken: the base having folded jedi's answers in since, a
+// build of the worktree for another layer's edit takes them too (#25).
+func TestOverlayPythonFollowsTheBasesJedi(t *testing.T) {
+	if !python.Available() {
+		t.Skip("built without the python tag")
+	}
+	main, wt := worktreeOf(t, map[string]string{
+		"a.py":      "def f():\n    pass\n\n\nclass C:\n    def m(self):\n        pass\n",
+		"b.py":      "from a import f, C\n\n\ndef g():\n    f()\n    C().m()\n",
+		"README.md": "# w\n",
+	}, nil)
+	opts := DefaultOptions()
+	opts.Py.Background = true
+	base, err := NewSession(main, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(base.Close)
+	mustSessionBuild(t, base)
+	o, err := base.Overlay(wt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(o.Close)
+	if _, rep := mustSessionBuild(t, o); rep.Py == nil || rep.Py.Live != base.rep.Py.Live {
+		t.Fatal("the worktree's Python layer is not the base's")
+	}
+	base.rep.Py.Live.Wait()
+	if _, _, err := base.Refresh(); err != nil {
+		t.Fatal(err)
+	}
+	write(t, filepath.Join(wt, "README.md"), "# w\n\nchanged\n")
+	g, _ := mustSessionBuild(t, o)
+	sameAsFresh(t, wt, g)
+}

@@ -18,6 +18,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	mcpsdk "github.com/mark3labs/mcp-go/mcp"
 
@@ -62,7 +63,7 @@ func (s *Server) registerTextSearch() {
 		mcpsdk.WithBoolean("files_only", mcpsdk.DefaultBool(false), mcpsdk.Description("List the matching files with their hit counts, not the hits. Cut, a first page also counts hits per directory, two levels below path (dirs), to choose path or exclude.")),
 		mcpsdk.WithBoolean("exclude_tests", mcpsdk.DefaultBool(false), mcpsdk.Description("Leave out test files: _test.go, *.test.*, *.spec.*.")),
 		mcpsdk.WithString("after", mcpsdk.Description("Continue after this file:line, the next of a cut answer.")),
-		mcpsdk.WithString("root", mcpsdk.Description("Search this git worktree of the repository instead of the checkout the graph is built from: its top directory, absolute or relative to the repository. Its hits name no declaration.")),
+		mcpsdk.WithString("root", mcpsdk.Description("Search this git worktree of the repository instead of the checkout the graph is built from: its top directory, absolute or relative to the repository. Its hits name their declarations when a graph tool given the same root has built its graph and its files have not changed since; otherwise they name none, and note says why.")),
 		mcpsdk.WithString("ref", mcpsdk.Description("Search the files of this commit instead of the files on disk: a branch, tag, SHA or expression git takes (origin/main, HEAD~2), resolved in root's checkout. Its hits name no declaration.")),
 		withBudget(),
 		mcpsdk.WithReadOnlyHintAnnotation(true),
@@ -80,8 +81,10 @@ type textHit struct {
 type textResult struct {
 	// Root is the worktree searched, when it is not the graph's; Ref
 	// the commit searched, when it is not the files on disk.
-	Root    string      `json:"root,omitempty"`
-	Ref     string      `json:"ref,omitempty"`
+	Root string `json:"root,omitempty"`
+	Ref  string `json:"ref,omitempty"`
+	// Note says why another worktree's hits name no declaration (#25).
+	Note    string      `json:"note,omitempty"`
 	Hits    []textHit   `json:"hits,omitempty"`
 	Matches []fileCount `json:"matches,omitempty"`
 	// Dirs rolls a cut files_only answer's hits up by directory, two
@@ -137,7 +140,7 @@ func (s *Server) handleSearchText(ctx context.Context, req mcpsdk.CallToolReques
 	if ts.other {
 		c.r.Root = ts.root
 	}
-	c.r.Ref = ts.ref
+	c.r.Ref, c.r.Note = ts.ref, ts.note
 	return jsonResult(c.r), nil
 }
 
@@ -162,17 +165,43 @@ func (s *Server) textSearch(ctx context.Context, req mcpsdk.CallToolRequest) (*t
 	if err := s.placeSearch(ctx, ts, req.GetString("root", ""), req.GetString("ref", "")); err != nil {
 		return nil, err
 	}
-	if !ts.other && ts.ref == "" {
+	switch {
+	case ts.ref != "":
+	case !ts.other:
 		g, _, err := s.graph(ctx)
 		if err != nil {
 			return nil, err
 		}
 		ts.byFile = nodesByFile(g)
+	default:
+		g, note := s.heldGraph(ts.root)
+		if g != nil {
+			ts.byFile = nodesByFile(g)
+		}
+		ts.note = note
 	}
 	if ts.skip, err = scope.Load(ts.root); err != nil {
 		return nil, badParam{err}
 	}
 	return ts, nil
+}
+
+// heldGraph is another worktree's graph for a search of its files, when
+// the server holds one that is current (#25, the owner's decision): a
+// search never waits for a build, so without one, or with one older than
+// the files, the hits name no declaration and the note says why.
+func (s *Server) heldGraph(root string) (*graph.Graph, string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	h := s.worktrees[root]
+	switch {
+	case h == nil || h.g == nil:
+		return nil, "hits name no declaration: no graph of this worktree is built yet; any graph tool given this root builds one"
+	case h.changed():
+		return nil, "hits name no declaration: the files changed since this worktree's graph was built; any graph tool given this root builds it again"
+	}
+	h.used = time.Now()
+	return h.g, ""
 }
 
 // placeSearch settles which tree a search reads: root's worktree, and
@@ -451,10 +480,12 @@ func clip(s string, n int) string {
 type textSearch struct {
 	root string
 	// other says root is a worktree other than the graph's, and ref
-	// that the search reads a commit rather than the files on disk:
-	// either way, its hits name no declaration.
+	// that the search reads a commit rather than the files on disk. A
+	// commit's hits name no declaration; another worktree's do when its
+	// graph is held and current, and note says why when they do not.
 	other  bool
 	ref    string
+	note   string
 	byFile map[string][]graph.Node
 	index  map[graph.ID]int
 	files  int

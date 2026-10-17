@@ -35,6 +35,13 @@ func withExcludeTests() mcpsdk.ToolOption {
 		mcpsdk.Description("Leave out _test.go declarations and their edges: the production graph."))
 }
 
+// withRoot is the graph tools' root: another worktree of the repository,
+// whose graph is laid over the served checkout's (#25).
+func withRoot() mcpsdk.ToolOption {
+	return mcpsdk.WithString("root",
+		mcpsdk.Description("Another git worktree of this repository, by its top directory: answer from its graph, built over this checkout's on first use (what its files share with this one is reused). The answer carries root."))
+}
+
 func withDirection(def direction) mcpsdk.ToolOption {
 	return mcpsdk.WithString("direction", mcpsdk.Enum("out", "in", "both"), mcpsdk.DefaultString(string(def)),
 		mcpsdk.Description("out: what it calls, contains, references. in: its callers, implementers, referrers."))
@@ -45,6 +52,7 @@ func (s *Server) registerTools() {
 
 	add(mcpsdk.NewTool("graph_stats",
 		mcpsdk.WithDescription("What the graph holds by layer and derivation, build time, and what the build skipped or could not compile."),
+		withRoot(),
 		mcpsdk.WithReadOnlyHintAnnotation(true),
 	), s.handleStats)
 
@@ -57,12 +65,14 @@ func (s *Server) registerTools() {
 		withExcludeTests(),
 		withExcludeGenerated(),
 		withBudget(),
+		withRoot(),
 		mcpsdk.WithReadOnlyHintAnnotation(true),
 	), s.handleFind)
 
 	add(mcpsdk.NewTool("get_node",
 		mcpsdk.WithDescription("One node: kind, name, position, attributes, and how many edges of each kind leave and arrive."),
 		mcpsdk.WithString("id", mcpsdk.Required(), mcpsdk.Description("A node ID from find_nodes.")),
+		withRoot(),
 		mcpsdk.WithReadOnlyHintAnnotation(true),
 	), s.handleGet)
 
@@ -73,6 +83,7 @@ func (s *Server) registerTools() {
 			withDirection(dirBoth),
 			mcpsdk.WithNumber("depth", mcpsdk.DefaultNumber(defaultDepth), mcpsdk.Min(1), mcpsdk.Max(maxDepth)),
 			withBudget(),
+			withRoot(),
 			mcpsdk.WithReadOnlyHintAnnotation(true),
 		}, withFilter()...)...,
 	), s.handleNeighbors)
@@ -85,6 +96,7 @@ func (s *Server) registerTools() {
 			withDirection(dirOut),
 			mcpsdk.WithNumber("max_depth", mcpsdk.DefaultNumber(maxPathDepth), mcpsdk.Min(1), mcpsdk.Max(maxPathDepth)),
 			withBudget(),
+			withRoot(),
 			mcpsdk.WithReadOnlyHintAnnotation(true),
 		}, withFilter()...)...,
 	), s.handlePath)
@@ -97,6 +109,7 @@ func (s *Server) registerTools() {
 			mcpsdk.WithNumber("depth", mcpsdk.DefaultNumber(questionDepth), mcpsdk.Min(1), mcpsdk.Max(maxDepth),
 				mcpsdk.Description("Hops from each seed; table -> generated code -> caller is 3.")),
 			withBudget(),
+			withRoot(),
 			mcpsdk.WithReadOnlyHintAnnotation(true),
 		}, withFilter()...)...,
 	), s.handleQuestion)
@@ -106,10 +119,12 @@ func (s *Server) registerTools() {
 		mcpsdk.WithString("kind", mcpsdk.Enum("dropped", "conflicts", "both"), mcpsdk.DefaultString("both")),
 		mcpsdk.WithString("prefix", mcpsdk.Description("Only items whose ID starts with this, e.g. sql://.")),
 		withBudget(),
+		withRoot(),
 		mcpsdk.WithReadOnlyHintAnnotation(true),
 	), s.handleIssues)
 
 	add(mcpsdk.NewTool("rebuild",
 		mcpsdk.WithDescription("Build the graph again from the working tree now. Rarely needed: every tool already rebuilds the changed layers first when files changed since the last build, and says so in rebuilt."),
+		withRoot(),
 	), s.handleRebuild)
 }

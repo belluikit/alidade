@@ -43,6 +43,11 @@ func (s *Session) Fingerprint() (string, error) {
 		}
 		fmt.Fprintf(h, "%s\n%s\n", root, strings.Join(lines, "\n"))
 	}
+	if s.base != nil {
+		// A worktree's graph takes layers from the base's, so it is out
+		// of date when the base's graph moves too (#25).
+		fmt.Fprintf(h, "base %d\n", s.base.gen)
+	}
 	return hex.EncodeToString(h.Sum(nil)), nil
 }
 

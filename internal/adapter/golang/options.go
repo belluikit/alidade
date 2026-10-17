@@ -58,6 +58,16 @@ type Options struct {
 	// dependency implementations, and the load is 3–4× cheaper. On by
 	// default since 2026-09-12 (#58); DepsFromSource is the way back.
 	DepsFromExportData bool
+
+	// Only, when not nil, loads only the packages with these import paths
+	// and emits only their declarations and the edges leaving them: a
+	// worktree's changed packages, over a base graph that holds the rest
+	// (#25, ADR 005 amended). An edge into another package of the tree's
+	// modules is named by ID, as any is, and resolves against the base's
+	// node; a module none of them is in is not loaded, and is still of the
+	// graph, so a call into it lands on the declaration. The Report's
+	// counts are of the packages loaded.
+	Only []string
 }
 
 // DefaultOptions returns the options ADR 004 asks for: tests out, module

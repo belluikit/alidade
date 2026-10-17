@@ -58,7 +58,7 @@ model is told what to use instead:
 
 Every worktree of the repository counts as the repository: a search in
 another `git worktree` of it is refused too, and the model is told to
-pass that worktree as `search_text`'s `root`.
+pass that worktree as `root`, to `search_text` and to the graph tools.
 
 The model is pointed to `search_text` for text, and to `find_nodes`,
 `neighbors` and `shortest_path` for code. Measured, an agent with alidade
@@ -206,8 +206,27 @@ skip = ["vendor", "third_party", "web/legacy"]
 | `shortest_path` | how two nodes connect |
 | `subgraph_for_question` | the neighbourhood of what a question names, across layers |
 | `graph_issues` | what the graph left out (dropped edges, folded by cause) or had to decide (conflicts) |
-| `search_text` | text the graph does not hold: a string literal, a log message, a comment. Each hit comes with the declaration holding it, as a node for the tools above. `path` and `exclude` to narrow it by path prefix, `files_only` (a cut first page also counts hits per directory below `path`), `exclude_tests`, and `after` to continue a cut answer. `root` searches another `git worktree` of the repository and `ref` a commit's files; their hits name no declaration |
+| `search_text` | text the graph does not hold: a string literal, a log message, a comment. Each hit comes with the declaration holding it, as a node for the tools above. `path` and `exclude` to narrow it by path prefix, `files_only` (a cut first page also counts hits per directory below `path`), `exclude_tests`, and `after` to continue a cut answer. `root` searches another `git worktree` of the repository and `ref` a commit's files; a commit's hits name no declaration, and a worktree's do when its graph is built (see below) |
 | `rebuild` | build again now. Rarely needed, since every tool rebuilds the changed layers first |
+
+**Another worktree.** Every graph tool takes `root`: another `git
+worktree` of the repository, by its top directory. The answer is that
+worktree's graph and says so under `root`. It is built on first use from
+the session's graph: a layer whose files are the same is reused, and the
+Go layer loads again only the packages whose files differ. Calls through
+an interface or a function value from those packages depend on code that
+was not loaded again; they are kept from the session's graph, marked
+INFERRED and `carried=base`, and may be stale. A package the worktree
+did not change is as the session's build saw it: a call of its through
+an interface does not reach an implementation only the worktree has.
+`graph_stats` with
+`root` lists what was reused under `overlay`. The server holds four
+worktrees' graphs at most, and lets the one used longest ago go.
+
+`search_text` with `root` never waits for that graph. Its hits name their
+declarations when a graph tool given the same `root` has built the
+worktree's graph and the worktree's files have not changed since;
+otherwise they name none, and `note` says why.
 
 **The usual shape of a question:** `subgraph_for_question` with the names
 involved. If the answer is too big for one call, `find_nodes` for the exact

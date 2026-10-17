@@ -30,6 +30,7 @@ var surfaceKeys = map[string]string{
 	"Build": "go_build", "ExcludedGoFiles": "go_excluded_files", "SchemaRoots": "schema_roots",
 	"GoModules": "go_modules", "GoModulesFailed": "go_modules_failed", "GoModuleEdges": "go_module_edges", "GoTestModuleEdges": "go_test_module_edges",
 	"GoTestNodes": "go_test_nodes", "GoTestsExact": "go_tests", "GoOutsideTree": "go_outside_tree", "GoPackagesFailed": "go_packages_failed", "GoPackagesWithoutCalls": "go_packages_without_calls", "Skipped": "skipped", "Elapsed": "build_ms",
+	"Overlay": "overlay",
 }
 
 // fullInfo is a BuildInfo with every field non-zero, so every key is
@@ -43,6 +44,7 @@ func fullInfo() mcp.BuildInfo {
 		GoTestModuleEdges: []mcp.ModuleEdge{{From: "example.com/a", Kind: "imports", Count: 2}},
 		GoTestNodes:       7, GoTestsExact: true, GoOutsideTree: 3, GoPackagesFailed: []string{"example.com/a/wip"}, GoPackagesWithoutCalls: []string{"example.com/a/user"}, Skipped: []graph.Skip{{Layer: "md", File: "docs/My Notes.md", Reason: "segment contains whitespace"}},
 		Elapsed: 1200 * time.Millisecond,
+		Overlay: &mcp.OverlayInfo{Base: "/repo-main", Inherited: []string{"md"}, Packages: []string{"example.com/a"}, Carried: 3},
 	}
 }
 

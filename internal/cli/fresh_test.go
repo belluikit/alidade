@@ -29,7 +29,7 @@ func TestServeAnswersFromTheFilesOnDisk(t *testing.T) {
 	}
 	write("go.mod", "module example.com/fresh\n\ngo 1.26\n")
 	write("a.go", "package fresh\n\nfunc Alpha() int { return 1 }\n")
-	buildFn, fingerprint, _, _, _ := sessionFuncs(dir, defaultOpts())
+	buildFn, fingerprint, _, _, _, _ := sessionFuncs(dir, defaultOpts())
 	s := mcp.New(buildFn).WatchFiles(fingerprint)
 	c, err := client.NewInProcessClient(s.MCP())
 	if err != nil {

@@ -8,6 +8,24 @@ tracker's. From v0.12.1 on, every number is this repository's.
 
 ## Unreleased
 
+- **Added: the graph tools answer for another worktree** (#25; ADR 005
+  amended). `find_nodes`, `get_node`, `neighbors`, `shortest_path`,
+  `subgraph_for_question`, `graph_stats`, `graph_issues` and `rebuild`
+  take `root`, another `git worktree` of the repository, and the answer
+  carries it. The worktree's graph is the session's with the worktree's
+  differences laid over it: layers whose files are the same are reused,
+  and only the Go packages whose files differ are loaded again. A call
+  through an interface or a function value from those packages is kept
+  from the session's graph, INFERRED with `carried=base`. A package the
+  worktree did not change keeps the session's edges, so its calls through
+  an interface miss an implementation only the worktree has. On
+  trendvidia/go a worktree's graph took 3.9–4.4 s against 21.7–22.4 s for
+  a full build. `graph_stats` with `root` says what was reused under
+  `overlay`. The server holds four worktrees' graphs at most. The grep
+  hook's refusal in a worktree names the graph tools too. `search_text`
+  with `root` still never waits for a build: its hits name their
+  declarations when that worktree's graph is already built and current,
+  and otherwise carry a `note` saying why they name none.
 - **Fixed: a `git worktree` nested inside the repository is not read as
   part of it** (#24; ADR 003 amended). One under `.claude/worktrees/`,
   where Claude Code puts them, had its files read under their nested

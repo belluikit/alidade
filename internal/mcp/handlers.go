@@ -45,6 +45,32 @@ type statsOut struct {
 	Dropped        int            `json:"dropped"`
 	DroppedBy      map[string]int `json:"dropped_by_reason,omitempty"`
 	Conflicts      int            `json:"conflicts"`
+	Overlay        *overlayOut    `json:"overlay,omitempty"`
+}
+
+// overlayOut is how a worktree's graph was laid over the base's (#25).
+type overlayOut struct {
+	Base      string   `json:"base"`
+	Inherited []string `json:"layers_from_base,omitempty"`
+	Packages  []string `json:"go_packages_loaded,omitempty"`
+	Removed   []string `json:"go_packages_removed,omitempty"`
+	Carried   int      `json:"carried,omitempty"`
+	GoWhole   bool     `json:"go_built_whole,omitempty"`
+	Note      string   `json:"note,omitempty"`
+}
+
+// carriedNote says what a carried edge is, where an answer has some.
+const carriedNote = "carried edges are the base graph's calls and implements edges from the packages loaded again, INFERRED: a call through an interface or a function value depends on code this load did not read"
+
+func renderOverlay(o *OverlayInfo) *overlayOut {
+	if o == nil {
+		return nil
+	}
+	out := &overlayOut{Base: o.Base, Inherited: o.Inherited, Packages: o.Packages, Removed: o.Removed, Carried: o.Carried, GoWhole: o.GoWhole}
+	if o.Carried > 0 {
+		out.Note = carriedNote
+	}
+	return out
 }
 
 // maxSkipped caps each unbounded list graph_stats itemizes: the skipped
@@ -107,6 +133,7 @@ func renderStats(g *graph.Graph, info BuildInfo) statsOut {
 	if o.Layers == nil {
 		o.Layers = []string{}
 	}
+	o.Overlay = renderOverlay(info.Overlay)
 	o.GoOutsideTree = info.GoOutsideTree
 	if info.GoTestsExact {
 		o.GoTests = "exact"
@@ -132,24 +159,26 @@ func renderStats(g *graph.Graph, info BuildInfo) statsOut {
 	return o
 }
 
-func (s *Server) handleStats(ctx contextT, _ mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
-	g, info, err := s.graph(ctx)
+func (s *Server) handleStats(ctx contextT, req mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
+	g, info, err := s.graphFor(ctx, req)
 	if err != nil {
 		return errorResult(err), nil
 	}
+	noteRoot(ctx, "") // the answer's own root says it
 	return jsonResult(renderStats(g, info)), nil
 }
 
-func (s *Server) handleRebuild(ctx contextT, _ mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
-	g, info, err := s.rebuild(ctx)
+func (s *Server) handleRebuild(ctx contextT, req mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
+	g, info, err := s.rebuild(ctx, req)
 	if err != nil {
 		return errorResult(err), nil
 	}
+	noteRoot(ctx, "") // the answer's own root says it
 	return jsonResult(renderStats(g, info)), nil
 }
 
 func (s *Server) handleFind(ctx contextT, req mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
-	g, _, err := s.graph(ctx)
+	g, _, err := s.graphFor(ctx, req)
 	if err != nil {
 		return errorResult(err), nil
 	}
@@ -185,7 +214,7 @@ type nodeDetail struct {
 }
 
 func (s *Server) handleGet(ctx contextT, req mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
-	g, _, err := s.graph(ctx)
+	g, _, err := s.graphFor(ctx, req)
 	if err != nil {
 		return errorResult(err), nil
 	}
@@ -205,7 +234,7 @@ func (s *Server) handleGet(ctx contextT, req mcpsdk.CallToolRequest) (*mcpsdk.Ca
 }
 
 func (s *Server) handleNeighbors(ctx contextT, req mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
-	g, _, err := s.graph(ctx)
+	g, _, err := s.graphFor(ctx, req)
 	if err != nil {
 		return errorResult(err), nil
 	}
@@ -229,7 +258,7 @@ func (s *Server) handleNeighbors(ctx contextT, req mcpsdk.CallToolRequest) (*mcp
 }
 
 func (s *Server) handlePath(ctx contextT, req mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
-	g, _, err := s.graph(ctx)
+	g, _, err := s.graphFor(ctx, req)
 	if err != nil {
 		return errorResult(err), nil
 	}
@@ -267,7 +296,7 @@ func (s *Server) handlePath(ctx contextT, req mcpsdk.CallToolRequest) (*mcpsdk.C
 }
 
 func (s *Server) handleQuestion(ctx contextT, req mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
-	g, _, err := s.graph(ctx)
+	g, _, err := s.graphFor(ctx, req)
 	if err != nil {
 		return errorResult(err), nil
 	}
@@ -351,7 +380,7 @@ type droppedGroup struct {
 }
 
 func (s *Server) handleIssues(ctx contextT, req mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
-	g, _, err := s.graph(ctx)
+	g, _, err := s.graphFor(ctx, req)
 	if err != nil {
 		return errorResult(err), nil
 	}

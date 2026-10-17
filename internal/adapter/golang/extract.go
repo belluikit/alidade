@@ -319,20 +319,58 @@ func extractOnce(b *graph.Builder, dir string, opts Options) (*Report, error) {
 		return nil, err
 	}
 	report.Configs, report.Recovered = configNames(host, extra), len(covered)
+	modules := graphModules(mods, report, opts)
+	rec.theirs = notAsked(opts.Only, modules)
 	for _, lm := range loaded {
-		x := newExtractor(rec, b.Minter(), lm.eng, lm.Path, report.Modules, opts, report)
+		x := newExtractor(rec, b.Minter(), lm.eng, lm.Path, modules, opts, report)
 		x.recovered = covered
 		if err := x.pass(lm.pkgs); err != nil {
 			return nil, err
 		}
 		for _, c := range extra {
-			if err := extraPass(rec, b.Minter(), lm, report.Modules, opts, c, report); err != nil {
+			if err := extraPass(rec, b.Minter(), lm, modules, opts, c, report); err != nil {
 				return nil, err
 			}
 		}
 	}
 	report.finish()
 	return report, nil
+}
+
+// graphModules are the module paths an edge may land in at declaration
+// granularity: the modules loaded, and under Options.Only also those not
+// loaded because none of their packages was asked for, which the base
+// graph holds (#25). A module that failed to load is in neither.
+func graphModules(mods []Module, report *Report, opts Options) []string {
+	out := slices.Clone(report.Modules)
+	if opts.Only == nil {
+		return out
+	}
+	for _, mod := range mods {
+		if len(onlyIn(opts.Only, mod.Path, mods)) == 0 {
+			out = append(out, mod.Path)
+		}
+	}
+	return out
+}
+
+// onlyIn lists the import paths of only that belong to module, nil when
+// only is nil.
+func onlyIn(only []string, module string, mods []Module) []string {
+	if only == nil {
+		return nil
+	}
+	paths := make([]string, len(mods))
+	for i, m := range mods {
+		paths[i] = m.Path
+	}
+	var out []string
+	for _, p := range only {
+		if Owner(p, paths) == module {
+			out = append(out, p)
+		}
+	}
+	return out
 }
 
 // goRepository reports whether the modules are a checkout of the Go
@@ -390,6 +428,9 @@ type loadedModule struct {
 	Module
 	eng  *analysis.Engine
 	pkgs []*packages.Package
+	// only are the import paths of this module's packages Options.Only
+	// asks for, nil when it asks for every package.
+	only []string
 }
 
 // loadModules loads each module for the host configuration. A module
@@ -400,8 +441,12 @@ type loadedModule struct {
 func loadModules(rec *recorder, m *graph.Minter, mods []Module, opts Options, report *Report) ([]loadedModule, error) {
 	var out []loadedModule
 	for _, mod := range mods {
+		only := onlyIn(opts.Only, mod.Path, mods)
+		if opts.Only != nil && len(only) == 0 {
+			continue // none of its packages asked for (#25)
+		}
 		start := time.Now()
-		eng, err := load(mod.Dir, opts, nil)
+		eng, err := load(mod.Dir, opts, nil, only)
 		report.Load += time.Since(start)
 		if err != nil {
 			// The root's module too: a syntax error in a one-package
@@ -414,7 +459,7 @@ func loadModules(rec *recorder, m *graph.Minter, mods []Module, opts Options, re
 			continue
 		}
 		report.Modules = append(report.Modules, mod.Path)
-		out = append(out, loadedModule{mod, eng, targetPackages(eng.Packages())})
+		out = append(out, loadedModule{mod, eng, targetPackages(eng.Packages()), only})
 	}
 	return out, nil
 }
@@ -465,7 +510,11 @@ func excludedInModules(loaded []loadedModule, tests bool) []string {
 
 // load runs caliper over the module for one configuration: the host's
 // when env is nil, otherwise the GOOS and GOARCH env carries.
-func load(dir string, opts Options, env []string) (*analysis.Engine, error) {
+// patterns, when not empty, are the import paths to load in place of
+// every package of the module: import paths, not ./dir, since caliper
+// loads a checkout of the Go repository from no directory, GOROOT
+// naming it, and ./dir would match nothing there (#25).
+func load(dir string, opts Options, env, patterns []string) (*analysis.Engine, error) {
 	eng, err := analysis.NewEngineWithOptions(dir, analysis.EngineOptions{
 		// Never inherited from analysis.DefaultOptions: both flags are
 		// alidade's decision (ADR 004). SkipGenerated is off so the AST
@@ -476,7 +525,7 @@ func load(dir string, opts Options, env []string) (*analysis.Engine, error) {
 		Env:           env,
 
 		DepsFromExportData: opts.DepsFromExportData,
-	})
+	}, patterns...)
 	if err != nil {
 		return nil, fmt.Errorf("golang: load %s: %w", dir, err)
 	}
@@ -492,7 +541,7 @@ func load(dir string, opts Options, env []string) (*analysis.Engine, error) {
 // layer that returns an error is dropped whole (#93).
 func extraPass(rec *recorder, m *graph.Minter, mod loadedModule, modules []string, opts Options, c config, report *Report) error {
 	start := time.Now()
-	eng, err := load(mod.Dir, opts, []string{"GOOS=" + c.goos, "GOARCH=" + c.goarch})
+	eng, err := load(mod.Dir, opts, []string{"GOOS=" + c.goos, "GOARCH=" + c.goarch}, mod.only)
 	report.Load += time.Since(start)
 	if err != nil {
 		report.Skipped = append(report.Skipped, m.Skip(filepath.Join(mod.Dir, "go.mod"), 0,
