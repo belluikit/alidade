@@ -148,7 +148,7 @@ func (x *extractor) withoutCalls(skipped []analysis.SkippedPackage) error {
 // module's; test files count only with tests.
 func unloadedGoFiles(lm loadedModule, opts Options, root string) []string {
 	tests := opts.Tests
-	loaded := loadedDirs(lm.eng)
+	loaded := accountedFor(lm)
 	var out []string
 	_ = filepath.WalkDir(lm.Dir, func(p string, d fs.DirEntry, err error) error {
 		switch {
@@ -156,13 +156,44 @@ func unloadedGoFiles(lm loadedModule, opts Options, root string) []string {
 			return nil
 		case d.IsDir() && p != lm.Dir && (skipModuleDir(d.Name()) || hasGoMod(p) || opts.Skip.SkipsDir(root, p)):
 			return filepath.SkipDir
-		case d.IsDir() || !strings.HasSuffix(p, ".go") || loaded[filepath.Dir(p)]:
+		case d.IsDir() || !strings.HasSuffix(p, ".go") || loaded(filepath.Dir(p)):
 			return nil
 		case tests || !strings.HasSuffix(p, "_test.go"):
 			out = append(out, p)
 		}
 		return nil
 	})
+	return out
+}
+
+// accountedFor reports whether a directory's Go files are accounted for
+// without counting them unloaded: a package of the load came from it, or
+// under Options.Only it is not a package asked for, and is the base's
+// (#25).
+func accountedFor(lm loadedModule) func(dir string) bool {
+	loaded, asked := loadedDirs(lm.eng), askedDirs(lm)
+	return func(dir string) bool {
+		return loaded[dir] || asked != nil && !asked[dir]
+	}
+}
+
+// askedDirs is the set of directories of the packages Options.Only asks
+// for in a module, nil when it asks for every package. A package's
+// directory is the module's joined with the path below it; the standard
+// library's paths are below no module path, and sit under its directory
+// as they are.
+func askedDirs(lm loadedModule) map[string]bool {
+	if lm.only == nil {
+		return nil
+	}
+	out := map[string]bool{}
+	for _, p := range lm.only {
+		rel := p
+		if lm.Path != "std" {
+			rel = strings.TrimPrefix(strings.TrimPrefix(p, lm.Path), "/")
+		}
+		out[filepath.Join(lm.Dir, filepath.FromSlash(rel))] = true
+	}
 	return out
 }
 

@@ -5,6 +5,7 @@ package golang
 
 import (
 	"bytes"
+	"fmt"
 	"maps"
 	"os"
 	"path/filepath"
@@ -36,7 +37,9 @@ type extraction struct {
 
 var (
 	cacheMu sync.Mutex
-	cache   = map[Options]extraction{}
+	// cache is keyed by the options as printed, Only being a slice; a
+	// pointer prints as its address, so it keys as it compared before.
+	cache = map[string]extraction{}
 )
 
 // extract runs the adapter over the fixture once per distinct Options and
@@ -47,7 +50,8 @@ func extract(t *testing.T, opts Options) (*graph.Graph, *Report) {
 	t.Helper()
 	cacheMu.Lock()
 	defer cacheMu.Unlock()
-	if e, ok := cache[opts]; ok {
+	key := fmt.Sprintf("%#v", opts)
+	if e, ok := cache[key]; ok {
 		return e.g, e.rep
 	}
 	dir := fixtureDir(t)
@@ -57,7 +61,7 @@ func extract(t *testing.T, opts Options) (*graph.Graph, *Report) {
 		t.Fatalf("Extract: %v", err)
 	}
 	e := extraction{b.Build(), rep}
-	cache[opts] = e
+	cache[key] = e
 	return e.g, e.rep
 }
 
@@ -901,4 +905,64 @@ func TestStructFields(t *testing.T) {
 	if n, ok := gt.Node(rid("fake.calls")); !ok || !n.Test {
 		t.Errorf("fake.calls with tests: present %v, test %v", ok, n.Test)
 	}
+}
+
+// TestOnlyLoadsTheNamedPackages pins Options.Only (#25): a load of one
+// package emits its declarations alone, and every edge leaving it that a
+// full build has — an edge into a package it did not load named by ID, to
+// resolve against a base graph, not a boundary edge to the package.
+func TestOnlyLoadsTheNamedPackages(t *testing.T) {
+	full, _ := extract(t, DefaultOptions())
+	dir := fixtureDir(t)
+	b := graph.NewBuilder(dir)
+	opts := DefaultOptions()
+	opts.Only = []string{fixtureModule + "/app"}
+	if _, err := Extract(b, dir, opts); err != nil {
+		t.Fatal(err)
+	}
+	sub := b.Build()
+	for n := range sub.Nodes() {
+		if strings.HasPrefix(string(n.ID), string(id("shapes"))) {
+			t.Errorf("a package not asked for is in the subset: %s", n.ID)
+		}
+	}
+	got := map[string]bool{}
+	for e := range sub.Edges() {
+		got[edgeLine(e)] = true
+	}
+	for _, d := range sub.Dropped() {
+		got[edgeLine(d.Edge)] = true // its end is the base's
+	}
+	want := edgesFrom(full, id("app"))
+	if len(want) == 0 {
+		t.Fatal("the full build has no edge leaving app")
+	}
+	for k := range want {
+		if !got[k] {
+			t.Errorf("the subset lacks %s", k)
+		}
+	}
+	for k := range got {
+		if !want[k] {
+			t.Errorf("the subset has %s, a full build does not", k)
+		}
+	}
+	if !got[edgeLine(graph.Edge{From: id("app#Run"), To: id("shapes#Total"), Kind: graph.KindCalls})] {
+		t.Error("app#Run's call into shapes is not to shapes#Total")
+	}
+}
+
+func edgeLine(e graph.Edge) string {
+	return string(e.From) + " -" + string(e.Kind) + "-> " + string(e.To)
+}
+
+// edgesFrom lists the edges leaving a package or a declaration of it.
+func edgesFrom(g *graph.Graph, pkg graph.ID) map[string]bool {
+	out := map[string]bool{}
+	for e := range g.Edges() {
+		if e.From == pkg || strings.HasPrefix(string(e.From), string(pkg)+"#") {
+			out[edgeLine(e)] = true
+		}
+	}
+	return out
 }

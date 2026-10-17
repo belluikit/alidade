@@ -3,7 +3,11 @@
 
 package golang
 
-import "github.com/belluikit/alidade/internal/graph"
+import (
+	"strings"
+
+	"github.com/belluikit/alidade/internal/graph"
+)
 
 // A sink is where an extractor's nodes and edges go. The host
 // configuration's pass writes to the builder and records what it wrote;
@@ -22,11 +26,17 @@ type edgeKey struct {
 	to   graph.ID
 }
 
-// A recorder passes everything to the builder and remembers it.
+// A recorder passes everything to the builder and remembers it. Under
+// Options.Only it passes only what is of the packages asked for: a node
+// of another package of the graph's modules, or an edge leaving one, is
+// the base graph's, which a load of fewer packages may see less of (#25).
 type recorder struct {
 	b     *graph.Builder
 	nodes map[graph.ID]bool
 	edges map[edgeKey]bool
+	// theirs, when set, reports whether an ID is of a package of the
+	// graph that was not asked for.
+	theirs func(graph.ID) bool
 }
 
 func newRecorder(b *graph.Builder) *recorder {
@@ -34,11 +44,17 @@ func newRecorder(b *graph.Builder) *recorder {
 }
 
 func (r *recorder) AddNode(n graph.Node) error {
+	if r.theirs != nil && r.theirs(n.ID) {
+		return nil
+	}
 	r.nodes[n.ID] = true
 	return r.b.AddNode(n)
 }
 
 func (r *recorder) AddEdge(e graph.Edge) error {
+	if r.theirs != nil && r.theirs(e.From) {
+		return nil
+	}
 	r.edges[edgeKey{e.From, e.Kind, e.To}] = true
 	return r.b.AddEdge(e)
 }
@@ -109,4 +125,27 @@ func withAttr(attrs map[string]string, k, v string) map[string]string {
 	}
 	out[k] = v
 	return out
+}
+
+// notAsked reports, for Options.Only, whether a Go ID is of a package of
+// the graph's modules other than those asked for. A package's external
+// test package (pkg_test) is asked for with it, as its files are in its
+// directory; a package outside the graph is no package of the base's.
+// It is nil when every package is asked for.
+func notAsked(only, modules []string) func(graph.ID) bool {
+	if only == nil {
+		return nil
+	}
+	asked := map[string]bool{}
+	for _, p := range only {
+		asked[p], asked[p+"_test"] = true, true
+	}
+	return func(id graph.ID) bool {
+		rest, ok := strings.CutPrefix(string(id), "go://")
+		if !ok {
+			return false
+		}
+		pkg, _, _ := strings.Cut(rest, "#")
+		return !asked[pkg] && Owner(pkg, modules) != ""
+	}
 }

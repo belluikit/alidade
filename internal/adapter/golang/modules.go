@@ -159,3 +159,89 @@ func loadError(err error) string {
 	}
 	return strings.Join(lines, "; ")
 }
+
+// PackagesOf maps Go files of the tree, repo-relative, to the packages
+// they are in, by import path, for a worktree's graph that loads again
+// only the packages whose files differ from the base's (#25). A package
+// whose directory still holds a Go file is in present, one whose
+// directory holds none any more in gone. A file the go tool would build
+// into no package of the tree's modules — under testdata, vendor, a
+// directory starting with "." or "_", a skipped directory, or in no
+// module — is in neither: the base graph has nothing of it either.
+func PackagesOf(root string, mods []Module, skip *scope.Dirs, files []string) (present, gone []string) {
+	seen := map[string]bool{}
+	for _, f := range files {
+		dir := filepath.Join(root, filepath.FromSlash(path.Dir(f)))
+		mod, ok := moduleOf(mods, dir)
+		if !ok || skip.SkipsUnder(root, dir) {
+			continue
+		}
+		rel, _ := filepath.Rel(mod.Dir, dir)
+		rel = filepath.ToSlash(rel)
+		if hiddenBelow(rel) {
+			continue
+		}
+		ip := mod.Path
+		switch {
+		case mod.Path == "std" && rel == ".":
+			continue // GOROOT/src holds no package
+		case mod.Path == "std":
+			ip = rel
+		case rel != ".":
+			ip += "/" + rel
+		}
+		if seen[ip] {
+			continue
+		}
+		seen[ip] = true
+		if holdsGo(dir) {
+			present = append(present, ip)
+		} else {
+			gone = append(gone, ip)
+		}
+	}
+	sort.Strings(present)
+	sort.Strings(gone)
+	return present, gone
+}
+
+// moduleOf returns the module whose directory holds dir most closely: a
+// nested module's directory is inside its parent's.
+func moduleOf(mods []Module, dir string) (Module, bool) {
+	var best Module
+	found := false
+	for _, m := range mods {
+		if (dir == m.Dir || strings.HasPrefix(dir, m.Dir+string(filepath.Separator))) && len(m.Dir) >= len(best.Dir) {
+			best, found = m, true
+		}
+	}
+	return best, found
+}
+
+// hiddenBelow reports whether a module-relative directory is one the go
+// tool's ./... never matches.
+func hiddenBelow(rel string) bool {
+	if rel == "." {
+		return false
+	}
+	for _, d := range strings.Split(rel, "/") {
+		if skipModuleDir(d) {
+			return true
+		}
+	}
+	return false
+}
+
+// holdsGo reports whether a directory holds a Go file.
+func holdsGo(dir string) bool {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return false
+	}
+	for _, e := range entries {
+		if !e.IsDir() && strings.HasSuffix(e.Name(), ".go") {
+			return true
+		}
+	}
+	return false
+}
