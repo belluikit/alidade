@@ -966,3 +966,43 @@ func edgesFrom(g *graph.Graph, pkg graph.ID) map[string]bool {
 	}
 	return out
 }
+
+// TestOnlyAPackageTheHostDoesNotBuild is #35: a load naming a package
+// the host's configuration builds no file of fails its whole module, so
+// the host's load leaves it out, and with no other package asked for
+// the module is not loaded for the host at all. Without further
+// configurations the package is skipped, as a load of every package
+// skips it.
+func TestOnlyAPackageTheHostDoesNotBuild(t *testing.T) {
+	other := "windows"
+	if runtime.GOOS == "windows" {
+		other = "linux"
+	}
+	dir := t.TempDir()
+	for rel, src := range map[string]string{
+		"go.mod":                     "module example.com/w\n\ngo 1.26\n",
+		"a/a.go":                     "package a\n\nfunc A() int { return 1 }\n",
+		"plat/plat_" + other + ".go": "package plat\n\nfunc P() int { return 1 }\n",
+	} {
+		p := filepath.Join(dir, filepath.FromSlash(rel))
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(src), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	opts := DefaultOptions()
+	opts.Only = []string{"example.com/w/plat"}
+	b := graph.NewBuilder(dir)
+	rep, err := Extract(b, dir, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rep.Failed) != 0 || rep.Packages != 0 || rep.Decls != 0 {
+		t.Errorf("failed %v, %d packages, %d declarations: want the module loaded for nothing", rep.Failed, rep.Packages, rep.Decls)
+	}
+	if !slices.ContainsFunc(rep.Skipped, func(s graph.Skip) bool { return s.File == "plat" }) {
+		t.Errorf("plat is not skipped: %+v", rep.Skipped)
+	}
+}

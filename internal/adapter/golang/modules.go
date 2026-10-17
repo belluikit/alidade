@@ -169,12 +169,7 @@ func loadError(err error) string {
 // into no package of the tree's modules — under testdata, vendor, a
 // directory starting with "." or "_", a skipped directory, or in no
 // module — is in neither: the base graph has nothing of it either.
-// unbuilt are those of present whose directory holds no Go file the
-// host's configuration builds: only a build tag or another platform
-// brings them in. A load naming one fails the whole module, where a load
-// of the module's every package leaves it out and reads it, if at all,
-// under another configuration.
-func PackagesOf(root string, mods []Module, skip *scope.Dirs, files []string) (present, gone, unbuilt []string) {
+func PackagesOf(root string, mods []Module, skip *scope.Dirs, files []string) (present, gone []string) {
 	seen := map[string]bool{}
 	for _, f := range files {
 		dir := filepath.Join(root, filepath.FromSlash(path.Dir(f)))
@@ -200,20 +195,15 @@ func PackagesOf(root string, mods []Module, skip *scope.Dirs, files []string) (p
 			continue
 		}
 		seen[ip] = true
-		switch {
-		case !holdsGo(dir):
+		if holdsGo(dir) {
+			present = append(present, ip)
+		} else {
 			gone = append(gone, ip)
-		case !hostBuilds(dir):
-			present = append(present, ip)
-			unbuilt = append(unbuilt, ip)
-		default:
-			present = append(present, ip)
 		}
 	}
 	sort.Strings(present)
 	sort.Strings(gone)
-	sort.Strings(unbuilt)
-	return present, gone, unbuilt
+	return present, gone
 }
 
 // hostBuilds reports whether the host's configuration builds a Go file of

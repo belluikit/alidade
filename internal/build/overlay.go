@@ -5,6 +5,7 @@ package build
 
 import (
 	"maps"
+	"path"
 	"slices"
 	"strings"
 
@@ -58,9 +59,9 @@ type Overlay struct {
 	// packages that were kept, INFERRED.
 	Carried int
 	// GoWhole says the Go layer was extracted whole rather than laid
-	// over the base's: a go.mod, go.sum or go.work differs, the base has
-	// no Go layer, or a package to load again holds no Go file the host
-	// builds, which a load naming it would fail on.
+	// over the base's: a go.mod, go.sum or go.work differs, or the base
+	// has no Go layer. A package to load again that holds no Go file the
+	// host builds is laid over the base too (#35).
 	GoWhole bool
 }
 
@@ -152,8 +153,7 @@ func inherit[R any](s *Session, name string, baseRep *R, extract func(*graph.Bui
 
 // goLayer is the Go layer's extraction: the whole layer for the base, and
 // for a worktree the base's, the base's with the differing packages laid
-// over it, or the whole layer when goWhole says so or a differing package
-// is one the host does not build.
+// over it, or the whole layer when goWhole says so.
 func (s *Session) goLayer(root string, opts golang.Options) func(*graph.Builder) (*golang.Report, error) {
 	return func(lb *graph.Builder) (*golang.Report, error) {
 		s.overlaid = nil
@@ -211,14 +211,8 @@ func (s *Session) overlayGo(lb *graph.Builder, root string, opts golang.Options)
 	if err != nil {
 		return nil, err
 	}
-	present, gone, unbuilt := golang.PackagesOf(root, mods, opts.Skip, differingGo(s.base.goFiles, s.goFilesNow()))
-	if len(unbuilt) > 0 {
-		// A load naming a package the host's configuration does not
-		// build fails its whole module; which configurations bring it in
-		// is chosen from the whole module. So the layer is built whole.
-		s.from["go"] = "own"
-		return extractGo(lb, root, opts)
-	}
+	differ := differingGo(s.base.goFiles, s.goFilesNow())
+	present, gone := golang.PackagesOf(root, mods, opts.Skip, differ)
 	owned := ownedBy(append(slices.Clone(present), gone...))
 
 	nodes, edges := s.base.b.Contributions("go")
@@ -246,6 +240,12 @@ func (s *Session) overlayGo(lb *graph.Builder, root string, opts golang.Options)
 		scratch := graph.NewBuilder(root)
 		o := opts
 		o.Only = present
+		if opts.Configs != "" {
+			// The configurations the base's build chose, from the whole
+			// module, so a package another platform's brings in is read
+			// under the one a full build reads it under (#35).
+			o.Configs = strings.Join(s.base.rep.Go.Configs, ",")
+		}
 		if sub, err = extractGo(scratch, root, o); err != nil {
 			return nil, err
 		}
@@ -256,7 +256,9 @@ func (s *Session) overlayGo(lb *graph.Builder, root string, opts golang.Options)
 	lb.Adopt(reached(keptNodes, keptEdges, carried), carried)
 
 	s.overlaid = &Overlay{Packages: present, Removed: gone, Carried: len(carried)}
-	return overlaidGoReport(s.base.rep.Go, sub, owned), nil
+	rep := overlaidGoReport(s.base.rep.Go, sub, owned)
+	rep.Skipped = overlaidSkips(s.base.rep.Go.Skipped, sub.Skipped, differ, s.base.root, s.root)
+	return rep, nil
 }
 
 // reached drops the base's external packages no edge kept from the base
@@ -352,6 +354,56 @@ func overlaidGoReport(base, sub *golang.Report, owned func(graph.ID) bool) *gola
 	return &rep
 }
 
+// overlaidSkips are the base's skipped files and directories outside the
+// packages loaded again, which are the directories of the differing
+// files, and the load's in their place (#35). A skipped directory is a
+// package's own, so one below a package loaded again stays; a go.mod is
+// the module's, and stays unless the load skips it too. A reason naming
+// a path of the base's names the worktree's instead, as a build of it
+// would.
+func overlaidSkips(base, sub []graph.Skip, differ []string, baseRoot, root string) []graph.Skip {
+	dirs := map[string]bool{}
+	for _, f := range differ {
+		dirs[path.Dir(f)] = true
+	}
+	out := slices.Clone(sub)
+	for _, sk := range base {
+		reloaded := dirs[sk.File] || strings.HasSuffix(sk.File, ".go") && dirs[path.Dir(sk.File)]
+		sk.Reason = renameRoot(sk.Reason, baseRoot, root)
+		if !reloaded && !slices.Contains(out, sk) {
+			out = append(out, sk)
+		}
+	}
+	slices.SortStableFunc(out, func(a, b graph.Skip) int { return strings.Compare(a.File, b.File) })
+	return out
+}
+
+// renameRoot names root wherever s names baseRoot or a path below it:
+// the root module's load error names its directory with nothing below it
+// ("load /x/go: ..."). A longer name, /x/go-old beside /x/go, is not it.
+func renameRoot(s, baseRoot, root string) string {
+	var b strings.Builder
+	for {
+		i := strings.Index(s, baseRoot)
+		if i < 0 {
+			b.WriteString(s)
+			return b.String()
+		}
+		end := i + len(baseRoot)
+		if end < len(s) && namesOn(s[end]) {
+			b.WriteString(s[:end])
+		} else {
+			b.WriteString(s[:i] + root)
+		}
+		s = s[end:]
+	}
+}
+
+// namesOn reports whether a byte after a path continues its last element.
+func namesOn(c byte) bool {
+	return c == '.' || c == '_' || c == '-' || '0' <= c && c <= '9' || 'a' <= c && c <= 'z' || 'A' <= c && c <= 'Z'
+}
+
 func merge(a, b []string) []string {
 	out := slices.Clone(a)
 	for _, p := range b {
@@ -383,10 +435,10 @@ func (s *Session) overlayReport(rep *Report) *Overlay {
 	return o
 }
 
-// refreshFromBase folds what jedi has learnt since (#269) into the base,
-// whose Python files the worktree's are, and takes its Python layer again.
+// refreshFromBase folds what jedi has learnt since (#269) into the base's
+// Python layer, whose files the worktree's are, and takes it again.
 func (s *Session) refreshFromBase(rep *Report) error {
-	if _, _, err := s.base.Refresh(); err != nil {
+	if err := s.base.catchUpPy(); err != nil {
 		return err
 	}
 	s.pyFromBase(rep)

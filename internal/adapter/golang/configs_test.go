@@ -77,11 +77,11 @@ var host = config{"darwin", "arm64"}
 
 func TestChooseConfigsHostOnly(t *testing.T) {
 	_, files := constraintFiles(t)
-	configs, covered, unread, err := chooseConfigs("", host, files)
+	configs, covered, unread, err := chooseConfigs("", host, files, false)
 	if err != nil || len(configs) != 0 || len(covered) != 0 || len(unread) != 0 {
 		t.Errorf("mode \"\": configs %v covered %v err %v", configs, covered, err)
 	}
-	if _, _, _, err := chooseConfigs("linux", host, files); err == nil || !strings.Contains(err.Error(), "GOOS/GOARCH") {
+	if _, _, _, err := chooseConfigs("linux", host, files, false); err == nil || !strings.Contains(err.Error(), "GOOS/GOARCH") {
 		t.Errorf("malformed list: err = %v", err)
 	}
 }
@@ -90,7 +90,7 @@ func TestChooseConfigsHostOnly(t *testing.T) {
 // windows configuration covers c; d and e no candidate satisfies.
 func TestChooseConfigsAuto(t *testing.T) {
 	dir, files := constraintFiles(t)
-	configs, covered, _, err := chooseConfigs("auto", host, files)
+	configs, covered, _, err := chooseConfigs("auto", host, files, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -104,7 +104,7 @@ func TestChooseConfigsAuto(t *testing.T) {
 
 func TestChooseConfigsExplicit(t *testing.T) {
 	_, files := constraintFiles(t)
-	configs, covered, _, err := chooseConfigs("windows/arm64, darwin/arm64", host, files)
+	configs, covered, _, err := chooseConfigs("windows/arm64, darwin/arm64", host, files, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -113,5 +113,23 @@ func TestChooseConfigsExplicit(t *testing.T) {
 	}
 	if got := configNames(host, configs); strings.Join(got, ",") != "darwin/arm64,windows/arm64" {
 		t.Errorf("configNames = %v", got)
+	}
+}
+
+// TestChooseConfigsGaining: under Options.Only a worktree's packages are
+// loaded under the base's configurations, and only those that bring in
+// a file of theirs (#35): here linux/arm64 brings in none that
+// linux/amd64 did not.
+func TestChooseConfigsGaining(t *testing.T) {
+	_, files := constraintFiles(t)
+	configs, _, _, err := chooseConfigs("linux/amd64,linux/arm64,windows/arm64", host, files, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := configNames(host, configs); strings.Join(got, ",") != "darwin/arm64,linux/amd64,windows/arm64" {
+		t.Errorf("gaining: %v", got)
+	}
+	if all, _, _, _ := chooseConfigs("linux/amd64,linux/arm64,windows/arm64", host, files, false); len(all) != 3 {
+		t.Errorf("not gaining: %v, want every one listed", all)
 	}
 }

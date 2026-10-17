@@ -322,9 +322,7 @@ func extractOnce(b *graph.Builder, dir string, opts Options) (*Report, error) {
 	modules := graphModules(mods, report, opts)
 	rec.theirs = notAsked(opts.Only, modules)
 	for _, lm := range loaded {
-		x := newExtractor(rec, b.Minter(), lm.eng, lm.Path, modules, opts, report)
-		x.recovered = covered
-		if err := x.pass(lm.pkgs); err != nil {
+		if err := hostPass(rec, b.Minter(), lm, modules, opts, covered, report); err != nil {
 			return nil, err
 		}
 		for _, c := range extra {
@@ -335,6 +333,17 @@ func extractOnce(b *graph.Builder, dir string, opts Options) (*Report, error) {
 	}
 	report.finish()
 	return report, nil
+}
+
+// hostPass emits a module's packages as the host's configuration loaded
+// them, if it loaded any.
+func hostPass(rec *recorder, m *graph.Minter, lm loadedModule, modules []string, opts Options, covered map[string]config, report *Report) error {
+	if lm.eng == nil {
+		return nil
+	}
+	x := newExtractor(rec, m, lm.eng, lm.Path, modules, opts, report)
+	x.recovered = covered
+	return x.pass(lm.pkgs)
 }
 
 // graphModules are the module paths an edge may land in at declaration
@@ -423,7 +432,9 @@ func compiledToolchain(goroot string) bool {
 	return err == nil && len(entries) > 0
 }
 
-// A loadedModule is one module's caliper engine and its packages.
+// A loadedModule is one module's caliper engine and its packages. eng is
+// nil when Options.Only asks only for packages the host's configuration
+// builds none of: they are loaded under the further configurations.
 type loadedModule struct {
 	Module
 	eng  *analysis.Engine
@@ -445,8 +456,15 @@ func loadModules(rec *recorder, m *graph.Minter, mods []Module, opts Options, re
 		if opts.Only != nil && len(only) == 0 {
 			continue // none of its packages asked for (#25)
 		}
+		lm := loadedModule{Module: mod, only: only}
+		host := hostBuilt(mod, only)
+		if only != nil && len(host) == 0 {
+			report.Modules = append(report.Modules, mod.Path)
+			out = append(out, lm)
+			continue
+		}
 		start := time.Now()
-		eng, err := load(mod.Dir, opts, nil, only)
+		eng, err := load(mod.Dir, opts, nil, host)
 		report.Load += time.Since(start)
 		if err != nil {
 			// The root's module too: a syntax error in a one-package
@@ -458,10 +476,28 @@ func loadModules(rec *recorder, m *graph.Minter, mods []Module, opts Options, re
 			}
 			continue
 		}
+		lm.eng, lm.pkgs = eng, targetPackages(eng.Packages())
 		report.Modules = append(report.Modules, mod.Path)
-		out = append(out, loadedModule{mod, eng, targetPackages(eng.Packages()), only})
+		out = append(out, lm)
 	}
 	return out, nil
+}
+
+// hostBuilt are the packages of only the host's configuration builds a
+// Go file of. Naming one it builds none of fails the whole load, so the
+// others are loaded for the host and it only under the configurations
+// that build it (#35). nil when only is.
+func hostBuilt(mod Module, only []string) []string {
+	if only == nil {
+		return nil
+	}
+	var out []string
+	for _, p := range only {
+		if hostBuilds(packageDir(mod, p)) {
+			out = append(out, p)
+		}
+	}
+	return out
 }
 
 // failedModule emits the package node of a module that did not load: its
@@ -487,7 +523,7 @@ func configsFor(m *graph.Minter, loaded []loadedModule, opts Options, host confi
 	}
 	excluded := append(excludedInModules(loaded, opts.Tests), unloaded...)
 	sort.Strings(excluded)
-	extra, covered, unread, err := chooseConfigs(opts.Configs, host, excluded)
+	extra, covered, unread, err := chooseConfigs(opts.Configs, host, excluded, opts.Only != nil)
 	if err != nil {
 		return nil, nil, err
 	}
