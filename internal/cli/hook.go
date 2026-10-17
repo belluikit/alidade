@@ -129,12 +129,18 @@ func served(targets []string, repo string) (string, string, bool) {
 
 // checkoutOf is the checkout of the repository a target lies in: the
 // repository's own, or another worktree of it; "" for neither. The
-// nearest checkout is asked first, since a worktree can lie inside the
-// repository's own, as Claude Code's .claude/worktrees/<name> does, and
-// a search there is one of that worktree.
+// nearest checkout of the repository is asked first, since a worktree
+// can lie inside the repository's own, as Claude Code's
+// .claude/worktrees/<name> does, and a search there is one of that
+// worktree, even in a submodule inside it (#24).
 func checkoutOf(target, repo string) string {
-	if top := worktree.Top(target); top != "" && worktree.Same(top, repo) {
-		return top
+	for top := worktree.Top(target); top != ""; top = worktree.Top(filepath.Dir(top)) {
+		if worktree.Same(top, repo) {
+			return top
+		}
+		if top == filepath.Dir(top) {
+			break
+		}
 	}
 	if inside(target, repo) {
 		return repo

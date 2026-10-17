@@ -21,8 +21,9 @@
 // Another checkout of the same repository nested inside it — a `git
 // worktree` under .claude/worktrees/<name>, say — is left out too, and
 // the list cannot bring it back (#24): it is another branch's copy of the
-// same code, and reading it loaded the repository's Go module twice. A
-// submodule, which has a git directory of its own, is read.
+// same code, and reading one under a directory the Go layer enters loaded
+// the repository's Go module twice. A submodule, which has a git
+// directory of its own, is read.
 //
 // Installed packages are left out besides the list, wherever they are,
 // and the list cannot bring them back (#266): a virtual environment — a

@@ -116,10 +116,11 @@ func TestInstalledPackages(t *testing.T) {
 }
 
 // TestOtherCheckout pins #24: a worktree of root's repository nested in
-// it is skipped, a repository of its own nested the same way is not.
+// it is skipped, a repository of its own nested the same way is not, nor
+// is a directory inside the worktree, which its top already covers.
 func TestOtherCheckout(t *testing.T) {
 	root := gittest.TempDir(t)
-	gittest.Init(t, root, map[string]string{"README.md": "# x\n"})
+	gittest.Init(t, root, map[string]string{"README.md": "# x\n", "sub/a.md": "# a\n"})
 	gittest.Git(t, root, "worktree", "add", "-q", "-b", "f", filepath.Join(root, "wt"))
 	gittest.Init(t, filepath.Join(root, "own"), map[string]string{"README.md": "# own\n"})
 	d := New(nil)

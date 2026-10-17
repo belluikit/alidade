@@ -177,9 +177,11 @@ skipping it hid `internal/build` from search.
 *Amended 2026-10-16 (#24):* another checkout of the
 same repository nested inside it is left out by every layer, `search_text`,
 the fingerprint and the hook's skip check, whatever the list says. Claude
-Code puts its worktrees under `.claude/worktrees/<name>`, and reading one
-loaded the repository's Go module a second time and returned every search hit
-once per worktree. A checkout is "the same repository" when it shares the
+Code puts its worktrees under `.claude/worktrees/<name>`, and reading one put
+its files in the graph under their nested paths and returned every search hit
+once per worktree; one under an ordinary directory, which the Go layer enters
+where it skips a dot-directory, also loaded the repository's Go module a second
+time. A checkout is "the same repository" when it shares the
 repository's git directory, which a `git worktree` does and a submodule or a
 nested clone does not, so those are still read as the rule above says. The
 check is one `lstat` of `.git` per directory entered, and only a directory
