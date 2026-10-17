@@ -6,7 +6,6 @@ package build
 import (
 	"maps"
 	"path"
-	"path/filepath"
 	"slices"
 	"strings"
 
@@ -60,9 +59,9 @@ type Overlay struct {
 	// packages that were kept, INFERRED.
 	Carried int
 	// GoWhole says the Go layer was extracted whole rather than laid
-	// over the base's: a go.mod, go.sum or go.work differs, the base has
-	// no Go layer, or a package to load again holds no Go file the host
-	// builds, which a load naming it would fail on.
+	// over the base's: a go.mod, go.sum or go.work differs, or the base
+	// has no Go layer. A package to load again that holds no Go file the
+	// host builds is laid over the base too (#35).
 	GoWhole bool
 }
 
@@ -154,8 +153,7 @@ func inherit[R any](s *Session, name string, baseRep *R, extract func(*graph.Bui
 
 // goLayer is the Go layer's extraction: the whole layer for the base, and
 // for a worktree the base's, the base's with the differing packages laid
-// over it, or the whole layer when goWhole says so or a differing package
-// is one the host does not build.
+// over it, or the whole layer when goWhole says so.
 func (s *Session) goLayer(root string, opts golang.Options) func(*graph.Builder) (*golang.Report, error) {
 	return func(lb *graph.Builder) (*golang.Report, error) {
 		s.overlaid = nil
@@ -371,13 +369,39 @@ func overlaidSkips(base, sub []graph.Skip, differ []string, baseRoot, root strin
 	out := slices.Clone(sub)
 	for _, sk := range base {
 		reloaded := dirs[sk.File] || strings.HasSuffix(sk.File, ".go") && dirs[path.Dir(sk.File)]
-		sk.Reason = strings.ReplaceAll(sk.Reason, baseRoot+string(filepath.Separator), root+string(filepath.Separator))
+		sk.Reason = renameRoot(sk.Reason, baseRoot, root)
 		if !reloaded && !slices.Contains(out, sk) {
 			out = append(out, sk)
 		}
 	}
 	slices.SortStableFunc(out, func(a, b graph.Skip) int { return strings.Compare(a.File, b.File) })
 	return out
+}
+
+// renameRoot names root wherever s names baseRoot or a path below it:
+// the root module's load error names its directory with nothing below it
+// ("load /x/go: ..."). A longer name, /x/go-old beside /x/go, is not it.
+func renameRoot(s, baseRoot, root string) string {
+	var b strings.Builder
+	for {
+		i := strings.Index(s, baseRoot)
+		if i < 0 {
+			b.WriteString(s)
+			return b.String()
+		}
+		end := i + len(baseRoot)
+		if end < len(s) && namesOn(s[end]) {
+			b.WriteString(s[:end])
+		} else {
+			b.WriteString(s[:i] + root)
+		}
+		s = s[end:]
+	}
+}
+
+// namesOn reports whether a byte after a path continues its last element.
+func namesOn(c byte) bool {
+	return c == '.' || c == '_' || c == '-' || '0' <= c && c <= '9' || 'a' <= c && c <= 'z' || 'A' <= c && c <= 'Z'
 }
 
 func merge(a, b []string) []string {

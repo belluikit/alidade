@@ -4,10 +4,13 @@
 package build
 
 import (
+	"errors"
 	"path/filepath"
 	"slices"
 	"testing"
 
+	"github.com/belluikit/alidade/internal/adapter/markdown"
+	"github.com/belluikit/alidade/internal/graph"
 	"github.com/belluikit/alidade/internal/python"
 )
 
@@ -155,4 +158,44 @@ func TestOverlayBuildFoldsInTheBasesJedi(t *testing.T) {
 	write(t, filepath.Join(wt, "README.md"), "# w\n\nchanged\n")
 	g, _ := mustSessionBuild(t, o)
 	sameAsFresh(t, wt, g)
+}
+
+// TestFailedBuildAfterAPythonRefresh is #34 with a build that refreshes
+// the kept Python layer and then fails: the report it leaves is the one
+// before, so the next build refreshes the layer again rather than keep
+// that report's Python counts over the refreshed layer.
+func TestFailedBuildAfterAPythonRefresh(t *testing.T) {
+	if !python.Available() {
+		t.Skip("built without the python tag")
+	}
+	root := t.TempDir()
+	write(t, filepath.Join(root, "a.py"), "def f():\n    pass\n\n\nclass C:\n    def m(self):\n        pass\n")
+	write(t, filepath.Join(root, "b.py"), "from a import f, C\n\n\ndef g():\n    f()\n    C().m()\n")
+	write(t, filepath.Join(root, "README.md"), "# w\n")
+	opts := DefaultOptions()
+	opts.Py.Background = true
+	s, err := NewSession(root, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(s.Close)
+	if _, rep := mustSessionBuild(t, s); rep.Py.Pending == 0 {
+		t.Skip("jedi was done before the first build answered")
+	}
+	s.rep.Py.Live.Wait()
+	write(t, filepath.Join(root, "README.md"), "# w\n\nchanged\n")
+	t.Cleanup(func() { extractMarkdown = markdown.Extract })
+	extractMarkdown = func(*graph.Builder, string, markdown.Options) (*markdown.Report, error) {
+		return nil, errors.New("injected")
+	}
+	_, _, err = s.Build()
+	extractMarkdown = markdown.Extract
+	if err == nil {
+		t.Fatal("the injected failure built")
+	}
+	g, rep := mustSessionBuild(t, s)
+	if rep.Py.Pending != 0 {
+		t.Errorf("the Python report says %d files pending after jedi is done", rep.Py.Pending)
+	}
+	sameAsFresh(t, root, g)
 }

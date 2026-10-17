@@ -4,6 +4,7 @@
 package build
 
 import (
+	"cmp"
 	"fmt"
 	"maps"
 	"os"
@@ -11,6 +12,7 @@ import (
 	"runtime"
 	"slices"
 	"sort"
+	"strings"
 	"testing"
 
 	"github.com/belluikit/alidade/internal/adapter/py"
@@ -207,17 +209,18 @@ func diffLines(got, want []string) string {
 // and edge for edge but for carried edges.
 func overlayEqualsFull(t *testing.T, main, wt string) *Report {
 	t.Helper()
-	return overlayEqualsFullWith(t, main, wt, DefaultOptions())
+	_, rep := overlayEqualsFullWith(t, main, wt, DefaultOptions())
+	return rep
 }
 
-func overlayEqualsFullWith(t *testing.T, main, wt string, opts Options) *Report {
+func overlayEqualsFullWith(t *testing.T, main, wt string, opts Options) (*graph.Graph, *Report) {
 	t.Helper()
 	g, rep := overlayWith(t, main, wt, opts)
 	full, frep, err := Build(wt, opts)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !slices.Equal(rep.Go.Skipped, frep.Go.Skipped) {
+	if !sameSkips(rep.Go.Skipped, frep.Go.Skipped) {
 		t.Errorf("skipped %+v, a full build of the worktree %+v", rep.Go.Skipped, frep.Go.Skipped)
 	}
 	if got, want := nodeLines(g), nodeLines(full); !slices.Equal(got, want) {
@@ -228,7 +231,7 @@ func overlayEqualsFullWith(t *testing.T, main, wt string, opts Options) *Report 
 	if !slices.Equal(got, want) {
 		t.Errorf("edges differ from a full build of the worktree:\n%s", diffLines(got, want))
 	}
-	return rep
+	return g, rep
 }
 
 // with is overlayRepo with files added or replaced.
@@ -283,11 +286,10 @@ func TestOverlayOfAnotherPlatformsPackage(t *testing.T) {
 				main, wt := worktreeOf(t, files, change)
 				opts := DefaultOptions()
 				opts.Go.Configs = configs
-				rep := overlayEqualsFullWith(t, main, wt, opts)
+				g, rep := overlayEqualsFullWith(t, main, wt, opts)
 				if o := rep.Overlay; o.GoWhole || !slices.Contains(o.Packages, "example.com/w/plat") {
 					t.Errorf("overlay %+v: want plat laid over the base", o)
 				}
-				g, _ := overlayWith(t, main, wt, opts)
 				_, read := g.Node("go://example.com/w/plat#Q")
 				skipped := slices.ContainsFunc(rep.Go.Skipped, func(s graph.Skip) bool { return s.File == "plat" })
 				if read != (configs == "auto") || skipped == read {
@@ -426,9 +428,22 @@ func TestOverlaySkipsAreAWorktreeBuilds(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !slices.Equal(rep.Go.Skipped, full.Go.Skipped) || len(full.Go.Skipped) != 2 {
+	if !sameSkips(rep.Go.Skipped, full.Go.Skipped) || len(full.Go.Skipped) != 2 {
 		t.Errorf("skipped %+v, a full build of the worktree %+v", rep.Go.Skipped, full.Go.Skipped)
 	}
+}
+
+// sameSkips reports whether two builds skipped the same files, in
+// whatever order: a full build lists them as its passes met them, a
+// worktree's laid over the base's by file.
+func sameSkips(a, b []graph.Skip) bool {
+	by := func(x, y graph.Skip) int {
+		return cmp.Or(strings.Compare(x.File, y.File), strings.Compare(x.Reason, y.Reason))
+	}
+	a, b = slices.Clone(a), slices.Clone(b)
+	slices.SortFunc(a, by)
+	slices.SortFunc(b, by)
+	return slices.Equal(a, b)
 }
 
 // buildOf renders the configuration a node or edge was read under beyond
@@ -449,5 +464,11 @@ func TestOverlaidSkipsNameTheWorktree(t *testing.T) {
 	got := overlaidSkips([]graph.Skip{{File: "misc/go.mod", Reason: "load " + at(base) + ": no C"}}, nil, nil, base, wt)
 	if len(got) != 1 || got[0].Reason != "load "+at(wt)+": no C" {
 		t.Errorf("skips %+v, want the reason to name %s", got, at(wt))
+	}
+	// The root module's load error names the root itself, with nothing
+	// below it; a sibling whose name only starts with the root's is not it.
+	got = overlaidSkips([]graph.Skip{{File: "go.mod", Reason: "load " + base + ": no C; " + base + "-old"}}, nil, nil, base, wt)
+	if want := "load " + wt + ": no C; " + base + "-old"; len(got) != 1 || got[0].Reason != want {
+		t.Errorf("skips %+v, want the reason %q", got, want)
 	}
 }

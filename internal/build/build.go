@@ -318,10 +318,14 @@ func (s *Session) Build() (*graph.Graph, *Report, error) {
 		drop(name)
 		return true
 	}
+	pyAt := s.pyAt
 	if err := s.layers(rep, prev, changed, drop); err != nil {
 		for _, name := range dropped {
 			s.stale[name] = true
 		}
+		// The report kept is the previous one, whose Python layer is
+		// older than a refresh this build made of it (#34).
+		s.pyAt = pyAt
 		return nil, nil, err
 	}
 	clear(s.stale)
@@ -422,10 +426,8 @@ func (s *Session) pyCurrent(rep, prev *Report, live *py.Live) error {
 		if live != nil {
 			live.Close() // the worktree's own jedi, its files now the base's
 		}
-		if s.base.pyBehind(s.base.rep) {
-			if _, _, err := s.base.Refresh(); err != nil {
-				return err
-			}
+		if err := s.base.catchUpPy(); err != nil {
+			return err
 		}
 		s.pyFromBase(rep)
 	case rep.Py != prev.Py:
@@ -440,6 +442,21 @@ func (s *Session) pyCurrent(rep, prev *Report, live *py.Live) error {
 // made (#34).
 func (s *Session) pyBehind(rep *Report) bool {
 	return rep != nil && rep.Py != nil && rep.Py.Live != nil && rep.Py.Live.Version() != s.pyAt
+}
+
+// catchUpPy folds what jedi has read since into the session's Python
+// layer and report, for a worktree that takes them (#34). The graph is
+// not folded again: the worktree adopts the layer, not the graph.
+func (s *Session) catchUpPy() error {
+	if !s.pyBehind(s.rep) {
+		return nil
+	}
+	rep := *s.rep
+	if err := s.refreshPy(&rep); err != nil {
+		return err
+	}
+	s.rep = &rep
+	return nil
 }
 
 // refreshPy makes rep's Python layer again from what jedi knows now.
@@ -585,7 +602,7 @@ func (s *Session) layers(rep, prev *Report, changed func(string) bool, drop func
 	if rep.Schema, err = s.schemaRoots(prev, changed); err != nil {
 		return err
 	}
-	rep.Markdown, err = rerun(b, "md", prev.Markdown, changed, inherit(s, "md", s.baseReport().Markdown, func(lb *graph.Builder) (*markdown.Report, error) { return markdown.Extract(lb, abs, opts.Markdown) }), func(r *markdown.Report) int { return r.Files + len(r.Skipped) })
+	rep.Markdown, err = rerun(b, "md", prev.Markdown, changed, inherit(s, "md", s.baseReport().Markdown, func(lb *graph.Builder) (*markdown.Report, error) { return extractMarkdown(lb, abs, opts.Markdown) }), func(r *markdown.Report) int { return r.Files + len(r.Skipped) })
 	return err
 }
 
@@ -627,6 +644,10 @@ func layer[R any](extract func() (*R, error), files func(*R) int) (*R, error) {
 // it fail: since #92 no input does, and a failed layer must still never
 // be kept (#93).
 var extractGo = golang.Extract
+
+// extractMarkdown is the Markdown layer's, a variable for the same reason:
+// a build that fails after the Python layer was refreshed (#34).
+var extractMarkdown = markdown.Extract
 
 // schemaRoot resolves and labels one schema root: an absolute, symlink-
 // resolved directory, labelled by its directory name.
