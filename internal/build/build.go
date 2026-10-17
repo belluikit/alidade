@@ -74,8 +74,11 @@ type Report struct {
 	// contributions (#56); a schema root is "proto@<label>". Both empty
 	// on a first build. Signature is how long deciding took.
 	Rebuilt, Kept []string
-	Signature     time.Duration
-	Elapsed       time.Duration
+	// Overlay says how a worktree's graph was made from the base's (#25);
+	// nil for the base.
+	Overlay   *Overlay
+	Signature time.Duration
+	Elapsed   time.Duration
 }
 
 // A SchemaReport is one schema root's contribution.
@@ -224,6 +227,24 @@ type Session struct {
 	// skip are the directories this build leaves out, read from the
 	// root's .alidade.pxf at its start (ADR 003, amended for #215).
 	skip *scope.Dirs
+	// goFiles are the content hashes of the files the Go layer read, by
+	// repo-relative path, as of the last build: what a worktree's graph
+	// compares with to find the Go packages that differ (#25).
+	goFiles map[string]string
+	// gen counts the graphs this session has made, so a worktree's graph
+	// over it knows when the base it took layers from has moved.
+	gen int
+	// base is the session a worktree's session lays its differences
+	// over (#25), nil for the base itself; own are the worktree's own
+	// layer signatures in the build under way, and from says, per layer,
+	// whether its contributions are the base's ("base") or its own.
+	base *Session
+	own  map[string]string
+	from map[string]string
+	// pendingGo are the Go layer's file hashes of the build under way,
+	// and overlaid what its Go layer last laid over the base's.
+	pendingGo map[string]string
+	overlaid  *Overlay
 }
 
 // NewSession checks root and prepares a Session; nothing is built yet.
@@ -245,7 +266,7 @@ func NewSession(root string, opts Options) (*Session, error) {
 		abs = real
 	}
 	return &Session{root: abs, opts: opts, b: graph.NewBuilder(abs), sigs: map[string]string{},
-		stale: map[string]bool{}, labels: map[string]bool{}}, nil
+		stale: map[string]bool{}, labels: map[string]bool{}, from: map[string]string{}}, nil
 }
 
 // Build builds the graph, or on a later call rebuilds the layers whose
@@ -257,10 +278,15 @@ func (s *Session) Build() (*graph.Graph, *Report, error) {
 		return nil, nil, fmt.Errorf("build: %w", err)
 	}
 	s.skip = skip
-	sigs, err := s.signatures()
+	if s.base != nil && s.base.rep == nil {
+		return nil, nil, fmt.Errorf("build: the graph of %s is not built, and a worktree's graph is laid over it", s.base.root)
+	}
+	sigs, goFiles, err := s.signatures()
 	if err != nil {
 		return nil, nil, fmt.Errorf("build: signatures: %w", err)
 	}
+	s.own, sigs = sigs, s.overBase(sigs)
+	s.pendingGo = goFiles
 	rep := &Report{Root: s.root, Signature: time.Since(start)}
 	first := s.rep == nil
 	prev := s.rep
@@ -297,10 +323,14 @@ func (s *Session) Build() (*graph.Graph, *Report, error) {
 		rep.Rebuilt = presentOnly(rep.Rebuilt, rep, prev)
 		rep.Kept = kept(rep)
 	}
-	s.sigs = sigs
+	s.sigs, s.goFiles = sigs, goFiles
+	if s.base != nil {
+		rep.Overlay = s.overlayReport(rep)
+	}
 	g := s.fold(rep)
 	rep.Elapsed = time.Since(start)
 	s.rep = rep
+	s.gen++
 	return g, rep, nil
 }
 
@@ -343,6 +373,9 @@ func (s *Session) Pending() (int64, string) {
 // Close ends the session: a layer still completing in the background
 // stops, and keeps what it has for the next session (#279).
 func (s *Session) Close() {
+	if s.from["py"] == "base" {
+		return // the base's to close
+	}
 	if s.rep != nil && s.rep.Py != nil && s.rep.Py.Live != nil {
 		s.rep.Py.Live.Close()
 	}
@@ -357,7 +390,12 @@ func (s *Session) Refresh() (*graph.Graph, *Report, error) {
 	}
 	start := time.Now()
 	rep := *s.rep
-	if rep.Py != nil && rep.Py.Live != nil {
+	if s.from["py"] == "base" {
+		if err := s.refreshFromBase(); err != nil {
+			return nil, nil, err
+		}
+		rep.Py = s.base.rep.Py
+	} else if rep.Py != nil && rep.Py.Live != nil {
 		s.b.Drop("py")
 		r, err := py.Refresh(s.b.Layer("py"), rep.Py.Live)
 		if err != nil {
@@ -370,6 +408,7 @@ func (s *Session) Refresh() (*graph.Graph, *Report, error) {
 	rep.Rebuilt, rep.Kept = nil, nil
 	rep.Elapsed = time.Since(start)
 	s.rep = &rep
+	s.gen++
 	return g, &rep, nil
 }
 
@@ -430,27 +469,27 @@ func kept(rep *Report) []string {
 
 // signatures computes the layer signatures of the root and of each
 // schema root.
-func (s *Session) signatures() (map[string]string, error) {
-	sigs, err := signatures(s.root, s.skip)
+func (s *Session) signatures() (map[string]string, map[string]string, error) {
+	sigs, goFiles, err := signaturesAndGoFiles(s.root, s.skip)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	for _, root := range s.opts.SchemaRoots {
 		abs, label, err := schemaRoot(root)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		skip, err := scope.Load(abs)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		ss, err := signatures(abs, skip)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		sigs["proto@"+label] = ss["proto"]
 	}
-	return sigs, nil
+	return sigs, goFiles, nil
 }
 
 // layers runs each layer whose signature changed and copies the report
@@ -466,38 +505,38 @@ func (s *Session) layers(rep, prev *Report, changed func(string) bool, drop func
 		// is recorded like any other, so a build that fails after it
 		// does not leave the layer looking unchanged (#93).
 		drop("go")
-	} else if rep.Go, err = rerun(b, "go", prev.Go, changed, func(lb *graph.Builder) (*golang.Report, error) { return extractGo(lb, abs, opts.Go) }, nil); err != nil {
+	} else if rep.Go, err = rerun(b, "go", prev.Go, changed, s.goLayer(abs, opts.Go), nil); err != nil {
 		return err
 	}
-	if rep.Proto, err = rerun(b, "proto", prev.Proto, changed, func(lb *graph.Builder) (*proto.Report, error) { return proto.Extract(lb, abs, opts.Proto) }, func(r *proto.Report) int { return r.Files + len(r.Skipped) }); err != nil {
+	if rep.Proto, err = rerun(b, "proto", prev.Proto, changed, inherit(s, "proto", s.baseReport().Proto, func(lb *graph.Builder) (*proto.Report, error) { return proto.Extract(lb, abs, opts.Proto) }), func(r *proto.Report) int { return r.Files + len(r.Skipped) }); err != nil {
 		return err
 	}
-	if rep.SQL, err = rerun(b, "sql", prev.SQL, changed, func(lb *graph.Builder) (*sql.Report, error) { return sql.Extract(lb, abs, opts.SQL) }, func(r *sql.Report) int { return r.Files + len(r.Skipped) }); err != nil {
+	if rep.SQL, err = rerun(b, "sql", prev.SQL, changed, inherit(s, "sql", s.baseReport().SQL, func(lb *graph.Builder) (*sql.Report, error) { return sql.Extract(lb, abs, opts.SQL) }), func(r *sql.Report) int { return r.Files + len(r.Skipped) }); err != nil {
 		return err
 	}
-	if rep.PXF, err = rerun(b, "pxf", prev.PXF, changed, func(lb *graph.Builder) (*pxf.Report, error) { return pxf.Extract(lb, abs, opts.PXF) }, func(r *pxf.Report) int { return r.Files + len(r.Skipped) }); err != nil {
+	if rep.PXF, err = rerun(b, "pxf", prev.PXF, changed, inherit(s, "pxf", s.baseReport().PXF, func(lb *graph.Builder) (*pxf.Report, error) { return pxf.Extract(lb, abs, opts.PXF) }), func(r *pxf.Report) int { return r.Files + len(r.Skipped) }); err != nil {
 		return err
 	}
-	if rep.Goasm, err = rerun(b, "goasm", prev.Goasm, changed, func(lb *graph.Builder) (*goasm.Report, error) { return goasm.Extract(lb, abs, opts.Goasm) }, func(r *goasm.Report) int { return r.Files + len(r.Skipped) }); err != nil {
+	if rep.Goasm, err = rerun(b, "goasm", prev.Goasm, changed, inherit(s, "goasm", s.baseReport().Goasm, func(lb *graph.Builder) (*goasm.Report, error) { return goasm.Extract(lb, abs, opts.Goasm) }), func(r *goasm.Report) int { return r.Files + len(r.Skipped) }); err != nil {
 		return err
 	}
-	if rep.TS, err = rerun(b, "ts", prev.TS, changed, func(lb *graph.Builder) (*ts.Report, error) { return ts.Extract(lb, abs, opts.TS) }, func(r *ts.Report) int { return r.Files + len(r.Skipped) }); err != nil {
+	if rep.TS, err = rerun(b, "ts", prev.TS, changed, inherit(s, "ts", s.baseReport().TS, func(lb *graph.Builder) (*ts.Report, error) { return ts.Extract(lb, abs, opts.TS) }), func(r *ts.Report) int { return r.Files + len(r.Skipped) }); err != nil {
 		return err
 	}
-	if rep.Py, err = rerun(b, "py", prev.Py, changed, func(lb *graph.Builder) (*py.Report, error) {
+	if rep.Py, err = rerun(b, "py", prev.Py, changed, inherit(s, "py", s.baseReport().Py, func(lb *graph.Builder) (*py.Report, error) {
 		po := opts.Py
 		if prev.Py != nil && prev.Py.Live != nil {
 			prev.Py.Live.Stop() // jedi reading the files as they were
 			po.Reuse = prev.Py.Live
 		}
 		return py.Extract(lb, abs, po)
-	}, func(r *py.Report) int { return r.Files + len(r.Skipped) }); err != nil {
+	}), func(r *py.Report) int { return r.Files + len(r.Skipped) }); err != nil {
 		return err
 	}
 	if rep.Schema, err = s.schemaRoots(prev, changed); err != nil {
 		return err
 	}
-	rep.Markdown, err = rerun(b, "md", prev.Markdown, changed, func(lb *graph.Builder) (*markdown.Report, error) { return markdown.Extract(lb, abs, opts.Markdown) }, func(r *markdown.Report) int { return r.Files + len(r.Skipped) })
+	rep.Markdown, err = rerun(b, "md", prev.Markdown, changed, inherit(s, "md", s.baseReport().Markdown, func(lb *graph.Builder) (*markdown.Report, error) { return markdown.Extract(lb, abs, opts.Markdown) }), func(r *markdown.Report) int { return r.Files + len(r.Skipped) })
 	return err
 }
 
@@ -581,6 +620,12 @@ func (s *Session) schemaRoots(prev *Report, changed func(string) bool) ([]Schema
 			out = append(out, prev.Schema[i])
 			continue
 		}
+		if s.inherits(name) {
+			s.adopt(s.b.Layer(name), name)
+			out = append(out, s.base.rep.Schema[i])
+			continue
+		}
+		s.from[name] = "own"
 		sb, err := s.secondary(name, label, abs)
 		if err != nil {
 			return nil, err

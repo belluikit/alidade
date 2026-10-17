@@ -133,7 +133,16 @@ func fileReads(base string) []read {
 // signatures hashes every file under root that some layer reads and
 // returns one signature per layer; a layer with no files has "".
 func signatures(root string, skip *scope.Dirs) (map[string]string, error) {
+	sigs, _, err := signaturesAndGoFiles(root, skip)
+	return sigs, err
+}
+
+// signaturesAndGoFiles is signatures, with the content hash of each file
+// the Go layer reads, by repo-relative path: what a worktree's graph
+// compares with the base's to find the packages that differ (#25).
+func signaturesAndGoFiles(root string, skip *scope.Dirs) (map[string]string, map[string]string, error) {
 	entries := map[string][]string{} // layer -> "path hash" lines
+	goFiles := map[string]string{}
 	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			if path == root {
@@ -166,13 +175,16 @@ func signatures(root string, skip *scope.Dirs) (map[string]string, error) {
 					hash = contentHash(path)
 				}
 				line += " " + hash
+				if r.layer == "go" {
+					goFiles[rel] = hash
+				}
 			}
 			entries[r.layer] = append(entries[r.layer], line)
 		}
 		return nil
 	})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	out := map[string]string{}
 	for l, lines := range entries {
@@ -180,7 +192,7 @@ func signatures(root string, skip *scope.Dirs) (map[string]string, error) {
 		sum := sha256.Sum256([]byte(strings.Join(lines, "\n")))
 		out[l] = hex.EncodeToString(sum[:])
 	}
-	return out, nil
+	return out, goFiles, nil
 }
 
 // underSkipped reports whether a repo-relative path lies under a
