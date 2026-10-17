@@ -401,7 +401,11 @@ func loadModules(rec *recorder, m *graph.Minter, mods []Module, opts Options, re
 	var out []loadedModule
 	for _, mod := range mods {
 		if opts.patterns != nil && len((*opts.patterns)[mod.Dir]) == 0 {
-			continue // SPIKE (#25): no package of this module is asked for
+			// SPIKE (#25): no package of this module is asked for. It is
+			// still of the graph — the base holds it — so a call into it
+			// lands on the declaration, not on its package as a boundary.
+			report.Modules = append(report.Modules, mod.Path)
+			continue
 		}
 		start := time.Now()
 		eng, err := load(mod.Dir, opts, nil)

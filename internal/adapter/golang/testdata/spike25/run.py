@@ -65,6 +65,7 @@ def splice(base_nodes, base_edges, ov_nodes, ov_edges, owned):
     for i, v in ov_nodes.items():
         if own(i) or i not in nodes: nodes[i] = v
     edges = {e for e in base_edges if not own(e[0])} | {e for e in ov_edges if own(e[0])}
+    edges = {e for e in edges if e[0] in nodes and e[1] in nodes}  # a dangling edge is dropped, as the builder does
     return nodes, edges
 
 def compare(name, nodes, edges, o_nodes, o_edges, P):

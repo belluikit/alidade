@@ -36,6 +36,9 @@ func TestSpikeDump(t *testing.T) {
 	}
 	opts := DefaultOptions()
 	opts.Skip = skip
+	if os.Getenv("SPIKE_DEPS") == "source" {
+		opts.DepsFromExportData = false
+	}
 	if pk := os.Getenv("SPIKE_PKGS"); pk != "" {
 		pats := patternsFor(t, dir, strings.Split(pk, ","))
 		opts.patterns = &pats
@@ -62,6 +65,14 @@ func TestSpikeDump(t *testing.T) {
 	for e := range g.Edges() {
 		lines = append(lines, fmt.Sprintf("E\t%s\t%s\t%s", e.From, e.To, e.Kind))
 	}
+	// A subset load is an overlay: an edge into a package it did not load
+	// lands on the base's node, so the edge is kept for the splice, which
+	// drops it only if the base has no such node either.
+	for _, d := range g.Dropped() {
+		if opts.patterns != nil && d.Reason == graph.DropUnknownTarget {
+			lines = append(lines, fmt.Sprintf("E\t%s\t%s\t%s", d.Edge.From, d.Edge.To, d.Edge.Kind))
+		}
+	}
 	sort.Strings(lines)
 	for _, l := range lines {
 		fmt.Fprintln(w, l)
@@ -74,7 +85,7 @@ func TestSpikeDump(t *testing.T) {
 }
 
 // patternsFor maps import paths to each module's directory and the
-// ./relative patterns caliper takes there.
+// import paths caliper loads there.
 func patternsFor(t *testing.T, dir string, paths []string) map[string][]string {
 	mods, _, err := Modules(dir, nil)
 	if err != nil {
@@ -102,7 +113,10 @@ func patternsFor(t *testing.T, dir string, paths []string) map[string][]string {
 		if _, err := os.Stat(filepath.Join(m.Dir, rel)); err != nil {
 			continue // deleted in this tree
 		}
-		out[m.Dir] = append(out[m.Dir], "./"+rel)
+		// The import path, not ./rel: caliper loads a toolchain checkout
+		// with no directory (GOROOT names it), where ./rel resolves
+		// against the process's directory and matches nothing.
+		out[m.Dir] = append(out[m.Dir], ip)
 	}
 	return out
 }
