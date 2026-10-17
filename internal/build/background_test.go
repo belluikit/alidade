@@ -5,6 +5,7 @@ package build
 
 import (
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"github.com/belluikit/alidade/internal/python"
@@ -84,6 +85,73 @@ func TestOverlayPythonFollowsTheBasesJedi(t *testing.T) {
 	if _, _, err := base.Refresh(); err != nil {
 		t.Fatal(err)
 	}
+	write(t, filepath.Join(wt, "README.md"), "# w\n\nchanged\n")
+	g, _ := mustSessionBuild(t, o)
+	sameAsFresh(t, wt, g)
+}
+
+// TestBuildKeepingPythonFoldsInJedi is #34: a build that keeps the Python
+// layer, because no Python file changed, gives it what jedi has learnt
+// since it was made. Otherwise a server that reads jedi's version before
+// such a build takes the graph for current, and its calls stay INFERRED
+// after jedi is done.
+func TestBuildKeepingPythonFoldsInJedi(t *testing.T) {
+	if !python.Available() {
+		t.Skip("built without the python tag")
+	}
+	root := t.TempDir()
+	write(t, filepath.Join(root, "a.py"), "def f():\n    pass\n\n\nclass C:\n    def m(self):\n        pass\n")
+	write(t, filepath.Join(root, "b.py"), "from a import f, C\n\n\ndef g():\n    f()\n    C().m()\n")
+	write(t, filepath.Join(root, "README.md"), "# w\n")
+	opts := DefaultOptions()
+	opts.Py.Background = true
+	s, err := NewSession(root, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(s.Close)
+	_, rep := mustSessionBuild(t, s)
+	if rep.Py.Pending == 0 {
+		t.Skip("jedi was done before the first build answered")
+	}
+	rep.Py.Live.Wait()
+	write(t, filepath.Join(root, "README.md"), "# w\n\nchanged\n")
+	g, rep := mustSessionBuild(t, s)
+	if slices.Contains(rep.Rebuilt, "py") {
+		t.Fatal("the Python layer was built again, not kept")
+	}
+	sameAsFresh(t, root, g)
+}
+
+// TestOverlayBuildFoldsInTheBasesJedi is #34 for a worktree whose Python
+// layer is the base's: its build takes what jedi has learnt since the
+// base's layer was made, though the base has not refreshed.
+func TestOverlayBuildFoldsInTheBasesJedi(t *testing.T) {
+	if !python.Available() {
+		t.Skip("built without the python tag")
+	}
+	main, wt := worktreeOf(t, map[string]string{
+		"a.py":      "def f():\n    pass\n\n\nclass C:\n    def m(self):\n        pass\n",
+		"b.py":      "from a import f, C\n\n\ndef g():\n    f()\n    C().m()\n",
+		"README.md": "# w\n",
+	}, nil)
+	opts := DefaultOptions()
+	opts.Py.Background = true
+	base, err := NewSession(main, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(base.Close)
+	if _, rep := mustSessionBuild(t, base); rep.Py.Pending == 0 {
+		t.Skip("jedi was done before the first build answered")
+	}
+	o, err := base.Overlay(wt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(o.Close)
+	mustSessionBuild(t, o)
+	base.rep.Py.Live.Wait()
 	write(t, filepath.Join(wt, "README.md"), "# w\n\nchanged\n")
 	g, _ := mustSessionBuild(t, o)
 	sameAsFresh(t, wt, g)

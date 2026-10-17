@@ -8,6 +8,14 @@ tracker's. From v0.12.1 on, every number is this repository's.
 
 ## Unreleased
 
+- **Fixed: a graph built while jedi is still reading the Python files
+  no longer keeps its INFERRED Python calls after jedi is done** (#34).
+  A rebuild for an edit to a non-Python file kept the Python layer as it
+  was last made, which could be older than what jedi had read; the
+  server took that graph for current, and its calls stayed INFERRED by
+  name until the next Python edit. A build that keeps the Python layer
+  now folds in what jedi has read since, and so does a worktree's build
+  that takes the Python layer from the session's.
 - **Added: the graph tools answer for another worktree** (#25; ADR 005
   amended). `find_nodes`, `get_node`, `neighbors`, `shortest_path`,
   `subgraph_for_question`, `graph_stats`, `graph_issues` and `rebuild`
