@@ -109,7 +109,8 @@ type Tree struct {
 }
 
 // maxWorktrees is how many worktrees' graphs the server holds besides
-// its own checkout's; the one used longest ago goes first. A worktree's
+// its own checkout's, the owner's decision on #25; the one used longest
+// ago goes first. A worktree's
 // graph shares the base's contributions, and what it holds of its own is
 // a copy of the graph's indexes: about the base graph's size again.
 const maxWorktrees = 4

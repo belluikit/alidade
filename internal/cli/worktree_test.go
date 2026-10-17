@@ -65,6 +65,48 @@ func TestGraphToolsAnswerForAWorktree(t *testing.T) {
 	}
 }
 
+// TestSearchTextInAWorktreeNamesDeclarationsFromItsGraph pins the owner's
+// decision on #25: a search of another worktree never waits for a build.
+// Its hits name their declarations when a graph tool given that root has
+// built the worktree's graph and its files are unchanged since; otherwise
+// they name none, and note says why.
+func TestSearchTextInAWorktreeNamesDeclarationsFromItsGraph(t *testing.T) {
+	base := gittest.TempDir(t)
+	main, wt := filepath.Join(base, "main"), filepath.Join(base, "wt")
+	gittest.Init(t, main, map[string]string{
+		"go.mod": "module example.com/w\n\ngo 1.26\n",
+		"a/a.go": "package a\n\nfunc Total() int { return 1 }\n",
+	})
+	gittest.Git(t, main, "worktree", "add", "-q", "-b", "wt", wt)
+	gittest.Commit(t, wt, map[string]string{
+		"a/a.go": "package a\n\nfunc Only() int {\n\treturn 2 // marker\n}\n",
+	}, "worktree change")
+	buildFn, fingerprint, pending, refresh, closeFn, open := sessionFuncs(main, defaultOpts())
+	t.Cleanup(closeFn)
+	s := mcp.New(buildFn).WatchFiles(fingerprint).WatchProgress(pending, refresh).Worktrees(open).Root(main)
+	call := mcpCaller(t, s)
+	search := func() (in any, note any) {
+		r := call("search_text", map[string]any{"pattern": "marker", "root": wt})
+		hits, _ := r["hits"].([]any)
+		if len(hits) != 1 {
+			t.Fatalf("hits %v", r)
+		}
+		return hits[0].(map[string]any)["in"], r["note"]
+	}
+	if in, note := search(); in != nil || note == nil {
+		t.Errorf("before any graph of the worktree: in %v, note %v; want none, and a note", in, note)
+	}
+	call("find_nodes", map[string]any{"query": "Only", "root": wt})
+	in, note := search()
+	if in == nil || note != nil {
+		t.Errorf("with the worktree's graph held: in %v, note %v; want the declaration", in, note)
+	}
+	gittest.Commit(t, wt, map[string]string{"a/a.go": "package a\n\n// moved\nfunc Only() int {\n\treturn 2 // marker\n}\n"}, "edit")
+	if in, note := search(); in != nil || note == nil {
+		t.Errorf("after the worktree's files changed: in %v, note %v; want none, and a note", in, note)
+	}
+}
+
 // mcpCaller serves s in process and returns a function calling one of its
 // tools, failing the test on an error answer.
 func mcpCaller(t *testing.T, s *mcp.Server) func(string, map[string]any) map[string]any {

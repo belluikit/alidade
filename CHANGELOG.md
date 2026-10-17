@@ -19,8 +19,11 @@ tracker's. From v0.12.1 on, every number is this repository's.
   from the session's graph, INFERRED with `carried=base`. On
   trendvidia/go a worktree's graph took 3.9–4.4 s against 21.7–22.4 s for
   a full build. `graph_stats` with `root` says what was reused under
-  `overlay`. The grep hook's refusal in a worktree names the graph tools
-  too.
+  `overlay`. The server holds four worktrees' graphs at most. The grep
+  hook's refusal in a worktree names the graph tools too. `search_text`
+  with `root` still never waits for a build: its hits name their
+  declarations when that worktree's graph is already built and current,
+  and otherwise carry a `note` saying why they name none.
 - **Fixed: a `git worktree` nested inside the repository is not read as
   part of it** (#24; ADR 003 amended). One under `.claude/worktrees/`,
   where Claude Code puts them, had its files read under their nested

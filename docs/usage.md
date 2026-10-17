@@ -206,7 +206,7 @@ skip = ["vendor", "third_party", "web/legacy"]
 | `shortest_path` | how two nodes connect |
 | `subgraph_for_question` | the neighbourhood of what a question names, across layers |
 | `graph_issues` | what the graph left out (dropped edges, folded by cause) or had to decide (conflicts) |
-| `search_text` | text the graph does not hold: a string literal, a log message, a comment. Each hit comes with the declaration holding it, as a node for the tools above. `path` and `exclude` to narrow it by path prefix, `files_only` (a cut first page also counts hits per directory below `path`), `exclude_tests`, and `after` to continue a cut answer. `root` searches another `git worktree` of the repository and `ref` a commit's files; their hits name no declaration |
+| `search_text` | text the graph does not hold: a string literal, a log message, a comment. Each hit comes with the declaration holding it, as a node for the tools above. `path` and `exclude` to narrow it by path prefix, `files_only` (a cut first page also counts hits per directory below `path`), `exclude_tests`, and `after` to continue a cut answer. `root` searches another `git worktree` of the repository and `ref` a commit's files; a commit's hits name no declaration, and a worktree's do when its graph is built (see below) |
 | `rebuild` | build again now. Rarely needed, since every tool rebuilds the changed layers first |
 
 **Another worktree.** Every graph tool takes `root`: another `git
@@ -219,7 +219,12 @@ was not loaded again; they are kept from the session's graph, marked
 INFERRED and `carried=base`, and may be stale. A package the worktree
 did not change is as the session's build saw it. `graph_stats` with
 `root` lists what was reused under `overlay`. The server holds four
-worktrees' graphs at most.
+worktrees' graphs at most, and lets the one used longest ago go.
+
+`search_text` with `root` never waits for that graph. Its hits name their
+declarations when a graph tool given the same `root` has built the
+worktree's graph and the worktree's files have not changed since;
+otherwise they name none, and `note` says why.
 
 **The usual shape of a question:** `subgraph_for_question` with the names
 involved. If the answer is too big for one call, `find_nodes` for the exact
