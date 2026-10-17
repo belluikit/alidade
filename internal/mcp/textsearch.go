@@ -256,6 +256,11 @@ func (c *textPage) finish() {
 		c.rollUp(costs[0])
 		n = c.fitting(costs)
 	}
+	if n == 0 && len(costs) > 0 {
+		// A first file bigger than the whole budget is listed alone, so
+		// the answer has a next and can be continued (#32).
+		n = 1
+	}
 	for i, f := range c.order[:n] {
 		c.used += costs[i]
 		c.r.Matches = append(c.r.Matches, fileCount{File: f, Count: c.matched[f]})
@@ -290,9 +295,9 @@ type dirCount struct {
 }
 
 // rollupDepth is how many path segments below path's directory a
-// directory of dirs keeps: src/cmd, not src: on trendvidia/go, src/cmd
-// held 1,277 of 2,780 TODOs, and src alone would have named every one of
-// them.
+// directory of dirs keeps, the owner's decision on #32: src/cmd, not src:
+// on trendvidia/go, src/cmd held 1,277 of 2,780 TODOs, and src alone would
+// have named every one of them.
 const rollupDepth = 2
 
 // rollUp adds dirs: the matching files' hits by directory, most first,
@@ -383,7 +388,10 @@ func (c *textPage) add(rel string, line int, text string, src []byte) bool {
 	if newNode != nil {
 		cost += estimate(*newNode)
 	}
-	if c.r.Truncated || c.used+cost > c.budget {
+	// A first hit bigger than the whole budget is kept alone, so the
+	// answer has a next and can be continued (#32).
+	alone := len(c.r.Hits) == 0 && !c.r.Truncated
+	if c.r.Truncated || c.used+cost > c.budget && !alone {
 		if !c.r.Truncated {
 			c.r.Truncated, c.r.Next = true, c.last
 		}

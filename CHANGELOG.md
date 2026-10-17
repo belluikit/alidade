@@ -17,6 +17,9 @@ tracker's. From v0.12.1 on, every number is this repository's.
   directory of its own, is still read.
   A grep of a directory holding nested worktrees is refused with each
   one's `root` named (#31).
+- **Fixed: a `search_text` answer whose first file or hit is bigger than
+  the whole budget can be continued** (#32). It was cut with no `next`;
+  that item is now listed alone, over the budget.
 - **Added: a cut `files_only` answer says where its hits are** (#26).
   Its first page also carries `dirs`: hit and matched-file counts per
   directory, two levels below `path`, most hits first, with `dirs_omitted`

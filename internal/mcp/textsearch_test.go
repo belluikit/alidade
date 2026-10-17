@@ -706,7 +706,8 @@ func TestSearchTextRollsUpTheFirstPageOnly(t *testing.T) {
 
 // TestSearchTextRollsUpBelowPath: a cut files_only answer narrowed with
 // path rolls up two levels below it, so the next narrowing is in view,
-// not one directory holding every hit.
+// not one directory holding every hit. Two levels below path is the
+// owner's decision on #32.
 func TestSearchTextRollsUpBelowPath(t *testing.T) {
 	dir := t.TempDir()
 	for i := range 60 {
@@ -784,5 +785,46 @@ func TestRollUpChargesItsKeys(t *testing.T) {
 	}{c.r.Dirs, c.r.DirsOmitted})
 	if len(c.r.Dirs) != 3 || c.used-envelope < added {
 		t.Errorf("rollUp listed %d dirs and charged %d tokens, want 3 and at least the %d they add", len(c.r.Dirs), c.used-envelope, added)
+	}
+}
+
+// TestSearchTextListsAnItemBiggerThanTheBudget pins the owner's decision
+// on #32: a first file or hit bigger than the whole budget is listed
+// alone, so a cut answer always has a next, and paging reaches every
+// item. Before, such an answer was cut with no next and could not be
+// continued.
+func TestSearchTextListsAnItemBiggerThanTheBudget(t *testing.T) {
+	dir := t.TempDir()
+	long := strings.Repeat("d", 120) + "/" + strings.Repeat("e", 120) + "/" + strings.Repeat("f", 120) + "/" + strings.Repeat("g", 120) + "/" + strings.Repeat("h", 200)
+	for _, name := range []string{long + "1.md", long + "2.md"} {
+		writeFile(t, filepath.Join(dir, name), "marker\n")
+	}
+	s := New(func() (*graph.Graph, BuildInfo, error) {
+		return graph.NewBuilder(dir).Build(), BuildInfo{Root: dir}, nil
+	})
+	h := &harness{t: t, c: connect(t, s)}
+	for _, filesOnly := range []bool{true, false} {
+		seen, after := 0, ""
+		for page := 1; page <= 4; page++ {
+			args := map[string]any{"pattern": "marker", "files_only": filesOnly, "max_tokens": 200}
+			if after != "" {
+				args["after"] = after
+			}
+			r := h.callJSON("search_text", args)
+			m, _ := r["matches"].([]any)
+			hits, _ := r["hits"].([]any)
+			seen += len(m) + len(hits)
+			next, _ := r["next"].(string)
+			if r["truncated"] != true {
+				break
+			}
+			if next == "" {
+				t.Fatalf("files_only %v, page %d: cut with no next: %v", filesOnly, page, r)
+			}
+			after = next
+		}
+		if seen != 2 {
+			t.Errorf("files_only %v: paging reached %d of 2 items", filesOnly, seen)
+		}
 	}
 }
