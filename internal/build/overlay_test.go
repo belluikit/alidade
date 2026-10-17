@@ -340,3 +340,28 @@ func TestOwnLiveIsNeverTheBases(t *testing.T) {
 		t.Error("the worktree's own jedi is not its own")
 	}
 }
+
+// TestOverlaySkipsAreAWorktreeBuilds is #35: the files a worktree's Go
+// layer skips are a full build's of it. A package loaded again has its
+// own skips in place of the base's: here a //line directive naming a
+// source outside the tree (#109), gone from one package and added to
+// another.
+func TestOverlaySkipsAreAWorktreeBuilds(t *testing.T) {
+	files := maps.Clone(overlayRepo)
+	files["a/gen.go"] = "package a\n\n//line /outside/gen.y:1\nfunc Gen() int { return 1 }\n"
+	main, wt := worktreeOf(t, files, map[string]string{
+		"a/gen.go": "package a\n\nfunc Gen() int { return 1 }\n",
+		"c/gen.go": "package c\n\n//line /outside/gen.y:1\nfunc Gen() int { return 1 }\n",
+	})
+	_, rep := overlayOf(t, main, wt)
+	if rep.Overlay == nil || rep.Overlay.GoWhole {
+		t.Fatalf("not laid over the base: %+v", rep.Overlay)
+	}
+	_, full, err := Build(wt, DefaultOptions())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(rep.Go.Skipped, full.Go.Skipped) || len(full.Go.Skipped) != 1 {
+		t.Errorf("skipped %+v, a full build of the worktree %+v", rep.Go.Skipped, full.Go.Skipped)
+	}
+}

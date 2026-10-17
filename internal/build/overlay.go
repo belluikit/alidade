@@ -5,6 +5,7 @@ package build
 
 import (
 	"maps"
+	"path"
 	"slices"
 	"strings"
 
@@ -211,7 +212,8 @@ func (s *Session) overlayGo(lb *graph.Builder, root string, opts golang.Options)
 	if err != nil {
 		return nil, err
 	}
-	present, gone, unbuilt := golang.PackagesOf(root, mods, opts.Skip, differingGo(s.base.goFiles, s.goFilesNow()))
+	differ := differingGo(s.base.goFiles, s.goFilesNow())
+	present, gone, unbuilt := golang.PackagesOf(root, mods, opts.Skip, differ)
 	if len(unbuilt) > 0 {
 		// A load naming a package the host's configuration does not
 		// build fails its whole module; which configurations bring it in
@@ -256,7 +258,7 @@ func (s *Session) overlayGo(lb *graph.Builder, root string, opts golang.Options)
 	lb.Adopt(reached(keptNodes, keptEdges, carried), carried)
 
 	s.overlaid = &Overlay{Packages: present, Removed: gone, Carried: len(carried)}
-	return overlaidGoReport(s.base.rep.Go, sub, owned), nil
+	return overlaidGoReport(s.base.rep.Go, sub, owned, differ), nil
 }
 
 // reached drops the base's external packages no edge kept from the base
@@ -332,10 +334,10 @@ func carried(base []graph.Edge, nodes []graph.Node, edges []graph.Edge) []graph.
 }
 
 // overlaidGoReport is the base's Go report with the packages loaded
-// again in place of the base's: their failures, and the time the load
-// took. The counts stay the base's: they describe the modules, which a
-// worktree with the same module files shares.
-func overlaidGoReport(base, sub *golang.Report, owned func(graph.ID) bool) *golang.Report {
+// again in place of the base's: their failures, their files skipped, and
+// the time the load took. The counts stay the base's: they describe the
+// modules, which a worktree with the same module files shares.
+func overlaidGoReport(base, sub *golang.Report, owned func(graph.ID) bool, differ []string) *golang.Report {
 	rep := *base
 	notOwned := func(paths []string) []string {
 		var out []string
@@ -349,7 +351,28 @@ func overlaidGoReport(base, sub *golang.Report, owned func(graph.ID) bool) *gola
 	rep.FailedPackages = merge(notOwned(base.FailedPackages), sub.FailedPackages)
 	rep.WithoutCalls = merge(notOwned(base.WithoutCalls), sub.WithoutCalls)
 	rep.Load, rep.CallGraph, rep.Emit = sub.Load, sub.CallGraph, sub.Emit
+	rep.Skipped = overlaidSkips(base.Skipped, sub.Skipped, differ)
 	return &rep
+}
+
+// overlaidSkips are the base's skipped files and directories outside the
+// packages loaded again, which are the directories of the differing
+// files, and the load's in their place (#35). A go.mod skipped is the
+// module's, not a package's, and stays unless the load skips it too.
+func overlaidSkips(base, sub []graph.Skip, differ []string) []graph.Skip {
+	dirs := map[string]bool{}
+	for _, f := range differ {
+		dirs[path.Dir(f)] = true
+	}
+	out := slices.Clone(sub)
+	for _, sk := range base {
+		reloaded := dirs[sk.File] || dirs[path.Dir(sk.File)] && path.Base(sk.File) != "go.mod"
+		if !reloaded && !slices.Contains(out, sk) {
+			out = append(out, sk)
+		}
+	}
+	slices.SortStableFunc(out, func(a, b graph.Skip) int { return strings.Compare(a.File, b.File) })
+	return out
 }
 
 func merge(a, b []string) []string {
