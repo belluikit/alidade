@@ -125,7 +125,10 @@ persisted graph, no invalidation model, and no staleness policy.**
      build of it would be, except the Go layer.
    - **The Go layer** loads again only the packages a differing Go file
      is in, and takes every other package from the base. A go.mod, go.sum
-     or go.work that differs builds the layer whole.
+     or go.work that differs builds the layer whole, and so does a
+     differing package holding no Go file the host's configuration
+     builds (one only a build tag brings in), since a load naming it
+     fails.
    - **What a load of fewer packages cannot see** is a package's
      whole-program edges: every implementation an interface call reaches,
      every function value reaching a call, an implements edge to an
@@ -152,7 +155,11 @@ persisted graph, no invalidation model, and no staleness policy.**
    graph against 7.8 GB without. Not measured: a worktree far from the
    base, where carried edges go stale as it diverges.
    `TestOverlayIsAWorktreeBuild` fails the day a worktree's graph differs
-   from a full build of it by more than its carried edges.
+   from a full build of it by more than its carried edges. The one
+   difference the assumption admits is pinned rather than counted: a call
+   through an interface from a package the worktree did not change does
+   not reach an implementation the worktree added
+   (`TestOverlayMissesAnImplementationCalledFromUnchangedCode`).
 
    This is the reopen named below, "the MCP surface starts holding graphs
    across checkouts": the invalidation model is the layer signatures

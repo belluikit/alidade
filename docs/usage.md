@@ -217,7 +217,9 @@ Go layer loads again only the packages whose files differ. Calls through
 an interface or a function value from those packages depend on code that
 was not loaded again; they are kept from the session's graph, marked
 INFERRED and `carried=base`, and may be stale. A package the worktree
-did not change is as the session's build saw it. `graph_stats` with
+did not change is as the session's build saw it: a call of its through
+an interface does not reach an implementation only the worktree has.
+`graph_stats` with
 `root` lists what was reused under `overlay`. The server holds four
 worktrees' graphs at most, and lets the one used longest ago go.
 

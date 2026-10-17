@@ -16,7 +16,9 @@ tracker's. From v0.12.1 on, every number is this repository's.
   differences laid over it: layers whose files are the same are reused,
   and only the Go packages whose files differ are loaded again. A call
   through an interface or a function value from those packages is kept
-  from the session's graph, INFERRED with `carried=base`. On
+  from the session's graph, INFERRED with `carried=base`. A package the
+  worktree did not change keeps the session's edges, so its calls through
+  an interface miss an implementation only the worktree has. On
   trendvidia/go a worktree's graph took 3.9–4.4 s against 21.7–22.4 s for
   a full build. `graph_stats` with `root` says what was reused under
   `overlay`. The server holds four worktrees' graphs at most. The grep

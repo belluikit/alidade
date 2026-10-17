@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/belluikit/alidade/internal/adapter/golang"
+	"github.com/belluikit/alidade/internal/adapter/py"
 	"github.com/belluikit/alidade/internal/graph"
 )
 
@@ -37,7 +38,10 @@ import (
 // wrong, all of them carried; on trendvidia/go it took 0.6–6.9 s and
 // 0.2–2.2 GB, against 20–23 s and 6.7 GB for the full build.
 // TestOverlayIsAWorktreeBuild fails the day the two differ by more than
-// the carried edges.
+// the carried edges. One difference is known and pinned rather than
+// measured away: a package the worktree did not change keeps the base's
+// edges, so a call of its through an interface misses an implementation
+// the worktree added (TestOverlayMissesAnImplementationCalledFromUnchangedCode).
 
 // An Overlay says how a worktree's graph was made from the base's.
 type Overlay struct {
@@ -54,8 +58,9 @@ type Overlay struct {
 	// packages that were kept, INFERRED.
 	Carried int
 	// GoWhole says the Go layer was extracted whole rather than laid
-	// over the base's: a go.mod, go.sum or go.work differs, or the base
-	// has no Go layer.
+	// over the base's: a go.mod, go.sum or go.work differs, the base has
+	// no Go layer, or a package to load again holds no Go file the host
+	// builds, which a load naming it would fail on.
 	GoWhole bool
 }
 
@@ -72,14 +77,15 @@ func (s *Session) Overlay(root string) (*Session, error) {
 	return o, nil
 }
 
-// Generation counts the graphs this session has made: a build or a
-// refresh. A worktree's graph over it is out of date when it moves.
-func (s *Session) Generation() int { return s.gen }
-
-// overBase makes a worktree's layer signatures stand for its files and
-// the base's together, so a layer taken from the base is taken again
-// when the base's files change, and one of its own is extracted again
-// when the base it was laid over changes; the base's own are as given.
+// overBase makes a worktree's layer signatures say where each layer comes
+// from, so a layer is extracted or taken again exactly when that changes:
+// one taken from the base is taken again when the base's files change,
+// the Go layer laid over the base's is laid again when the base's or the
+// worktree's Go files change, and any other layer of the worktree's own
+// is extracted again only when its own files change — a base's edit
+// reruns no extraction of the worktree that does not read it. A layer
+// moving between the base's and its own changes its signature too. The
+// base's own signatures are as given.
 func (s *Session) overBase(own map[string]string) map[string]string {
 	if s.base == nil {
 		return own
@@ -87,10 +93,24 @@ func (s *Session) overBase(own map[string]string) map[string]string {
 	out := map[string]string{}
 	for _, m := range []map[string]string{own, s.base.sigs} {
 		for name := range m {
-			out[name] = own[name] + " over " + s.base.sigs[name]
+			switch {
+			case own[name] == s.base.sigs[name]:
+				out[name] = "base " + own[name]
+			case name == "go" && !s.goWhole():
+				out[name] = own[name] + " over " + s.base.sigs[name]
+			default:
+				out[name] = "own " + own[name]
+			}
 		}
 	}
 	return out
+}
+
+// goWhole reports whether a worktree's Go layer differing from the base's
+// is extracted whole rather than laid over the base's: the base has no Go
+// layer, or the module files differ.
+func (s *Session) goWhole() bool {
+	return s.base.rep.Go == nil || moduleFilesDiffer(s.base.goFiles, s.goFilesNow())
 }
 
 // inherits reports whether a layer's files are the base's.
@@ -132,7 +152,8 @@ func inherit[R any](s *Session, name string, baseRep *R, extract func(*graph.Bui
 
 // goLayer is the Go layer's extraction: the whole layer for the base, and
 // for a worktree the base's, the base's with the differing packages laid
-// over it, or the whole layer when the module files differ.
+// over it, or the whole layer when goWhole says so or a differing package
+// is one the host does not build.
 func (s *Session) goLayer(root string, opts golang.Options) func(*graph.Builder) (*golang.Report, error) {
 	return func(lb *graph.Builder) (*golang.Report, error) {
 		s.overlaid = nil
@@ -140,7 +161,7 @@ func (s *Session) goLayer(root string, opts golang.Options) func(*graph.Builder)
 		case s.inherits("go"):
 			s.adopt(lb, "go")
 			return s.base.rep.Go, nil
-		case s.base == nil || s.base.rep.Go == nil || moduleFilesDiffer(s.base.goFiles, s.goFilesNow()):
+		case s.base == nil || s.goWhole():
 			s.from["go"] = "own"
 			return extractGo(lb, root, opts)
 		}
@@ -171,16 +192,15 @@ func moduleFilesDiffer(base, wt map[string]string) bool {
 // differingGo lists the Go files whose content differs between two
 // trees, or that only one has.
 func differingGo(base, wt map[string]string) []string {
-	var out []string
+	differ := map[string]bool{}
 	for _, m := range []map[string]string{base, wt} {
 		for rel := range m {
-			if strings.HasSuffix(rel, ".go") && base[rel] != wt[rel] && !slices.Contains(out, rel) {
-				out = append(out, rel)
+			if strings.HasSuffix(rel, ".go") && base[rel] != wt[rel] {
+				differ[rel] = true
 			}
 		}
 	}
-	slices.Sort(out)
-	return out
+	return slices.Sorted(maps.Keys(differ))
 }
 
 // overlayGo lays the worktree's differing Go packages over the base's Go
@@ -191,7 +211,14 @@ func (s *Session) overlayGo(lb *graph.Builder, root string, opts golang.Options)
 	if err != nil {
 		return nil, err
 	}
-	present, gone := golang.PackagesOf(root, mods, opts.Skip, differingGo(s.base.goFiles, s.goFilesNow()))
+	present, gone, unbuilt := golang.PackagesOf(root, mods, opts.Skip, differingGo(s.base.goFiles, s.goFilesNow()))
+	if len(unbuilt) > 0 {
+		// A load naming a package the host's configuration does not
+		// build fails its whole module; which configurations bring it in
+		// is chosen from the whole module. So the layer is built whole.
+		s.from["go"] = "own"
+		return extractGo(lb, root, opts)
+	}
 	owned := ownedBy(append(slices.Clone(present), gone...))
 
 	nodes, edges := s.base.b.Contributions("go")
@@ -210,7 +237,7 @@ func (s *Session) overlayGo(lb *graph.Builder, root string, opts golang.Options)
 			carry = append(carry, e)
 		}
 	}
-	lb.Adopt(keptNodes, keptEdges)
+	lb.Adopt(nil, keptEdges)
 
 	sub := &golang.Report{}
 	var subNodes []graph.Node
@@ -226,10 +253,30 @@ func (s *Session) overlayGo(lb *graph.Builder, root string, opts golang.Options)
 		lb.Adopt(subNodes, subEdges)
 	}
 	carried := carried(carry, subNodes, subEdges)
-	lb.Adopt(nil, carried)
+	lb.Adopt(reached(keptNodes, keptEdges, carried), carried)
 
 	s.overlaid = &Overlay{Packages: present, Removed: gone, Carried: len(carried)}
 	return overlaidGoReport(s.base.rep.Go, sub, owned), nil
+}
+
+// reached drops the base's external packages no edge kept from the base
+// reaches: the extractor emits one only where a boundary edge lands, so
+// one only a package loaded again imported is the worktree's to emit, if
+// it still imports it.
+func reached(nodes []graph.Node, kept, carried []graph.Edge) []graph.Node {
+	ends := map[graph.ID]bool{}
+	for _, es := range [][]graph.Edge{kept, carried} {
+		for _, e := range es {
+			ends[e.From], ends[e.To] = true, true
+		}
+	}
+	out := nodes[:0:0]
+	for _, n := range nodes {
+		if n.Attrs["external"] != "true" || ends[n.ID] {
+			out = append(out, n)
+		}
+	}
+	return out
 }
 
 // ownedBy reports whether a Go ID is of one of the packages, or of the
@@ -336,14 +383,32 @@ func (s *Session) overlayReport(rep *Report) *Overlay {
 	return o
 }
 
-// refreshFromBase takes the base's Python contributions again, the base
-// having folded in what jedi has learnt since (#269): the worktree's
-// Python files are the base's, so jedi's answers for the base are its.
-func (s *Session) refreshFromBase() error {
+// refreshFromBase folds what jedi has learnt since (#269) into the base,
+// whose Python files the worktree's are, and takes its Python layer again.
+func (s *Session) refreshFromBase(rep *Report) error {
 	if _, _, err := s.base.Refresh(); err != nil {
 		return err
 	}
+	s.pyFromBase(rep)
+	return nil
+}
+
+// pyFromBase takes the base's Python contributions and report as they
+// are now. A build whose Python files are unchanged takes them again
+// too: the base may have folded jedi's answers in since, which changes
+// no signature.
+func (s *Session) pyFromBase(rep *Report) {
 	s.b.Drop("py")
 	s.adopt(s.b.Layer("py"), "py")
-	return nil
+	rep.Py = s.base.rep.Py
+}
+
+// ownLive is the jedi of the session's own previous Python layer, nil
+// when there is none or that layer was the base's: a worktree's session
+// stops or closes only a jedi it started, never the base's.
+func (s *Session) ownLive(prev *Report) *py.Live {
+	if s.from["py"] == "base" || prev.Py == nil {
+		return nil
+	}
+	return prev.Py.Live
 }

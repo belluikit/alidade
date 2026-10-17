@@ -231,8 +231,10 @@ type Session struct {
 	// repo-relative path, as of the last build: what a worktree's graph
 	// compares with to find the Go packages that differ (#25).
 	goFiles map[string]string
-	// gen counts the graphs this session has made, so a worktree's graph
-	// over it knows when the base it took layers from has moved.
+	// gen counts the builds this session has made, so a worktree's graph
+	// over it knows when the base it took layers from has moved. A
+	// refresh does not count: a worktree's Python layer taken from the
+	// base follows jedi through Pending, as the base's does.
 	gen int
 	// base is the session a worktree's session lays its differences
 	// over (#25), nil for the base itself; own are the worktree's own
@@ -391,10 +393,9 @@ func (s *Session) Refresh() (*graph.Graph, *Report, error) {
 	start := time.Now()
 	rep := *s.rep
 	if s.from["py"] == "base" {
-		if err := s.refreshFromBase(); err != nil {
+		if err := s.refreshFromBase(&rep); err != nil {
 			return nil, nil, err
 		}
-		rep.Py = s.base.rep.Py
 	} else if rep.Py != nil && rep.Py.Live != nil {
 		s.b.Drop("py")
 		r, err := py.Refresh(s.b.Layer("py"), rep.Py.Live)
@@ -408,7 +409,6 @@ func (s *Session) Refresh() (*graph.Graph, *Report, error) {
 	rep.Rebuilt, rep.Kept = nil, nil
 	rep.Elapsed = time.Since(start)
 	s.rep = &rep
-	s.gen++
 	return g, &rep, nil
 }
 
@@ -505,6 +505,7 @@ func (s *Session) layers(rep, prev *Report, changed func(string) bool, drop func
 		// is recorded like any other, so a build that fails after it
 		// does not leave the layer looking unchanged (#93).
 		drop("go")
+		delete(s.from, "go")
 	} else if rep.Go, err = rerun(b, "go", prev.Go, changed, s.goLayer(abs, opts.Go), nil); err != nil {
 		return err
 	}
@@ -523,15 +524,22 @@ func (s *Session) layers(rep, prev *Report, changed func(string) bool, drop func
 	if rep.TS, err = rerun(b, "ts", prev.TS, changed, inherit(s, "ts", s.baseReport().TS, func(lb *graph.Builder) (*ts.Report, error) { return ts.Extract(lb, abs, opts.TS) }), func(r *ts.Report) int { return r.Files + len(r.Skipped) }); err != nil {
 		return err
 	}
+	live := s.ownLive(prev)
 	if rep.Py, err = rerun(b, "py", prev.Py, changed, inherit(s, "py", s.baseReport().Py, func(lb *graph.Builder) (*py.Report, error) {
 		po := opts.Py
-		if prev.Py != nil && prev.Py.Live != nil {
-			prev.Py.Live.Stop() // jedi reading the files as they were
-			po.Reuse = prev.Py.Live
+		if live != nil {
+			live.Stop() // jedi reading the files as they were
+			po.Reuse = live
 		}
 		return py.Extract(lb, abs, po)
 	}), func(r *py.Report) int { return r.Files + len(r.Skipped) }); err != nil {
 		return err
+	}
+	if s.from["py"] == "base" {
+		if live != nil {
+			live.Close() // the worktree's own jedi, its files now the base's
+		}
+		s.pyFromBase(rep)
 	}
 	if rep.Schema, err = s.schemaRoots(prev, changed); err != nil {
 		return err

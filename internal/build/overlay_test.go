@@ -5,11 +5,14 @@ package build
 
 import (
 	"fmt"
+	"maps"
+	"os"
 	"path/filepath"
 	"slices"
 	"sort"
 	"testing"
 
+	"github.com/belluikit/alidade/internal/adapter/py"
 	"github.com/belluikit/alidade/internal/graph"
 	"github.com/belluikit/alidade/internal/worktree/gittest"
 )
@@ -188,4 +191,152 @@ func diffLines(got, want []string) string {
 		}
 	}
 	return out
+}
+
+// overlayEqualsFull builds the base's graph and the worktree's over it,
+// and checks the worktree's against a full build of it: node for node,
+// and edge for edge but for carried edges.
+func overlayEqualsFull(t *testing.T, main, wt string) *Report {
+	t.Helper()
+	g, rep := overlayOf(t, main, wt)
+	full, _, err := Build(wt, DefaultOptions())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := nodeLines(g), nodeLines(full); !slices.Equal(got, want) {
+		t.Errorf("nodes differ from a full build of the worktree:\n%s", diffLines(got, want))
+	}
+	got, _ := edgeLines(g)
+	want, _ := edgeLines(full)
+	if !slices.Equal(got, want) {
+		t.Errorf("edges differ from a full build of the worktree:\n%s", diffLines(got, want))
+	}
+	return rep
+}
+
+// with is overlayRepo with files added or replaced.
+func with(files map[string]string) map[string]string {
+	out := maps.Clone(overlayRepo)
+	maps.Copy(out, files)
+	return out
+}
+
+// TestOverlayBuildsGoWholeForAPackageTheHostDoesNotBuild: a load naming a
+// package whose files only a build tag brings in fails its whole module,
+// which a load of every package does not, so a worktree that changed one
+// builds its Go layer whole — here a's changes are in the graph too.
+func TestOverlayBuildsGoWholeForAPackageTheHostDoesNotBuild(t *testing.T) {
+	tools := "//go:build tools\n\npackage tools\n\nimport _ \"example.com/w/a\"\n"
+	main, wt := worktreeOf(t, with(map[string]string{"tools/tools.go": tools}), map[string]string{
+		"tools/tools.go": tools + "\n// changed\n",
+		"a/a.go":         "package a\n\ntype Shape interface{ Area() int }\n\nfunc Only() int { return 1 }\n\nfunc Total(ss []Shape) int { return 0 }\n",
+	})
+	if rep := overlayEqualsFull(t, main, wt); !rep.Overlay.GoWhole {
+		t.Errorf("overlay %+v: want the Go layer built whole", rep.Overlay)
+	}
+}
+
+// TestOverlayDropsAnExternalPackageNoLongerImported: an external package
+// only a package loaded again imported is not kept from the base when the
+// worktree no longer imports it; one an unchanged package imports is.
+func TestOverlayDropsAnExternalPackageNoLongerImported(t *testing.T) {
+	main, wt := worktreeOf(t, with(map[string]string{
+		"c/c.go": "package c\n\nimport (\n\t_ \"strings\"\n\n\t\"example.com/w/a\"\n)\n\nfunc Helper() int { return a.Total(nil) }\n",
+		"b/x.go": "package b\n\nimport _ \"bytes\"\n",
+	}), map[string]string{
+		"c/c.go": "package c\n\nimport \"example.com/w/a\"\n\nfunc Helper() int { return a.Total(nil) }\n",
+	})
+	overlayEqualsFull(t, main, wt)
+}
+
+// TestOverlayMissesAnImplementationCalledFromUnchangedCode pins the
+// divergence ADR 005's amendment for #25 names: a package the worktree
+// did not change has the base's edges, so a call through an interface
+// from it does not reach an implementation the worktree added elsewhere.
+// A full build of the worktree has the edge. The day the overlay finds
+// it, this fails, and the ADR and docs/usage.md should say so.
+func TestOverlayMissesAnImplementationCalledFromUnchangedCode(t *testing.T) {
+	main, wt := worktreeOf(t, overlayRepo, map[string]string{
+		"b/b.go": overlayRepo["b/b.go"] + "\ntype Tri struct{}\n\nfunc (Tri) Area() int { return 3 }\n\nfunc Use3() int { return a.Total([]a.Shape{Tri{}}) }\n",
+	})
+	g, _ := overlayOf(t, main, wt)
+	full, _, err := Build(wt, DefaultOptions())
+	if err != nil {
+		t.Fatal(err)
+	}
+	const tri = "go://example.com/w/a#Total -calls-> go://example.com/w/b#Tri.Area"
+	got, _ := edgeLines(g)
+	want, _ := edgeLines(full)
+	if !slices.Contains(want, tri+" RESOLVED") {
+		t.Fatalf("the full build lacks %s: the fixture no longer shows the divergence", tri)
+	}
+	if slices.Contains(got, tri+" RESOLVED") {
+		t.Errorf("the overlay has %s: update ADR 005 and docs/usage.md, the divergence is gone", tri)
+	}
+	if want = slices.DeleteFunc(want, func(l string) bool { return l == tri+" RESOLVED" }); !slices.Equal(got, want) {
+		t.Errorf("edges differ from a full build of the worktree by more than %s:\n%s", tri, diffLines(got, want))
+	}
+}
+
+// TestOverlayExtractsItsOwnLayerOnlyWhenItsFilesChange: a layer of the
+// worktree's own is not extracted again because the base's files for it
+// changed, and is taken from the base once its files are the base's.
+func TestOverlayExtractsItsOwnLayerOnlyWhenItsFilesChange(t *testing.T) {
+	main, wt := worktreeOf(t, overlayRepo, map[string]string{"README.md": "# w\n\nSee `Helper`.\n"})
+	base := newSession(t, main)
+	mustSessionBuild(t, base)
+	o, err := base.Overlay(wt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, rep := mustSessionBuild(t, o); slices.Contains(rep.Overlay.Inherited, "md") {
+		t.Fatalf("inherited %v: the worktree's md differs from the base's", rep.Overlay.Inherited)
+	}
+	write(t, filepath.Join(main, "README.md"), "# w\n\nSee `Use`.\n")
+	mustSessionBuild(t, base)
+	if _, rep := mustSessionBuild(t, o); slices.Contains(rep.Rebuilt, "md") {
+		t.Errorf("rebuilt %v: the worktree's own md layer was extracted again for the base's edit", rep.Rebuilt)
+	}
+	write(t, filepath.Join(main, "README.md"), "# w\n\nSee `Helper`.\n")
+	mustSessionBuild(t, base)
+	if _, rep := mustSessionBuild(t, o); !slices.Contains(rep.Overlay.Inherited, "md") {
+		t.Errorf("inherited %v: the worktree's md is the base's again", rep.Overlay.Inherited)
+	}
+}
+
+// TestOverlayWithoutGoModTakesNoGoLayer: a worktree whose go.mod went
+// away after its Go layer was taken from the base says it has none.
+func TestOverlayWithoutGoModTakesNoGoLayer(t *testing.T) {
+	main, wt := worktreeOf(t, overlayRepo, nil)
+	base := newSession(t, main)
+	mustSessionBuild(t, base)
+	o, err := base.Overlay(wt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, rep := mustSessionBuild(t, o); !slices.Contains(rep.Overlay.Inherited, "go") {
+		t.Fatalf("inherited %v: want go", rep.Overlay.Inherited)
+	}
+	if err := os.Remove(filepath.Join(wt, "go.mod")); err != nil {
+		t.Fatal(err)
+	}
+	if _, rep := mustSessionBuild(t, o); rep.Go != nil || slices.Contains(rep.Overlay.Inherited, "go") {
+		t.Errorf("without go.mod: Go report %v, inherited %v", rep.Go != nil, rep.Overlay.Inherited)
+	}
+}
+
+// TestOwnLiveIsNeverTheBases: a worktree's session stops or closes only
+// a jedi it started; one its Python layer took from the base is the
+// base's.
+func TestOwnLiveIsNeverTheBases(t *testing.T) {
+	l := &py.Live{}
+	prev := &Report{Py: &py.Report{Live: l}}
+	s := &Session{from: map[string]string{"py": "base"}}
+	if got := s.ownLive(prev); got != nil {
+		t.Error("the base's jedi is taken for the worktree's own")
+	}
+	s.from["py"] = "own"
+	if got := s.ownLive(prev); got != l {
+		t.Error("the worktree's own jedi is not its own")
+	}
 }

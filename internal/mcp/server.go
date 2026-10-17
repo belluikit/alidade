@@ -92,7 +92,8 @@ type OverlayInfo struct {
 	// interface or a function value depends on code a load of fewer
 	// packages does not read.
 	Carried int
-	// GoWhole says the Go layer was built whole: the module files differ.
+	// GoWhole says the Go layer was built whole: the module files differ,
+	// or a package to load again is one the host does not build.
 	GoWhole bool
 }
 
@@ -301,58 +302,80 @@ func (s *Server) graph(ctx contextT) (*graph.Graph, BuildInfo, error) {
 // with root another worktree's, laid over the session's (#25). An answer
 // about another worktree says which, under root.
 func (s *Server) graphFor(ctx contextT, req mcpsdk.CallToolRequest) (*graph.Graph, BuildInfo, error) {
-	h, root, err := s.tree(ctx, req.GetString("root", ""))
-	if err != nil || h == nil {
-		if err == nil {
-			return s.graph(ctx)
-		}
+	return s.graphOf(ctx, req, false)
+}
+
+// graphOf is graphFor, dropping the graph first when rebuild says so. A
+// worktree's graph is looked up, opened and built under one hold of the
+// lock, so a call for another worktree cannot let it go in between.
+func (s *Server) graphOf(ctx contextT, req mcpsdk.CallToolRequest, rebuild bool) (*graph.Graph, BuildInfo, error) {
+	p, err := s.worktreeRoot(ctx, req.GetString("root", ""))
+	if err != nil {
 		return nil, BuildInfo{}, err
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if p == "" {
+		if rebuild {
+			s.base.g = nil
+		}
+		return s.base.get(ctx)
+	}
+	h, err := s.tree(p)
+	if err != nil {
+		return nil, BuildInfo{}, err
+	}
+	if rebuild {
+		h.g = nil
+	}
 	g, info, err := h.get(ctx)
-	noteRoot(ctx, root)
+	noteRoot(ctx, p)
 	return g, info, err
 }
 
-// tree returns the held graph of the worktree root names, opening it on
-// first use, or nil for the served checkout. The served checkout's graph
-// is made fresh first: the worktree's is laid over it.
-func (s *Server) tree(ctx contextT, root string) (*held, string, error) {
+// worktreeRoot resolves root to another worktree's top directory, or ""
+// for the served checkout.
+func (s *Server) worktreeRoot(ctx contextT, root string) (string, error) {
 	if root == "" {
-		return nil, "", nil
+		return "", nil
 	}
 	served, err := s.servedRoot(ctx)
 	if err != nil {
-		return nil, "", err
+		return "", err
 	}
 	p, other, err := treeParam(root, served)
 	if err != nil {
-		return nil, "", badParam{err}
+		return "", badParam{err}
 	}
 	if !other {
-		return nil, "", nil
+		return "", nil
 	}
 	if s.worktree == nil {
-		return nil, "", badParam{fmt.Errorf("root: this server builds no graph of another worktree")}
+		return "", badParam{fmt.Errorf("root: this server builds no graph of another worktree")}
 	}
-	if _, _, err := s.graph(ctx); err != nil {
-		return nil, "", err
+	return p, nil
+}
+
+// tree returns the held graph of the worktree at p, opening it on first
+// use, with s.mu held. The served checkout's graph is made fresh first:
+// the worktree's is laid over it. What that build notes is the served
+// checkout's, not the answer's, so it is noted nowhere.
+func (s *Server) tree(p string) (*held, error) {
+	if _, _, err := s.base.get(context.Background()); err != nil {
+		return nil, err
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
 	h := s.worktrees[p]
 	if h == nil {
 		t, err := s.worktree(p)
 		if err != nil {
-			return nil, "", err
+			return nil, err
 		}
 		h = &held{build: t.Build, fresh: t.Fingerprint, pending: t.Pending, refresh: t.Refresh, close: t.Close}
 		s.worktrees[p] = h
 	}
 	h.used = time.Now()
 	s.evict()
-	return h, p, nil
+	return h, nil
 }
 
 // evict lets go of the worktrees' graphs beyond maxWorktrees, the one
@@ -444,18 +467,7 @@ func (h *held) foldIn(pv int64) error {
 
 // rebuild drops the graph a call asks about and builds it again.
 func (s *Server) rebuild(ctx contextT, req mcpsdk.CallToolRequest) (*graph.Graph, BuildInfo, error) {
-	h, _, err := s.tree(ctx, req.GetString("root", ""))
-	if err != nil {
-		return nil, BuildInfo{}, err
-	}
-	s.mu.Lock()
-	if h == nil {
-		s.base.g = nil
-	} else {
-		h.g = nil
-	}
-	s.mu.Unlock()
-	return s.graphFor(ctx, req)
+	return s.graphOf(ctx, req, true)
 }
 
 // A callNote carries, through one tool call's context, the layers a
