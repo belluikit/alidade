@@ -388,13 +388,7 @@ func (c *textPage) add(rel string, line int, text string, src []byte) bool {
 	if newNode != nil {
 		cost += estimate(*newNode)
 	}
-	// A first hit bigger than the whole budget is kept alone, so the
-	// answer has a next and can be continued (#32).
-	alone := len(c.r.Hits) == 0 && !c.r.Truncated
-	if c.r.Truncated || c.used+cost > c.budget && !alone {
-		if !c.r.Truncated {
-			c.r.Truncated, c.r.Next = true, c.last
-		}
+	if !c.room(cost) {
 		return true
 	}
 	c.used += cost
@@ -405,6 +399,20 @@ func (c *textPage) add(rel string, line int, text string, src []byte) bool {
 	}
 	c.r.Hits = append(c.r.Hits, hit)
 	return true
+}
+
+// room reports whether a hit of this cost goes on the page, and cuts
+// the page when it does not. A first hit bigger than the whole budget
+// goes on alone, so the answer has a next and can be continued (#32).
+func (c *textPage) room(cost int) bool {
+	alone := len(c.r.Hits) == 0 && !c.r.Truncated
+	if !c.r.Truncated && (c.used+cost <= c.budget || alone) {
+		return true
+	}
+	if !c.r.Truncated {
+		c.r.Truncated, c.r.Next = true, c.last
+	}
+	return false
 }
 
 // budgetOf reads max_tokens within the bounds every tool keeps.
