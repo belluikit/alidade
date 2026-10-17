@@ -17,6 +17,15 @@ tracker's. From v0.12.1 on, every number is this repository's.
   directory of its own, is still read.
   A grep of a directory holding nested worktrees is refused with each
   one's `root` named (#31).
+- **Fixed: a `search_text` answer whose first file or hit is bigger than
+  the whole budget can be continued** (#32). It was cut with no `next`;
+  that item is now listed alone, over the budget.
+- **Added: a cut `files_only` answer says where its hits are** (#26).
+  Its first page also carries `dirs`: hit and matched-file counts per
+  directory, two levels below `path`, most hits first, with `dirs_omitted`
+  when not all fit. A page continued with `after` lists files only. On trendvidia/go, `TODO`
+  matched 1,033 files and the file list stopped after 221. The rollup
+  shows `src/cmd` holding 1,277 of the 2,780 hits on the first call.
 - **Added: `search_text` answers for another worktree, a commit, or all
   but some paths** (#23). `root` searches another `git worktree` of the
   repository, by its top directory, and `ref` searches a commit's files

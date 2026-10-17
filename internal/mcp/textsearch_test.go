@@ -5,9 +5,11 @@ package mcp
 
 import (
 	"context"
+	"fmt"
 	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -644,5 +646,185 @@ func TestSearchTextLeavesNestedWorktreesOut(t *testing.T) {
 	}
 	if r := h.callJSON("search_text", map[string]any{"pattern": "marker", "root": nested}); r["total"] != 1.0 || r["root"] != nested {
 		t.Errorf("root at the nested worktree: %v", r)
+	}
+}
+
+// TestSearchTextRollsUpACutFileList pins #26: a files_only answer too
+// long for its budget leads with hits per directory, two levels deep,
+// most first — the noisy directory is visible before any paging — and
+// one that fits carries no rollup.
+func TestSearchTextRollsUpACutFileList(t *testing.T) {
+	h := apiNoiseHarness(t)
+	r := h.callJSON("search_text", map[string]any{"pattern": "marker", "files_only": true, "max_tokens": 400})
+	dirs, _ := r["dirs"].([]any)
+	if r["truncated"] != true || len(dirs) != 3 {
+		t.Fatalf("a cut answer: truncated %v, dirs %v; want three directories", r["truncated"], r["dirs"])
+	}
+	want := []string{"api 60 60", ". 1 1", "src/cmd 1 1"}
+	for i, d := range dirs {
+		m := d.(map[string]any)
+		if got := fmt.Sprintf("%s %v %v", m["dir"], m["count"], m["matched"]); got != want[i] {
+			t.Errorf("dirs[%d] = %s, want %s", i, got, want[i])
+		}
+	}
+	if m, _ := r["matches"].([]any); len(m) == 0 {
+		t.Error("the rollup left no room for files")
+	}
+
+	if r := h.callJSON("search_text", map[string]any{"pattern": "marker", "files_only": true, "path": "src/"}); r["dirs"] != nil {
+		t.Errorf("an answer that fits carries dirs: %v", r["dirs"])
+	}
+}
+
+// apiNoiseHarness serves a tree where api/ holds 60 of 62 matching files,
+// too many for one files_only page of 400 tokens.
+func apiNoiseHarness(t *testing.T) *harness {
+	dir := t.TempDir()
+	for i := range 60 {
+		writeFile(t, filepath.Join(dir, fmt.Sprintf("api/go1.%02d.txt", i)), "#56088 marker\n")
+	}
+	writeFile(t, filepath.Join(dir, "src/cmd/dist/build.go"), "package dist // marker\n")
+	writeFile(t, filepath.Join(dir, "README.md"), "marker\n")
+	s := New(func() (*graph.Graph, BuildInfo, error) {
+		return graph.NewBuilder(dir).Build(), BuildInfo{Root: dir}, nil
+	})
+	return &harness{t: t, c: connect(t, s)}
+}
+
+// TestSearchTextRollsUpTheFirstPageOnly: a page continued with after
+// lists files only, its whole budget theirs: the first page already said
+// where they are.
+func TestSearchTextRollsUpTheFirstPageOnly(t *testing.T) {
+	h := apiNoiseHarness(t)
+	r := h.callJSON("search_text", map[string]any{"pattern": "marker", "files_only": true, "max_tokens": 400})
+	next, _ := r["next"].(string)
+	page := h.callJSON("search_text", map[string]any{"pattern": "marker", "files_only": true, "max_tokens": 200, "after": next})
+	if m, _ := page["matches"].([]any); next == "" || page["truncated"] != true || len(m) == 0 || page["dirs"] != nil {
+		t.Errorf("a page continued after %q: matches %v, dirs %v; want it cut, with files and no rollup", next, page["matches"], page["dirs"])
+	}
+}
+
+// TestSearchTextRollsUpBelowPath: a cut files_only answer narrowed with
+// path rolls up two levels below it, so the next narrowing is in view,
+// not one directory holding every hit. Two levels below path is the
+// owner's decision on #32.
+func TestSearchTextRollsUpBelowPath(t *testing.T) {
+	dir := t.TempDir()
+	for i := range 60 {
+		writeFile(t, filepath.Join(dir, fmt.Sprintf("src/cmd/compile/internal/f%02d.go", i)), "// marker\n")
+	}
+	writeFile(t, filepath.Join(dir, "src/cmd/go/main.go"), "// marker\n")
+	s := New(func() (*graph.Graph, BuildInfo, error) {
+		return graph.NewBuilder(dir).Build(), BuildInfo{Root: dir}, nil
+	})
+	h := &harness{t: t, c: connect(t, s)}
+	r := h.callJSON("search_text", map[string]any{"pattern": "marker", "files_only": true, "max_tokens": 400, "path": "src/cmd/"})
+	var got []string
+	dirs, _ := r["dirs"].([]any)
+	for _, d := range dirs {
+		got = append(got, fmt.Sprint(d.(map[string]any)["dir"]))
+	}
+	if want := []string{"src/cmd/compile/internal", "src/cmd/go"}; !slices.Equal(got, want) {
+		t.Errorf("dirs under path src/cmd/ = %v, want %v", got, want)
+	}
+}
+
+// TestSearchTextRollupLeavesRoomToContinue: the rollup never takes the
+// room the first file needs, so a cut answer always lists one and can be
+// continued, even when that file's path is long.
+func TestSearchTextRollupLeavesRoomToContinue(t *testing.T) {
+	dir := t.TempDir()
+	long := filepath.Join("a", "b", strings.Repeat("c", 110), strings.Repeat("d", 110), strings.Repeat("e", 110), strings.Repeat("f", 110)+".md")
+	writeFile(t, filepath.Join(dir, long), "marker\n")
+	for i := range 80 {
+		writeFile(t, filepath.Join(dir, fmt.Sprintf("d%02d/x.md", i)), "marker\n")
+	}
+	s := New(func() (*graph.Graph, BuildInfo, error) {
+		return graph.NewBuilder(dir).Build(), BuildInfo{Root: dir}, nil
+	})
+	h := &harness{t: t, c: connect(t, s)}
+	r := h.callJSON("search_text", map[string]any{"pattern": "marker", "files_only": true, "max_tokens": 200})
+	if m, _ := r["matches"].([]any); r["truncated"] != true || len(m) == 0 || r["next"] == nil {
+		t.Errorf("a cut answer led by a %d-byte path: matches %v, next %v; want it listed, and a next to continue", len(long), r["matches"], r["next"])
+	}
+}
+
+// TestSearchTextSaysARollupWasCut: a rollup with more directories than
+// fit says how many it left out, so its counts are never read as all.
+func TestSearchTextSaysARollupWasCut(t *testing.T) {
+	dir := t.TempDir()
+	for i := range 80 {
+		writeFile(t, filepath.Join(dir, fmt.Sprintf("d%02d/x.md", i)), "marker\n")
+	}
+	s := New(func() (*graph.Graph, BuildInfo, error) {
+		return graph.NewBuilder(dir).Build(), BuildInfo{Root: dir}, nil
+	})
+	h := &harness{t: t, c: connect(t, s)}
+	r := h.callJSON("search_text", map[string]any{"pattern": "marker", "files_only": true, "max_tokens": 400})
+	d, _ := r["dirs"].([]any)
+	omitted, _ := r["dirs_omitted"].(float64)
+	if len(d) == 0 || omitted == 0 || len(d)+int(omitted) != 80 {
+		t.Errorf("dirs %d listed, %v omitted; want some of each, adding up to 80", len(d), r["dirs_omitted"])
+	}
+}
+
+// TestRollUpChargesItsKeys: the rollup is charged for what it adds to
+// the answer, its keys and brackets with its entries, so tokens does not
+// understate it.
+func TestRollUpChargesItsKeys(t *testing.T) {
+	c := &textPage{ts: &textSearch{}, budget: 400, used: envelope, matched: map[string]int{}}
+	for i := range 3 {
+		f := fmt.Sprintf("d%d/x.md", i)
+		c.order = append(c.order, f)
+		c.matched[f] = i + 1
+	}
+	c.rollUp(0)
+	added := estimate(struct {
+		Dirs    []dirCount `json:"dirs"`
+		Omitted int        `json:"dirs_omitted"`
+	}{c.r.Dirs, c.r.DirsOmitted})
+	if len(c.r.Dirs) != 3 || c.used-envelope < added {
+		t.Errorf("rollUp listed %d dirs and charged %d tokens, want 3 and at least the %d they add", len(c.r.Dirs), c.used-envelope, added)
+	}
+}
+
+// TestSearchTextListsAnItemBiggerThanTheBudget pins the owner's decision
+// on #32: a first file or hit bigger than the whole budget is listed
+// alone, so a cut answer always has a next, and paging reaches every
+// item. Before, such an answer was cut with no next and could not be
+// continued.
+func TestSearchTextListsAnItemBiggerThanTheBudget(t *testing.T) {
+	dir := t.TempDir()
+	long := strings.Repeat("d", 120) + "/" + strings.Repeat("e", 120) + "/" + strings.Repeat("f", 120) + "/" + strings.Repeat("g", 120) + "/" + strings.Repeat("h", 200)
+	for _, name := range []string{long + "1.md", long + "2.md"} {
+		writeFile(t, filepath.Join(dir, name), "marker\n")
+	}
+	s := New(func() (*graph.Graph, BuildInfo, error) {
+		return graph.NewBuilder(dir).Build(), BuildInfo{Root: dir}, nil
+	})
+	h := &harness{t: t, c: connect(t, s)}
+	for _, filesOnly := range []bool{true, false} {
+		seen, after := 0, ""
+		for page := 1; page <= 4; page++ {
+			args := map[string]any{"pattern": "marker", "files_only": filesOnly, "max_tokens": 200}
+			if after != "" {
+				args["after"] = after
+			}
+			r := h.callJSON("search_text", args)
+			m, _ := r["matches"].([]any)
+			hits, _ := r["hits"].([]any)
+			seen += len(m) + len(hits)
+			next, _ := r["next"].(string)
+			if r["truncated"] != true {
+				break
+			}
+			if next == "" {
+				t.Fatalf("files_only %v, page %d: cut with no next: %v", filesOnly, page, r)
+			}
+			after = next
+		}
+		if seen != 2 {
+			t.Errorf("files_only %v: paging reached %d of 2 items", filesOnly, seen)
+		}
 	}
 }
