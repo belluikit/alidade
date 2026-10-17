@@ -144,6 +144,45 @@ func (b *Builder) Drop(name string) (nodes, edges int) {
 	return nodes, edges
 }
 
+// Contributions returns the nodes and edges added through Builders
+// tagged layer, as they were recorded: each position repo-relative, each
+// edge unresolved. A worktree's graph takes a layer whose files equal the
+// base's from the base this way rather than extracting it again (#25).
+func (b *Builder) Contributions(layer string) ([]Node, []Edge) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	var nodes []Node
+	for _, cs := range b.nodes {
+		for _, c := range cs {
+			if c.layer == layer {
+				nodes = append(nodes, c.node)
+			}
+		}
+	}
+	var edges []Edge
+	for _, c := range b.edges {
+		if c.layer == layer {
+			edges = append(edges, c.edge)
+		}
+	}
+	return nodes, edges
+}
+
+// Adopt adds nodes and edges as [Builder.Contributions] returned them
+// from another Builder of a tree with the same layout: positions are
+// already repo-relative and are not relativized again. A node or edge is
+// shared, not copied, since Build never mutates what it was given.
+func (b *Builder) Adopt(nodes []Node, edges []Edge) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	for _, n := range nodes {
+		b.nodes[n.ID] = append(b.nodes[n.ID], nodeContrib{b.layer, n})
+	}
+	for _, e := range edges {
+		b.edges = append(b.edges, edgeContrib{b.layer, e})
+	}
+}
+
 // Minter returns the Minter adapters should mint their IDs through. It is
 // the Builder's own, so every ID in a graph is relativized against one root.
 func (b *Builder) Minter() *Minter { return b.minter }
