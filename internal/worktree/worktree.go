@@ -81,6 +81,33 @@ func Same(a, b string) bool {
 	return ca != "" && ca == CommonDir(b)
 }
 
+// List is the tops of every linked worktree of top's repository, as git
+// records them: each <commondir>/worktrees/<name>/gitdir names the
+// worktree's .git file. A worktree whose directory is gone is left out.
+func List(top string) []string {
+	common := CommonDir(top)
+	if common == "" {
+		return nil
+	}
+	entries, err := os.ReadDir(filepath.Join(common, "worktrees"))
+	if err != nil {
+		return nil
+	}
+	var out []string
+	for _, e := range entries {
+		b, err := os.ReadFile(filepath.Join(common, "worktrees", e.Name(), "gitdir"))
+		if err != nil {
+			continue
+		}
+		wt := filepath.Dir(abs(filepath.Join(common, "worktrees", e.Name()), strings.TrimSpace(string(b))))
+		if _, err := os.Stat(wt); err == nil {
+			out = append(out, wt)
+		}
+	}
+	slices.Sort(out)
+	return out
+}
+
 // localEnv are the variables that point git at a repository other than
 // the one its working directory is in, as `git rev-parse
 // --local-env-vars` lists them. A git hook exports some of them, and -C

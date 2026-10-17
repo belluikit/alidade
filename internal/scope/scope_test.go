@@ -144,3 +144,27 @@ func TestOtherCheckout(t *testing.T) {
 		t.Error("OtherCheckout from a subdirectory, with a relative root: the nested worktree is not reported")
 	}
 }
+
+// TestMovedMainCheckoutIsNotGuessed pins the owner's decision on #31: a
+// nested worktree whose main checkout was moved keeps an absolute gitdir
+// naming the old place, which git itself reports broken until `git
+// worktree repair`. alidade does not guess from the dead path that it is
+// still the repository's: the worktree is read, as ADR 003's #24 note
+// says, until git is told where it is again.
+func TestMovedMainCheckoutIsNotGuessed(t *testing.T) {
+	base := gittest.TempDir(t)
+	before, after := filepath.Join(base, "a"), filepath.Join(base, "b")
+	gittest.Init(t, before, map[string]string{"README.md": "# x\n"})
+	gittest.Git(t, before, "worktree", "add", "-q", "-b", "f", filepath.Join(before, "wt"))
+	if err := os.Rename(before, after); err != nil {
+		t.Fatal(err)
+	}
+	d := New(nil)
+	if d.SkipsDir(after, filepath.Join(after, "wt")) {
+		t.Error("a nested worktree with a dead gitdir is skipped: the dead path was guessed from")
+	}
+	gittest.Git(t, after, "worktree", "repair", filepath.Join(after, "wt"))
+	if !d.SkipsDir(after, filepath.Join(after, "wt")) {
+		t.Error("after git worktree repair, the nested worktree is still read")
+	}
+}

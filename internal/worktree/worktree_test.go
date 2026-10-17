@@ -4,8 +4,10 @@
 package worktree_test
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"github.com/belluikit/alidade/internal/worktree"
@@ -95,5 +97,28 @@ func TestRelativeDirectories(t *testing.T) {
 	}
 	if !worktree.Same("..", wt) || !worktree.Same(filepath.Join("..", "wt"), main) {
 		t.Errorf("Same with a relative top: common dirs %q, %q and %q", worktree.CommonDir(".."), worktree.CommonDir(filepath.Join("..", "wt")), worktree.CommonDir(main))
+	}
+}
+
+// TestList: every linked worktree of the repository, from the main
+// checkout or from a worktree, nested or beside it; one whose directory
+// is gone is left out.
+func TestList(t *testing.T) {
+	base := gittest.TempDir(t)
+	main := filepath.Join(base, "main")
+	gittest.Init(t, main, map[string]string{"README.md": "# x\n"})
+	nested, beside, gone := filepath.Join(main, ".claude/worktrees/n"), filepath.Join(base, "wt"), filepath.Join(base, "gone")
+	for i, wt := range []string{nested, beside, gone} {
+		gittest.Git(t, main, "worktree", "add", "-q", "-b", fmt.Sprintf("b%d", i), wt)
+	}
+	if err := os.RemoveAll(gone); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{nested, beside}
+	slices.Sort(want)
+	for _, from := range []string{main, beside} {
+		if got := worktree.List(from); !slices.Equal(got, want) {
+			t.Errorf("List(%s) = %v, want %v", from, got, want)
+		}
 	}
 }

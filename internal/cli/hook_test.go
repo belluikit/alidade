@@ -235,6 +235,10 @@ func TestHookCoversWorktrees(t *testing.T) {
 		{"under vendor in the worktree", main, "Bash", map[string]any{"command": "grep -rn Foo " + wt + "/vendor"}, "-"},
 		{"reading a worktree file", main, "Bash", map[string]any{"command": "sed -n 1,20p " + wt + "/a.go"}, "-"},
 		{"a worktree inside the main checkout", main, "Bash", map[string]any{"command": "grep -rn Foo .claude/worktrees/n"}, nested},
+		// The directory holding nested worktrees: search_text from main
+		// leaves them out, so the refusal names each one's root (#31).
+		{"the directory nested worktrees are in", main, "Bash", map[string]any{"command": "grep -rn Foo .claude/worktrees"}, nested},
+		{"the main checkout, worktrees nested in it", main, "Grep", map[string]any{"pattern": "Foo"}, hidden},
 		{"a submodule in a worktree inside the main checkout", main, "Bash", map[string]any{"command": "grep -n Foo .claude/worktrees/n/mods/sub/s.go"}, nested},
 		{"a worktree under a directory the main checkout's search leaves out", main, "Grep", map[string]any{"pattern": "Foo", "path": hidden}, hidden},
 		{"git --work-tree the worktree grep", main, "Bash", map[string]any{"command": "git --git-dir " + main + "/.git --work-tree " + wt + " grep Foo"}, wt},
