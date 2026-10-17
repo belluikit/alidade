@@ -113,6 +113,51 @@ persisted graph, no invalidation model, and no staleness policy.**
    done in 1.7 s, and its graph equals a fresh full build. The file can be
    deleted at any time, and the next session rebuilds it.
 
+   *Amended 2026-10-17 (#25, the owner's decision):* the graph tools
+   answer for another `git worktree` of the repository, named by `root`,
+   and the server holds that worktree's graph beside its own checkout's.
+   It is not built from nothing: it is the base graph with the worktree's
+   differences laid over it, as a union file system lays one directory
+   over another.
+   - **A layer whose files are the base's,** byte for byte by its
+     signature (#56), takes the base's contributions as they are.
+   - **A layer whose files differ** is extracted from the worktree, as a
+     build of it would be, except the Go layer.
+   - **The Go layer** loads again only the packages a differing Go file
+     is in, and takes every other package from the base. A go.mod, go.sum
+     or go.work that differs builds the layer whole.
+   - **What a load of fewer packages cannot see** is a package's
+     whole-program edges: every implementation an interface call reaches,
+     every function value reaching a call, an implements edge to an
+     interface outside the load. The base's such edges from a declaration
+     the worktree still has, into a package not loaded again, are kept,
+     INFERRED with carried=base (ADR 006: the ends are real nodes, the
+     relationship may be stale).
+   - **Freshness is the base's rule:** a worktree's graph is made again
+     when its files change or when the base's graph does. Nothing is
+     persisted. The server holds at most four worktrees' graphs and lets
+     the one used longest ago go.
+
+   The assumption this rests on: a package the worktree did not change
+   has the base's declarations and edges, apart from whole-program edges
+   into changed code. Measured on #25 against a full build of each
+   worktree: on six govm worktrees the Go layer missed at most 0.06% of
+   the changed packages' edges and had at most 0.07% wrong. On
+   trendvidia/go, through the server's own path, go-notiny's graph equals
+   a full build of it but for 2 stale carried edges of 533,866, in 3.9 s
+   against 21.7 s. go-fastleaf's differs by 47 nodes in cgo test packages
+   whose source is the base's and which each checkout's compiled toolchain
+   resolves differently: an unchanged package is as the base's build saw
+   it. The peak memory is the base build's: 7.4–8.0 GB with a worktree's
+   graph against 7.8 GB without. Not measured: a worktree far from the
+   base, where carried edges go stale as it diverges.
+   `TestOverlayIsAWorktreeBuild` fails the day a worktree's graph differs
+   from a full build of it by more than its carried edges.
+
+   This is the reopen named below, "the MCP surface starts holding graphs
+   across checkouts": the invalidation model is the layer signatures
+   already in use, applied between two trees instead of two builds.
+
 2. **Caching is delegated, not reimplemented.** Caliper's result cache
    (`pkg/mcp/resultcache.go`) already keys on a source fingerprint —
    `(relpath, mtime, size)` per file. alidade reuses whatever each layer provides
@@ -194,6 +239,8 @@ implementation detail of the surface, not of the core.
   above is the same reopen as a single module that does.
 * **The MCP surface starts holding graphs across checkouts** — at that point
   there is a cache with an invalidation problem whether or not it is called one.
+
+  *Reached, 2026-10-17 (#25):* see decision 1's amendment of that date.
 * **Cross-repo graphs arrive.** Building N repos on demand does not scale the way
   building one does, and that is the most likely trigger of the three.
 
