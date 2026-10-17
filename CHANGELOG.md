@@ -18,6 +18,15 @@ tracker's. From v0.12.1 on, every number is this repository's.
   its declarations stay, `graph_stats` lists its broken package under
   `go_packages_failed` and the packages it cost their calls under
   `go_packages_without_calls`, and the other modules are read whole.
+  
+- **Fixed: a graph built while jedi is still reading the Python files
+  no longer keeps its INFERRED Python calls after jedi is done** (#34).
+  A rebuild for an edit to a non-Python file kept the Python layer as it
+  was last made, which could be older than what jedi had read; the
+  server took that graph for current, and its calls stayed INFERRED by
+  name until the next Python edit. A build that keeps the Python layer
+  now folds in what jedi has read since, and so does a worktree's build
+  that takes the Python layer from the session's.
 - **Added: the graph tools answer for another worktree** (#25; ADR 005
   amended). `find_nodes`, `get_node`, `neighbors`, `shortest_path`,
   `subgraph_for_question`, `graph_stats`, `graph_issues` and `rebuild`
@@ -32,7 +41,10 @@ tracker's. From v0.12.1 on, every number is this repository's.
   trendvidia/go a worktree's graph took 3.9–4.4 s against 21.7–22.4 s for
   a full build. `graph_stats` with `root` says what was reused under
   `overlay`. The server holds four worktrees' graphs at most. The grep
-  hook's refusal in a worktree names the graph tools too. `search_text`
+  hook's refusal in a worktree names the graph tools too. A worktree
+  that changes a package only another platform or a build tag brings in
+  is laid over the session's graph too, the package read under the
+  configuration a full build reads it under (#35). `search_text`
   with `root` still never waits for a build: its hits name their
   declarations when that worktree's graph is already built and current,
   and otherwise carry a `note` saying why they name none.

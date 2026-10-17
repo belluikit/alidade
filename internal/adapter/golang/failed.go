@@ -188,19 +188,27 @@ func askedDirs(lm loadedModule) map[string]bool {
 	}
 	out := map[string]bool{}
 	for _, p := range lm.only {
-		rel := p
-		if lm.Path != "std" {
-			rel = strings.TrimPrefix(strings.TrimPrefix(p, lm.Path), "/")
-		}
-		out[filepath.Join(lm.Dir, filepath.FromSlash(rel))] = true
+		out[packageDir(lm.Module, p)] = true
 	}
 	return out
+}
+
+// packageDir is the directory of a package of mod, by import path.
+func packageDir(mod Module, importPath string) string {
+	rel := importPath
+	if mod.Path != "std" {
+		rel = strings.TrimPrefix(strings.TrimPrefix(importPath, mod.Path), "/")
+	}
+	return filepath.Join(mod.Dir, filepath.FromSlash(rel))
 }
 
 // loadedDirs is the set of directories some package of the load, loaded
 // or failed, came from.
 func loadedDirs(eng *analysis.Engine) map[string]bool {
 	out := map[string]bool{}
+	if eng == nil {
+		return out // nothing loaded for the host
+	}
 	for _, p := range append(eng.Packages(), eng.Failed()...) {
 		for _, f := range append(append([]string{}, p.GoFiles...), p.IgnoredFiles...) {
 			out[filepath.Dir(f)] = true

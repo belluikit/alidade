@@ -125,10 +125,19 @@ persisted graph, no invalidation model, and no staleness policy.**
      build of it would be, except the Go layer.
    - **The Go layer** loads again only the packages a differing Go file
      is in, and takes every other package from the base. A go.mod, go.sum
-     or go.work that differs builds the layer whole, and so does a
-     differing package holding no Go file the host's configuration
-     builds (one only a build tag brings in), since a load naming it
-     fails.
+     or go.work that differs builds the layer whole.
+     *Amended 2026-10-17 (#35, the owner's decision):* a differing
+     package the host's configuration builds no file of (only another
+     platform or a build tag brings it in) no longer builds the layer
+     whole. A load naming it fails its module, so the host's load leaves
+     it out. It is loaded under the further configurations the base's
+     build chose, those of them that bring in a file of it, so it is read
+     under the configuration a full build reads it under, or skipped as a
+     full build skips it. On trendvidia/go, a worktree changing
+     internal/syscall/windows/sysdll took 3.9 s against 22.5 s for a
+     full build, and 11.1 s against 2 min 4 s with `-go-configs auto`.
+     `TestOverlayOfAnotherPlatformsPackage` fails the day such a package
+     is read under another configuration than a full build's.
    - **What a load of fewer packages cannot see** is a package's
      whole-program edges: every implementation an interface call reaches,
      every function value reaching a call, an implements edge to an

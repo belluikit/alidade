@@ -266,17 +266,18 @@ func (cv *coverage) take(c config) {
 // and which of the host's excluded files each brings in. mode is "" for
 // none, "auto" to pick from candidates greedily until no candidate
 // covers a further file, or a comma-separated GOOS/GOARCH list to take
-// as given. covered maps a file to the configuration that includes it,
-// and unread the files no constraint could be read from, each with why.
-// Only a malformed mode is an error.
-func chooseConfigs(mode string, host config, excluded []string) (configs []config, covered map[string]config, unread map[string]error, err error) {
+// as given; with gaining, a listed one that brings in no further file is
+// left out (#35). covered maps a file to the configuration that includes
+// it, and unread the files no constraint could be read from, each with
+// why. Only a malformed mode is an error.
+func chooseConfigs(mode string, host config, excluded []string, gaining bool) (configs []config, covered map[string]config, unread map[string]error, err error) {
 	if mode == "" || len(excluded) == 0 && mode == "auto" {
 		return nil, map[string]config{}, map[string]error{}, nil
 	}
 	cv := readConstraints(excluded)
 	if mode == "auto" {
 		configs = autoConfigs(cv, host)
-	} else if configs, err = listedConfigs(cv, host, mode); err != nil {
+	} else if configs, err = listedConfigs(cv, host, mode, gaining); err != nil {
 		return nil, nil, nil, err
 	}
 	return configs, cv.covered, cv.unread, nil
@@ -303,15 +304,16 @@ func autoConfigs(cv *coverage, host config) []config {
 	}
 }
 
-// listedConfigs takes the configurations as named, the host's skipped.
-func listedConfigs(cv *coverage, host config, list string) ([]config, error) {
+// listedConfigs takes the configurations as named, the host's skipped,
+// and with gaining those that bring in no file the earlier ones did not.
+func listedConfigs(cv *coverage, host config, list string, gaining bool) ([]config, error) {
 	var configs []config
 	for _, s := range strings.Split(list, ",") {
 		c, err := parseConfig(s)
 		if err != nil {
 			return nil, err
 		}
-		if c != host {
+		if c != host && (!gaining || cv.gain(c) > 0) {
 			configs = append(configs, c)
 			cv.take(c)
 		}
