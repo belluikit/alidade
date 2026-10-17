@@ -412,6 +412,30 @@ func (s *Session) Refresh() (*graph.Graph, *Report, error) {
 	return g, &rep, nil
 }
 
+// pyCurrent brings the Python layer the build has to what jedi knows
+// now: the base's, for a worktree whose Python files are the base's, or
+// the session's own when it was kept (#34). live is the session's own
+// previous jedi.
+func (s *Session) pyCurrent(rep, prev *Report, live *py.Live) error {
+	switch {
+	case s.from["py"] == "base":
+		if live != nil {
+			live.Close() // the worktree's own jedi, its files now the base's
+		}
+		if s.base.pyBehind(s.base.rep) {
+			if _, _, err := s.base.Refresh(); err != nil {
+				return err
+			}
+		}
+		s.pyFromBase(rep)
+	case rep.Py != prev.Py:
+		s.pyAt = 0 // a new jedi, its version counted from 0
+	case s.pyBehind(rep):
+		return s.refreshPy(rep)
+	}
+	return nil
+}
+
 // pyBehind says whether jedi has read more since rep's Python layer was
 // made (#34).
 func (s *Session) pyBehind(rep *Report) bool {
@@ -555,23 +579,8 @@ func (s *Session) layers(rep, prev *Report, changed func(string) bool, drop func
 	}), func(r *py.Report) int { return r.Files + len(r.Skipped) }); err != nil {
 		return err
 	}
-	switch {
-	case s.from["py"] == "base":
-		if live != nil {
-			live.Close() // the worktree's own jedi, its files now the base's
-		}
-		if s.base.pyBehind(s.base.rep) {
-			if _, _, err := s.base.Refresh(); err != nil {
-				return err
-			}
-		}
-		s.pyFromBase(rep)
-	case rep.Py != prev.Py:
-		s.pyAt = 0 // a new jedi, its version counted from 0
-	case s.pyBehind(rep):
-		if err := s.refreshPy(rep); err != nil {
-			return err
-		}
+	if err := s.pyCurrent(rep, prev, live); err != nil {
+		return err
 	}
 	if rep.Schema, err = s.schemaRoots(prev, changed); err != nil {
 		return err
