@@ -174,7 +174,7 @@ installed packages. A name only one layer skips as its build output (`build`,
 `dist`, `out`) is a Go package or a Markdown directory to another layer, and
 skipping it hid `internal/build` from search.
 
-*Amended 2026-10-16 (#24):* another checkout of the
+*Amended 2026-10-16 (#24, the owner's decision):* another checkout of the
 same repository nested inside it is left out by every layer, `search_text`,
 the fingerprint and the hook's skip check, whatever the list says. Claude
 Code puts its worktrees under `.claude/worktrees/<name>`, and reading one put
@@ -188,6 +188,23 @@ check is one `lstat` of `.git` per directory entered, and only a directory
 holding one reads further. `TestNestedWorktreeIsLeftOut` fails the day a
 nested worktree's module or files come back, or a nested repository of its
 own stops being read.
+
+Three edges, each decided by the owner on 2026-10-16:
+
+- **No override.** A nested worktree is never read, even one holding another
+  branch's content, such as `gh-pages` checked out inside the repository, and
+  the list cannot bring one back (#30). No repository measured has one; it is
+  searched with `search_text`'s `root`. An include list is the remedy if one
+  turns up.
+- **No guessing from a moved checkout.** After the main checkout is moved, a
+  nested worktree's `.git` still names the old place, and git reports it
+  broken until `git worktree repair`. alidade does not match the dead path's
+  `worktrees/<name>` to decide it is still the repository's, so such a
+  worktree is read until it is repaired (#31; `TestMovedMainCheckoutIsNotGuessed`).
+- **The hook names what search leaves out.** A grep of a directory holding
+  nested worktrees, `.claude/worktrees` for instance, is refused, and the
+  refusal names each nested worktree's `root`, so the refusal can still be
+  answered through `search_text` (#31).
 
 ## Amended 2026-10-09: Python is read (#237, the owner's decision; ADR 008)
 
