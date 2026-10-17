@@ -18,6 +18,13 @@
 // dependencies (node_modules, dist, .git); it cannot bring one of those
 // back.
 //
+// Another checkout of the same repository nested inside it — a `git
+// worktree` under .claude/worktrees/<name>, say — is left out too, and
+// the list cannot bring it back (#24): it is another branch's copy of the
+// same code, and reading one under a directory the Go layer enters loaded
+// the repository's Go module twice. A submodule, which has a git
+// directory of its own, is read.
+//
 // Installed packages are left out besides the list, wherever they are,
 // and the list cannot bring them back (#266): a virtual environment — a
 // directory holding a pyvenv.cfg, whatever its name — and a directory
@@ -35,6 +42,8 @@ import (
 	"strings"
 
 	"github.com/trendvidia/protowire-go/encoding/pxf"
+
+	"github.com/belluikit/alidade/internal/worktree"
 )
 
 // File is the configuration's name, at the repository's root.
@@ -163,15 +172,26 @@ func (d *Dirs) Skips(rel string) bool {
 }
 
 // SkipsDir is Skips for an absolute directory under root, and also
-// reports a virtual environment, whatever its name. A walk asks it of
-// every directory it would enter, so it never enters one under a
-// directory it reports.
+// reports a virtual environment, whatever its name, and another checkout
+// of root's repository. A walk asks it of every directory it would
+// enter, so it never enters one under a directory it reports.
 func (d *Dirs) SkipsDir(root, dir string) bool {
 	rel, err := filepath.Rel(root, dir)
 	if err != nil || rel == "." {
 		return false
 	}
-	return d.Skips(rel) || Venv(dir)
+	return d.Skips(rel) || Venv(dir) || OtherCheckout(root, dir)
+}
+
+// OtherCheckout reports whether dir, under root, is the top of another
+// checkout of root's repository: a worktree of it, or its main checkout
+// when root is a worktree. A directory holding no .git of its own costs
+// one stat.
+func OtherCheckout(root, dir string) bool {
+	if _, err := os.Lstat(filepath.Join(dir, ".git")); err != nil {
+		return false
+	}
+	return worktree.Same(dir, worktree.Top(root))
 }
 
 // SkipsUnder reports whether p, a file or directory under root that no
@@ -186,7 +206,7 @@ func (d *Dirs) SkipsUnder(root, p string) bool {
 		if rel == "" || rel == "." || rel == ".." || strings.HasPrefix(rel, "../") {
 			return false
 		}
-		if Venv(dir) {
+		if Venv(dir) || OtherCheckout(root, dir) {
 			return true
 		}
 	}

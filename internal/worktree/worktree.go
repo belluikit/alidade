@@ -16,9 +16,15 @@ import (
 	"strings"
 )
 
-// Top is the top directory of the checkout holding dir, or "".
+// Top is the top directory of the checkout holding dir, or "". It is
+// absolute: a relative dir is the process's, and climbing "." would end
+// at once.
 func Top(dir string) string {
-	for d := filepath.Clean(dir); ; d = filepath.Dir(d) {
+	d, err := filepath.Abs(dir)
+	if err != nil {
+		return ""
+	}
+	for ; ; d = filepath.Dir(d) {
 		if _, err := os.Stat(filepath.Join(d, ".git")); err == nil {
 			return d
 		}
@@ -31,11 +37,15 @@ func Top(dir string) string {
 // CommonDir is the git directory a checkout's top shares with every
 // other checkout of its repository: the main checkout's .git, which a
 // linked worktree's .git file leads to through its gitdir's commondir.
-// It is "" when top is no checkout, and has its symbolic links resolved,
-// so two of them compare as strings.
+// It is "" when top is no checkout, and is absolute with its symbolic
+// links resolved, so two of them compare as strings.
 func CommonDir(top string) string {
 	if top == "" {
 		// filepath.Join would make ".git", the process's own.
+		return ""
+	}
+	top, err := filepath.Abs(top)
+	if err != nil {
 		return ""
 	}
 	dotgit := filepath.Join(top, ".git")
@@ -69,6 +79,33 @@ func CommonDir(top string) string {
 func Same(a, b string) bool {
 	ca := CommonDir(a)
 	return ca != "" && ca == CommonDir(b)
+}
+
+// List is the tops of every linked worktree of top's repository, as git
+// records them: each <commondir>/worktrees/<name>/gitdir names the
+// worktree's .git file. A worktree whose directory is gone is left out.
+func List(top string) []string {
+	common := CommonDir(top)
+	if common == "" {
+		return nil
+	}
+	entries, err := os.ReadDir(filepath.Join(common, "worktrees"))
+	if err != nil {
+		return nil
+	}
+	var out []string
+	for _, e := range entries {
+		b, err := os.ReadFile(filepath.Join(common, "worktrees", e.Name(), "gitdir"))
+		if err != nil {
+			continue
+		}
+		wt := filepath.Dir(abs(filepath.Join(common, "worktrees", e.Name()), strings.TrimSpace(string(b))))
+		if _, err := os.Stat(wt); err == nil {
+			out = append(out, wt)
+		}
+	}
+	slices.Sort(out)
+	return out
 }
 
 // localEnv are the variables that point git at a repository other than

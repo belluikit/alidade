@@ -626,3 +626,23 @@ func TestSearchTextRootOutsideAnyRepository(t *testing.T) {
 		t.Errorf("root %s, from a graph in no repository: %s (refused %v), want it refused as in no repository", wt, text, isErr)
 	}
 }
+
+// TestSearchTextLeavesNestedWorktreesOut pins #24: from the main
+// checkout, a worktree nested inside it is not searched — its hits came
+// back once per worktree — while root searches it as its own tree.
+func TestSearchTextLeavesNestedWorktreesOut(t *testing.T) {
+	main := gittest.TempDir(t)
+	gittest.Init(t, main, map[string]string{"docs/x.md": "# X\n\nmarker\n"})
+	nested := filepath.Join(main, ".claude/worktrees/f")
+	gittest.Git(t, main, "worktree", "add", "-q", "-b", "f", nested)
+	s := New(func() (*graph.Graph, BuildInfo, error) {
+		return graph.NewBuilder(main).Build(), BuildInfo{Root: main}, nil
+	}).Root(main)
+	h := &harness{t: t, c: connect(t, s)}
+	if r := h.callJSON("search_text", map[string]any{"pattern": "marker", "files_only": true}); r["total"] != 1.0 {
+		t.Errorf("from the main checkout: %v, want docs/x.md alone", r["matches"])
+	}
+	if r := h.callJSON("search_text", map[string]any{"pattern": "marker", "root": nested}); r["total"] != 1.0 || r["root"] != nested {
+		t.Errorf("root at the nested worktree: %v", r)
+	}
+}

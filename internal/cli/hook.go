@@ -49,7 +49,7 @@ func hook(stdin io.Reader, stdout, stderr io.Writer) int {
 	out := map[string]any{"hookSpecificOutput": map[string]any{
 		"hookEventName":            "PreToolUse",
 		"permissionDecision":       "deny",
-		"permissionDecisionReason": reasonFor(in.ToolInput.Command, top, repo),
+		"permissionDecisionReason": nestedNote(target, top) + reasonFor(in.ToolInput.Command, top, repo),
 	}}
 	if err := json.NewEncoder(stdout).Encode(out); err != nil {
 		fmt.Fprintf(stderr, "alidade hook: %v\n", err)
@@ -74,6 +74,23 @@ const escapeNote = "Grep comes back only for a session started with ALIDADE_ALLO
 // inlineEscapeRE is ALIDADE_ALLOW_GREP=1 written into a command, as an
 // assignment before a program or an export.
 var inlineEscapeRE = regexp.MustCompile(`(^|[\s;&|(])(export\s+)?ALIDADE_ALLOW_GREP=1\b`)
+
+// nestedNote names the worktrees nested under a search's target, which
+// search_text from the checkout holding them leaves out (#24), so the
+// refusal stays answerable: grep -r Foo .claude/worktrees is told each
+// worktree's root (#31). Empty when none is nested there.
+func nestedNote(target, top string) string {
+	var nested []string
+	for _, wt := range worktree.List(top) {
+		if wt != top && inside(wt, target) {
+			nested = append(nested, fmt.Sprintf("root=%q", wt))
+		}
+	}
+	if len(nested) == 0 {
+		return ""
+	}
+	return "search_text leaves out the worktrees nested in " + target + "; search each with " + strings.Join(nested, ", ") + ". "
+}
 
 // reasonFor is the refusal's reason, saying so when the command set
 // ALIDADE_ALLOW_GREP=1 itself: it is not honoured there, since an agent
@@ -129,12 +146,18 @@ func served(targets []string, repo string) (string, string, bool) {
 
 // checkoutOf is the checkout of the repository a target lies in: the
 // repository's own, or another worktree of it; "" for neither. The
-// nearest checkout is asked first, since a worktree can lie inside the
-// repository's own, as Claude Code's .claude/worktrees/<name> does, and
-// a search there is one of that worktree.
+// nearest checkout of the repository is asked first, since a worktree
+// can lie inside the repository's own, as Claude Code's
+// .claude/worktrees/<name> does, and a search there is one of that
+// worktree, even in a submodule inside it (#24).
 func checkoutOf(target, repo string) string {
-	if top := worktree.Top(target); top != "" && worktree.Same(top, repo) {
-		return top
+	for top := worktree.Top(target); top != ""; top = worktree.Top(filepath.Dir(top)) {
+		if worktree.Same(top, repo) {
+			return top
+		}
+		if top == filepath.Dir(top) {
+			break
+		}
 	}
 	if inside(target, repo) {
 		return repo

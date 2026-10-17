@@ -8,6 +8,15 @@ tracker's. From v0.12.1 on, every number is this repository's.
 
 ## Unreleased
 
+- **Fixed: a `git worktree` nested inside the repository is not read as
+  part of it** (#24; ADR 003 amended). One under `.claude/worktrees/`,
+  where Claude Code puts them, had its files read under their nested
+  paths, and every `search_text` hit came back once per worktree. One
+  under an ordinary directory, not a dot-directory, also loaded the
+  repository's Go module a second time. A submodule, which has a git
+  directory of its own, is still read.
+  A grep of a directory holding nested worktrees is refused with each
+  one's `root` named (#31).
 - **Added: `search_text` answers for another worktree, a commit, or all
   but some paths** (#23). `root` searches another `git worktree` of the
   repository, by its top directory, and `ref` searches a commit's files

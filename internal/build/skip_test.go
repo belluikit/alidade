@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/belluikit/alidade/internal/graph"
+	"github.com/belluikit/alidade/internal/worktree/gittest"
 )
 
 // TestOneBadInputCostsOneFact pins #92: an input no ID can name, or that
@@ -460,5 +461,44 @@ func wantLayers(t *testing.T, root, dir string, want []string) {
 		if !got[l] {
 			t.Errorf("no %s node under %s: layers %v", l, dir, got)
 		}
+	}
+}
+
+// TestNestedWorktreeIsLeftOut pins #24: a `git worktree` of the
+// repository nested inside it — under .claude/worktrees, or any other
+// directory — is read by no layer and not by the fingerprint, so its Go
+// module is not loaded a second time; another repository nested the same
+// way, as a submodule is, is still read (TestSkippedDirectories).
+func TestNestedWorktreeIsLeftOut(t *testing.T) {
+	root := gittest.TempDir(t)
+	files := map[string]string{"go.mod": "module example.com/m\n\ngo 1.26\n", "a/a.go": "package a\n\nfunc F() {}\n",
+		"docs/x.md": "# X\n", "web/a.ts": "export function a() {}\n", "p/a.proto": "syntax = \"proto3\";\npackage p;\nmessage M {}\n"}
+	gittest.Init(t, root, files)
+	gittest.Git(t, root, "worktree", "add", "-q", "-b", "f", filepath.Join(root, ".claude/worktrees/f"))
+	gittest.Git(t, root, "worktree", "add", "-q", "-b", "g", filepath.Join(root, "wts/g"))
+	gittest.Init(t, filepath.Join(root, "nested"), map[string]string{"doc.md": "# Nested\n"})
+	g, rep := mustBuild(t, root)
+	for n := range g.Nodes() {
+		if strings.HasPrefix(n.Pos.File, ".claude/") || strings.HasPrefix(n.Pos.File, "wts/") || strings.HasPrefix(string(n.ID), "md://.claude") || strings.HasPrefix(string(n.ID), "md://wts") {
+			t.Errorf("%s, of a nested worktree, is in the graph", n.ID)
+		}
+	}
+	if rep.Go == nil || !slices.Equal(rep.Go.Modules, []string{"example.com/m"}) {
+		t.Errorf("Go modules %v, want example.com/m once", rep.Go)
+	}
+	if _, ok := g.Node("md://nested/doc.md#nested"); !ok {
+		t.Error("a nested repository of its own, as a submodule is, was not read")
+	}
+	s, err := NewSession(root, DefaultOptions())
+	if err != nil {
+		t.Fatal(err)
+	}
+	before, err := s.Fingerprint()
+	if err != nil {
+		t.Fatal(err)
+	}
+	write(t, filepath.Join(root, "wts/g/docs/x.md"), "# Changed in the worktree\n")
+	if after, _ := s.Fingerprint(); after != before {
+		t.Error("an edit in a nested worktree changed the fingerprint")
 	}
 }
