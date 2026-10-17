@@ -132,4 +132,15 @@ func TestOtherCheckout(t *testing.T) {
 	if !d.SkipsUnder(root, filepath.Join(root, "wt", "README.md")) || d.SkipsUnder(root, filepath.Join(root, "own", "README.md")) {
 		t.Error("SkipsUnder: a file of the nested worktree is skipped, one of the nested repository is not")
 	}
+	// A relative root, as a walk from the process's directory names it:
+	// its git directory once came out relative and the worktree's
+	// absolute, so the two never compared equal.
+	t.Chdir(root)
+	if !d.SkipsDir(".", "wt") || d.SkipsDir(".", "own") {
+		t.Error("SkipsDir with a relative root: the nested worktree is skipped, the nested repository is not")
+	}
+	t.Chdir("sub")
+	if !OtherCheckout("..", filepath.Join("..", "wt")) {
+		t.Error("OtherCheckout from a subdirectory, with a relative root: the nested worktree is not reported")
+	}
 }

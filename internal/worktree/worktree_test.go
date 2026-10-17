@@ -79,3 +79,21 @@ func TestGitEnvLeavesAHooksRepositoryOut(t *testing.T) {
 		t.Errorf("dir's repository holds %q, want a.md", got)
 	}
 }
+
+// TestRelativeDirectories: a directory named relative to the process's
+// has the same top and git directory as named absolute. Top(".") from a
+// subdirectory once ended at "." with no top, and CommonDir(".") came
+// out ".git", which equals no worktree's.
+func TestRelativeDirectories(t *testing.T) {
+	base := gittest.TempDir(t)
+	main, wt := filepath.Join(base, "main"), filepath.Join(base, "main", "wt")
+	gittest.Init(t, main, map[string]string{"sub/a.md": "# a\n"})
+	gittest.Git(t, main, "worktree", "add", "-q", "-b", "feature", wt)
+	t.Chdir(filepath.Join(main, "sub"))
+	if got := worktree.Top("."); got != main {
+		t.Errorf("Top(\".\") = %q, want %s", got, main)
+	}
+	if !worktree.Same("..", wt) || !worktree.Same(filepath.Join("..", "wt"), main) {
+		t.Errorf("Same with a relative top: common dirs %q, %q and %q", worktree.CommonDir(".."), worktree.CommonDir(filepath.Join("..", "wt")), worktree.CommonDir(main))
+	}
+}

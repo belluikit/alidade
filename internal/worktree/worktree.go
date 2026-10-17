@@ -16,9 +16,15 @@ import (
 	"strings"
 )
 
-// Top is the top directory of the checkout holding dir, or "".
+// Top is the top directory of the checkout holding dir, or "". It is
+// absolute: a relative dir is the process's, and climbing "." would end
+// at once.
 func Top(dir string) string {
-	for d := filepath.Clean(dir); ; d = filepath.Dir(d) {
+	d, err := filepath.Abs(dir)
+	if err != nil {
+		return ""
+	}
+	for ; ; d = filepath.Dir(d) {
 		if _, err := os.Stat(filepath.Join(d, ".git")); err == nil {
 			return d
 		}
@@ -31,11 +37,15 @@ func Top(dir string) string {
 // CommonDir is the git directory a checkout's top shares with every
 // other checkout of its repository: the main checkout's .git, which a
 // linked worktree's .git file leads to through its gitdir's commondir.
-// It is "" when top is no checkout, and has its symbolic links resolved,
-// so two of them compare as strings.
+// It is "" when top is no checkout, and is absolute with its symbolic
+// links resolved, so two of them compare as strings.
 func CommonDir(top string) string {
 	if top == "" {
 		// filepath.Join would make ".git", the process's own.
+		return ""
+	}
+	top, err := filepath.Abs(top)
+	if err != nil {
 		return ""
 	}
 	dotgit := filepath.Join(top, ".git")
