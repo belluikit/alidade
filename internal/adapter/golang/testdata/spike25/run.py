@@ -42,7 +42,9 @@ def changed_pkgs(base_tree, wt):
     base = subprocess.run(["git", "-C", base_tree, "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip()
     files = subprocess.run(["git", "-C", wt, "diff", "--name-only", base], capture_output=True, text=True).stdout.split()
     files += subprocess.run(["git", "-C", wt, "ls-files", "--others", "--exclude-standard"], capture_output=True, text=True).stdout.split()
-    gofiles = sorted({f for f in files if f.endswith(".go") and "/testdata/" not in f and not f.startswith("testdata/")})
+    # The full build's ./... skips testdata and any directory starting with _ or .
+    hidden = lambda f: any(d == "testdata" or d[:1] in "_." for d in f.split("/")[:-1])
+    gofiles = sorted({f for f in files if f.endswith(".go") and not hidden(f)})
     pk = set()
     for f in gofiles:
         ip = module_of(wt, os.path.dirname(f)) or module_of(base_tree, os.path.dirname(f))
