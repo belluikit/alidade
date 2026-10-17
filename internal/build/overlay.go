@@ -435,10 +435,10 @@ func (s *Session) overlayReport(rep *Report) *Overlay {
 	return o
 }
 
-// refreshFromBase folds what jedi has learnt since (#269) into the base,
-// whose Python files the worktree's are, and takes its Python layer again.
+// refreshFromBase folds what jedi has learnt since (#269) into the base's
+// Python layer, whose files the worktree's are, and takes it again.
 func (s *Session) refreshFromBase(rep *Report) error {
-	if _, _, err := s.base.Refresh(); err != nil {
+	if err := s.base.catchUpPy(); err != nil {
 		return err
 	}
 	s.pyFromBase(rep)

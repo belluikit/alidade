@@ -199,3 +199,38 @@ func TestFailedBuildAfterAPythonRefresh(t *testing.T) {
 	}
 	sameAsFresh(t, root, g)
 }
+
+// TestOverlayRefreshFoldsInTheBasesJedi: a worktree's refresh, its Python
+// layer the base's, takes what jedi has learnt since though the base has
+// not refreshed (#269, #34).
+func TestOverlayRefreshFoldsInTheBasesJedi(t *testing.T) {
+	if !python.Available() {
+		t.Skip("built without the python tag")
+	}
+	main, wt := worktreeOf(t, map[string]string{
+		"a.py": "def f():\n    pass\n\n\nclass C:\n    def m(self):\n        pass\n",
+		"b.py": "from a import f, C\n\n\ndef g():\n    f()\n    C().m()\n",
+	}, nil)
+	opts := DefaultOptions()
+	opts.Py.Background = true
+	base, err := NewSession(main, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(base.Close)
+	if _, rep := mustSessionBuild(t, base); rep.Py.Pending == 0 {
+		t.Skip("jedi was done before the first build answered")
+	}
+	o, err := base.Overlay(wt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(o.Close)
+	mustSessionBuild(t, o)
+	base.rep.Py.Live.Wait()
+	g, _, err := o.Refresh()
+	if err != nil {
+		t.Fatal(err)
+	}
+	sameAsFresh(t, wt, g)
+}
