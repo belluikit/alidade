@@ -345,10 +345,13 @@ func TestOwnLiveIsNeverTheBases(t *testing.T) {
 // layer skips are a full build's of it. A package loaded again has its
 // own skips in place of the base's: here a //line directive naming a
 // source outside the tree (#109), gone from one package and added to
-// another.
+// another. A directory below a package loaded again keeps the base's
+// skip: a/tagged, which only a build tag brings in, as src/runtime/asan
+// is below src/runtime in the Go repository.
 func TestOverlaySkipsAreAWorktreeBuilds(t *testing.T) {
 	files := maps.Clone(overlayRepo)
 	files["a/gen.go"] = "package a\n\n//line /outside/gen.y:1\nfunc Gen() int { return 1 }\n"
+	files["a/tagged/t.go"] = "//go:build tools\n\npackage tagged\n"
 	main, wt := worktreeOf(t, files, map[string]string{
 		"a/gen.go": "package a\n\nfunc Gen() int { return 1 }\n",
 		"c/gen.go": "package c\n\n//line /outside/gen.y:1\nfunc Gen() int { return 1 }\n",
@@ -361,7 +364,19 @@ func TestOverlaySkipsAreAWorktreeBuilds(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !slices.Equal(rep.Go.Skipped, full.Go.Skipped) || len(full.Go.Skipped) != 1 {
+	if !slices.Equal(rep.Go.Skipped, full.Go.Skipped) || len(full.Go.Skipped) != 2 {
 		t.Errorf("skipped %+v, a full build of the worktree %+v", rep.Go.Skipped, full.Go.Skipped)
+	}
+}
+
+// TestOverlaidSkipsNameTheWorktree: a skip kept from the base whose
+// reason names a path of the base's, as a module's load failure does,
+// names the worktree's, as a full build of it would (#35).
+func TestOverlaidSkipsNameTheWorktree(t *testing.T) {
+	base, wt := filepath.Join("/x", "go"), filepath.Join("/x", "go-wt")
+	at := func(root string) string { return filepath.Join(root, "misc", "gmp.go") }
+	got := overlaidSkips([]graph.Skip{{File: "misc/go.mod", Reason: "load " + at(base) + ": no C"}}, nil, nil, base, wt)
+	if len(got) != 1 || got[0].Reason != "load "+at(wt)+": no C" {
+		t.Errorf("skips %+v, want the reason to name %s", got, at(wt))
 	}
 }
