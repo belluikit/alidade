@@ -380,8 +380,8 @@ func (cv *coverage) take(c config) {
 // chooseConfigs decides which configurations beyond the host's to load,
 // and which of the host's excluded files each brings in. mode is "" for
 // none, "auto" to pick from candidates greedily until no candidate
-// covers a further file, or a comma-separated GOOS/GOARCH list to take
-// as given; with gaining, a listed one that brings in no further file is
+// covers a further file, or a comma-separated list of GOOS/GOARCH, each
+// with build tags if any (linux/amd64+gl), to take as given; with gaining, a listed one that brings in no further file is
 // left out (#35). covered maps a file to the configuration that includes
 // it, and unread the files no constraint could be read from, each with
 // why. Only a malformed mode is an error.

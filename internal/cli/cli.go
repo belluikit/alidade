@@ -50,7 +50,8 @@ flags (serve and graph):
                   interface call can keep package-level edges into packages
                   only tests bring in
   -go-configs     Go build configurations beyond the host's: "auto", or a
-                  GOOS/GOARCH list such as "linux/amd64,windows/arm64"
+                  GOOS/GOARCH list such as "linux/amd64,windows/arm64", a
+                  configuration's build tags after it: "linux/amd64+gl"
   -go-deps-source type-check Go dependencies from source instead of taking
                   their types from the compiler's export data (the default
                   since v0.4.0): the module's graph is the same either way,
@@ -95,7 +96,7 @@ func Run(args []string, stdout, stderr io.Writer) int {
 	root := fs.String("root", ".", "repository root")
 	tests := fs.Bool("tests", false, "include _test.go files")
 	testsExact := fs.Bool("tests-exact", false, "include _test.go files, with a production view exactly the build without tests (a second load)")
-	goConfigs := fs.String("go-configs", "", `Go build configurations beyond the host's: "auto", or "linux/amd64,windows/arm64"`)
+	goConfigs := fs.String("go-configs", "", `Go build configurations beyond the host's: "auto", or "linux/amd64,windows/arm64+gl"`)
 	depsSource := fs.Bool("go-deps-source", false, "type-check Go dependencies from source instead of taking their types from export data")
 	var schemaRoots []string
 	fs.Func("schema-root", "a repository whose .proto files this one's generated code comes from (repeatable)", func(v string) error {

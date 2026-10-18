@@ -529,25 +529,27 @@ func TestBrokenPackagesAreThereAndSaySo(t *testing.T) {
 	}
 }
 
+// platformOnlyFiles are a module with a package only windows builds,
+// one only the plugin tag includes, and one only plan9 builds.
+func platformOnlyFiles() map[string]string {
+	return map[string]string{
+		"win/w_windows.go": "package win\n\nfunc W() {}\n",
+		"plug/main.go":     "//go:build plugin\n\npackage main\n\nfunc Plug() {}\n",
+		"nine/n.go":        "//go:build plan9\n\npackage nine\n",
+		"p/p.go":           "package p\n\nfunc P() {}\n",
+	}
+}
+
 // TestPlatformOnlyPackages pins #95: a package whose every file is for
 // another platform is never matched by ./..., so no load names it. It is
-// recorded as skipped on the host, and -go-configs auto brings it in.
-// Since #48 so is one only a build tag includes, read with the tag set;
-// one no platform auto considers builds, with its tags or without, stays
-// skipped.
+// recorded as skipped on the host, saying whether -go-configs auto would
+// bring it in: since #48 also one only a build tag includes; not one no
+// platform auto considers builds, with its tags or without.
 func TestPlatformOnlyPackages(t *testing.T) {
-	files := func() map[string]string {
-		return map[string]string{
-			"win/w_windows.go": "package win\n\nfunc W() {}\n",
-			"plug/main.go":     "//go:build plugin\n\npackage main\n\nfunc Plug() {}\n",
-			"nine/n.go":        "//go:build plan9\n\npackage nine\n",
-			"p/p.go":           "package p\n\nfunc P() {}\n",
-		}
-	}
 	if runtime.GOOS == "windows" {
 		t.Skip("the platform-only package is the host's")
 	}
-	g, rep := module(t, files(), DefaultOptions())
+	g, rep := module(t, platformOnlyFiles(), DefaultOptions())
 	if _, ok := g.Node("go://example.com/m/win"); ok {
 		t.Fatal("the windows-only package loaded on the host")
 	}
@@ -555,14 +557,14 @@ func TestPlatformOnlyPackages(t *testing.T) {
 	for _, s := range rep.Skipped {
 		reasons[s.File] = s.Reason
 	}
-	if !strings.Contains(reasons["win"], "-go-configs auto would load another platform's") {
-		t.Errorf("win: reason %q", reasons["win"])
-	}
-	if !strings.Contains(reasons["plug"], "-go-configs auto would load them with their tags") {
-		t.Errorf("plug: reason %q", reasons["plug"])
-	}
-	if !strings.Contains(reasons["nine"], "for every platform -go-configs auto considers") {
-		t.Errorf("nine: reason %q", reasons["nine"])
+	for dir, want := range map[string]string{
+		"win":  "-go-configs auto would load another platform's",
+		"plug": "-go-configs auto would load them with their tags",
+		"nine": "for every platform -go-configs auto considers",
+	} {
+		if !strings.Contains(reasons[dir], want) {
+			t.Errorf("%s: reason %q, want %q", dir, reasons[dir], want)
+		}
 	}
 	// A reason reaches the build's output, where something
 	// machine-specific makes two builds of one tree disagree
@@ -573,9 +575,19 @@ func TestPlatformOnlyPackages(t *testing.T) {
 			t.Errorf("%s: reason %q names the host platform", f, r)
 		}
 	}
+}
+
+// TestAutoBringsInPlatformOnlyPackages: -go-configs auto reads the
+// package only windows builds, and the one only the plugin tag includes
+// with the tag set, its build attribute saying so (#95, #48); the one no
+// platform auto considers builds stays skipped.
+func TestAutoBringsInPlatformOnlyPackages(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the platform-only package is the host's")
+	}
 	opts := DefaultOptions()
 	opts.Configs = "auto"
-	g, rep = module(t, files(), opts)
+	g, rep := module(t, platformOnlyFiles(), opts)
 	if _, ok := g.Node("go://example.com/m/win#W"); !ok {
 		t.Errorf("-go-configs auto did not bring in win#W; configs %v", rep.Configs)
 	}
