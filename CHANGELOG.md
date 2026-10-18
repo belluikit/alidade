@@ -8,6 +8,17 @@ tracker's. From v0.12.1 on, every number is this repository's.
 
 ## Unreleased
 
+- **Fixed: one Go module whose packages do not type-check for the host
+  no longer fails the whole graph** (#37). Served from a folder of
+  sibling modules, one such module (gl-js, whose cgo GLES types do not
+  resolve on macOS) built no package for the call graph, and its error
+  ended the build: every tool answered `call graph for
+  github.com/belluikit/gl-js: no SSA packages built`. The module's calls
+  are now left out as a panic in the call graph already left them out:
+  its declarations stay, `graph_stats` lists its broken package under
+  `go_packages_failed` and the packages it cost their calls under
+  `go_packages_without_calls`, and the other modules are read whole.
+  
 - **Fixed: a graph built while jedi is still reading the Python files
   no longer keeps its INFERRED Python calls after jedi is done** (#34).
   A rebuild for an edit to a non-Python file kept the Python layer as it

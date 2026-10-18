@@ -652,10 +652,7 @@ func (x *extractor) pass(pkgs []*packages.Package) error {
 		return err
 	}
 	emitted := time.Now()
-	ipc, failure, err := x.interProcedural()
-	if err != nil {
-		return fmt.Errorf("golang: call graph for %s: %w", x.module, err)
-	}
+	ipc, failure := x.interProcedural()
 	built := time.Now()
 	if failure != "" {
 		if err := x.callGraphFailed(pkgs, failure); err != nil {
@@ -681,17 +678,23 @@ var callGraphOf = (*analysis.Engine).InterProcedural
 // interProcedural builds the module's call graph, and recovers a panic
 // inside it as a failure to report rather than a build that dies: x/tools
 // panicked walking a method with type parameters of its own (#216), and
-// the next construct it does not know would do the same. The call graph is
-// one whole-program build per module, so a failure costs the module's
-// calls; its declarations, imports and implements stay.
-func (x *extractor) interProcedural() (ipc *analysis.InterProceduralContext, failure string, err error) {
+// the next construct it does not know would do the same. An error is a
+// failure too: a module none of whose packages type-checks for the host
+// builds no SSA package, and one such module among siblings failed the
+// whole graph (#37). The call graph is one whole-program build per
+// module, so a failure costs the module's calls; its declarations,
+// imports and implements stay.
+func (x *extractor) interProcedural() (ipc *analysis.InterProceduralContext, failure string) {
 	defer func() {
 		if r := recover(); r != nil {
-			ipc, failure, err = nil, fmt.Sprint(r), nil
+			ipc, failure = nil, fmt.Sprint(r)
 		}
 	}()
-	ipc, err = x.callGraph()
-	return ipc, failure, err
+	ipc, err := x.callGraph()
+	if err != nil {
+		return nil, err.Error()
+	}
+	return ipc, ""
 }
 
 // callGraphFailed marks every package of the module as one whose calls
