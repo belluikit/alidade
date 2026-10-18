@@ -8,6 +8,8 @@ tracker's. From v0.12.1 on, every number is this repository's.
 
 ## Unreleased
 
+## v0.14.0 — 2026-10-18
+
 - **Added: `-go-configs auto` reads Go files behind custom build tags and
   on more platforms** (#48). A file only a tag brings in (`//go:build gl`,
   `mobile`, `plugin`) was never read, and neither were js/wasm,
