@@ -379,21 +379,23 @@ func TestOverlayBuildsWholeWhenAModuleDoesNotLoad(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("the fixtures' configuration is the host's")
 	}
-	cgo := func(pkg, name string) string {
-		return "package " + pkg + "\n\nimport \"C\"\n\nfunc " + name + "() int { return 2 }\n"
+	// A type error in a windows file, not an import of C: whether a load
+	// for another platform builds cgo files depends on CGO_ENABLED.
+	broken := func(pkg, name string) string {
+		return "package " + pkg + "\n\nvar bad NoSuchType\n\nfunc " + name + "() int { return 2 }\n"
 	}
 	plain := func(pkg, name string) string { return "package " + pkg + "\n\nfunc " + name + "() int { return 2 }\n" }
-	// m2 does not load for windows/amd64: each of its packages imports C
-	// there, which the load does not build.
+	// m2 does not load for windows/amd64: none of its packages
+	// type-checks there.
 	m2 := with(map[string]string{
 		"m2/go.mod":         "module example.com/m2\n\ngo 1.26\n",
 		"m2/p/p.go":         plain("p", "P"),
-		"m2/p/p_windows.go": cgo("p", "PW"),
+		"m2/p/p_windows.go": broken("p", "PW"),
 		"m2/r/r.go":         plain("r", "R"),
-		"m2/r/r_windows.go": cgo("r", "RW"),
+		"m2/r/r_windows.go": broken("r", "RW"),
 	})
 	// The root module loads for windows/amd64, though p alone does not.
-	lone := with(map[string]string{"p/p.go": plain("p", "P"), "p/p_windows.go": cgo("p", "PW")})
+	lone := with(map[string]string{"p/p.go": plain("p", "P"), "p/p_windows.go": broken("p", "PW")})
 	for _, tt := range []struct {
 		name          string
 		files, change map[string]string
