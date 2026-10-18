@@ -257,7 +257,7 @@ func (s *Session) overlayGo(lb *graph.Builder, root string, opts golang.Options)
 	}
 
 	owned := ownedBy(append(slices.Clone(present), gone...))
-	carried := s.layOver(lb, owned, subNodes, subEdges)
+	carried := s.layOver(lb, owned, ownedBy(append(slices.Clone(sub.FailedPackages), sub.WithoutCalls...)), subNodes, subEdges)
 	s.overlaid = &Overlay{Packages: present, Removed: gone, Carried: carried}
 	rep = overlaidGoReport(base, sub, owned)
 	rep.Skipped = overlaidSkips(base.Skipped, sub.Skipped, differ, s.base.root, s.root)
@@ -268,7 +268,10 @@ func (s *Session) overlayGo(lb *graph.Builder, root string, opts golang.Options)
 // layOver adds the base's Go contributions outside the packages loaded
 // again, the load's own, and the base's whole-program edges from those
 // packages it did not find, carried; it returns how many were carried.
-func (s *Session) layOver(lb *graph.Builder, owned func(graph.ID) bool, subNodes []graph.Node, subEdges []graph.Edge) int {
+// None is carried from a package noCalls reports — one the load found
+// broken, or cut off from the call graph by a broken import — which a
+// full build gives no calls either.
+func (s *Session) layOver(lb *graph.Builder, owned, noCalls func(graph.ID) bool, subNodes []graph.Node, subEdges []graph.Edge) int {
 	nodes, edges := s.base.b.Contributions("go")
 	keptNodes := nodes[:0:0]
 	for _, n := range nodes {
@@ -281,7 +284,7 @@ func (s *Session) layOver(lb *graph.Builder, owned func(graph.ID) bool, subNodes
 		switch {
 		case !owned(e.From):
 			keptEdges = append(keptEdges, e)
-		case !owned(e.To) && (e.Kind == graph.KindCalls || e.Kind == graph.KindImplements):
+		case !owned(e.To) && !noCalls(e.From) && (e.Kind == graph.KindCalls || e.Kind == graph.KindImplements):
 			carry = append(carry, e)
 		}
 	}

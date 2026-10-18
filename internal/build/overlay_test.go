@@ -734,6 +734,21 @@ func TestOverlaidSkipsNameTheWorktree(t *testing.T) {
 	}
 }
 
+// TestOverlayCarriesNoCallsFromABrokenPackage: a package the load of the
+// differing packages found broken has no calls in a full build, where the
+// call graph leaves it out, so the base's calls from it are not carried.
+// b, changed and clean, keeps the load alive.
+func TestOverlayCarriesNoCallsFromABrokenPackage(t *testing.T) {
+	main, wt := worktreeOf(t, overlayRepo, map[string]string{
+		"b/b.go": overlayRepo["b/b.go"] + "\nfunc More() int { return 0 }\n",
+		"c/c.go": overlayRepo["c/c.go"] + "\nfunc Y() int { return nope }\n",
+	})
+	_, rep := overlayEqualsFullWith(t, main, wt, DefaultOptions())
+	if o := rep.Overlay; o.GoWhole || len(o.Packages) != 2 {
+		t.Errorf("overlay %+v: want b and c laid over the base", o)
+	}
+}
+
 // TestHostExcludedIsTheWorktrees: a directory loaded again gives its own
 // list in place of the base's, so a file it no longer excludes, or no
 // longer has, is not the base's to keep (#39).
