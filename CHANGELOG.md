@@ -8,6 +8,12 @@ tracker's. From v0.12.1 on, every number is this repository's.
 
 ## Unreleased
 
+- **Fixed: with `-tests`, the tests of a module's root package written
+  as `package <root>_test` are in the graph** (#45). Every test,
+  benchmark and example in such a file was missing, because its package
+  path, `github.com/x/m_test`, sat under no module path. On
+  belluikit/bellui the graph listed 74 of the root module's 78
+  benchmarks; it now lists all 78.
 - **Fixed: one Go module whose packages do not type-check for the host
   no longer fails the whole graph** (#37). Served from a folder of
   sibling modules, one such module (gl-js, whose cgo GLES types do not
