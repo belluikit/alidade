@@ -68,6 +68,8 @@ github.com/tommie/v8go/deps/linux_arm64 v0.0.0-20261002084705-a57e453c0be5 h1:od
 github.com/tommie/v8go/deps/linux_arm64 v0.0.0-20261002084705-a57e453c0be5/go.mod h1:B/myVnZ82IRgW//OzDnHArcOzW8Yq7FbWnMnYPbZ0Hc=
 github.com/trendvidia/caliper v1.6.2 h1:KfzGBj5O8gwR7GcfoYLgGdrFY8UYp/VK9hXYQ5kqJVs=
 github.com/trendvidia/caliper v1.6.2/go.mod h1:tNWUhpZOIvKrPu4JP2j4YHS1nwrWo0uqtIL8f4HbsuQ=
+github.com/trendvidia/caliper v1.6.3-0.20261018014921-c88a51bfec16 h1:2JjjJXHu4Lz+oEO9eqzKxhYBJPlDNqbAMsb6xMitZVA=
+github.com/trendvidia/caliper v1.6.3-0.20261018014921-c88a51bfec16/go.mod h1:tNWUhpZOIvKrPu4JP2j4YHS1nwrWo0uqtIL8f4HbsuQ=
 github.com/trendvidia/chameleon v0.25.2 h1:KvYUAZT/XnVbX+594XqELTCEYCEEf1Zg9xRLMyGsWP4=
 github.com/trendvidia/chameleon v0.25.2/go.mod h1:Q0OzPH6UlHdK27ApmxcoCpZaXU+E2sBp1rW3tG/cGnA=
 github.com/trendvidia/goasm v1.1.1 h1:okPs4kHpb8ycz7rIBLu9wEC/Hf5yq9jWT+C/VfZ/4lI=
