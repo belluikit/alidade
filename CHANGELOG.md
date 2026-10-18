@@ -24,6 +24,15 @@ tracker's. From v0.12.1 on, every number is this repository's.
   as constrained to it** (#48). alidade knew 14 of the 24 GOARCH values
   go/build does, so such a file looked unconstrained to auto, which then
   counted it as one a configuration would bring in.
+- **Changed: a worktree that auto would choose other platforms for no
+  longer reloads its changed packages in full before it is built whole**
+  (#43). With `-go-configs auto`, the check whether the worktree's files
+  would change auto's choice used to run after the reload's call graph
+  and emit, and all of that work was then thrown away. It now runs right
+  after the reload's load, before anything else is made of it. On
+  trendvidia/go's go-notiny worktree that reload's call graph and emit
+  are 5.2 s of its 12 s.
+  
 - **Fixed: with `-tests`, the tests of a module's root package written
   as `package <root>_test` are in the graph** (#45). Every test,
   benchmark and example in such a file was missing, because its package

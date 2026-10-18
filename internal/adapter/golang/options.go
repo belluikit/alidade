@@ -79,6 +79,15 @@ type Options struct {
 	// configurations; with Configs a list, those of them that bring in a
 	// file of the packages asked for (#35).
 	Only []string
+	// Proceed, when set, is asked after the host's loads — with the files
+	// they leave out, relative to the root, and whether the load has
+	// tests — before any call graph is built or anything emitted, and
+	// false ends the extraction with ErrStopped. A worktree's reload asks
+	// whether auto would choose the base's configurations, so that one
+	// which would not costs a load rather than a whole reload before the
+	// layer is built whole (#43). Under ExactTests it is asked of each of
+	// the two loads.
+	Proceed func(hostExcluded []string, tests bool) bool
 	// testConfigs, when not "", are the configurations the load with
 	// tests takes in place of Configs under ExactTests: those a base's
 	// load with tests chose, which Reload sets.
