@@ -283,18 +283,18 @@ func unloadedReason(files []string) string {
 }
 
 // autoBuilds reports whether some platform auto chooses among includes
-// one of the files without build tags, and whether one does with the
-// tags the file's own constraint names.
+// one of the files without build tags, and whether one does with some of
+// the tags the file's own constraint names (#51).
 func autoBuilds(files []string) (platform, tagged bool) {
 	for _, f := range files {
 		fc, err := readConstraint(f)
 		if err != nil {
 			continue
 		}
-		tags := tagsOf(map[string]fileConstraint{f: fc})
 		for _, p := range platforms {
-			platform = platform || fc.satisfied(p)
-			tagged = tagged || len(tags) > 0 && fc.satisfied(p.withTags(tags))
+			own, ok := fc.fewestTags(p)
+			platform = platform || ok && len(own) == 0
+			tagged = tagged || ok && len(own) > 0
 		}
 	}
 	return platform, tagged

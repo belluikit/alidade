@@ -233,18 +233,58 @@ func TestUnloadedReasonForBSDOnly(t *testing.T) {
 	}
 }
 
-// TestAutoTagsAllAtOnce pins a documented divergence (#51): auto sets
-// every tag it finds at once, so a file needing one set and another
-// unset is read by none of its candidates, and stays out.
-func TestAutoTagsAllAtOnce(t *testing.T) {
+// TestAutoReadsAFileNeedingATagUnset pins #51, the owner's decision: a
+// file needing one found tag set and another unset is read by neither the
+// load without tags nor the one with every tag, and auto reads it under
+// the fewest of its own tags it needs. So is one needing two set and a
+// third unset; and a directory of such files is reported as one auto
+// would load with its tags.
+func TestAutoReadsAFileNeedingATagUnset(t *testing.T) {
 	ci := writeFile(t, "ci.go", "//go:build ci && !mobile\n\npackage p\n")
 	mobile := writeFile(t, "mobile.go", "//go:build mobile\n\npackage p\n")
-	_, covered, _, err := chooseConfigs("auto", host, []string{ci, mobile}, false)
+	both := writeFile(t, "both.go", "//go:build linux && a && b && !mobile\n\npackage p\n")
+	_, covered, _, err := chooseConfigs("auto", host, []string{ci, mobile, both}, false)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, ok := covered[ci]; ok || len(covered) != 1 {
-		t.Errorf("covered = %v: want mobile.go only, until #51 decides otherwise", covered)
+	if c, ok := covered[ci]; !ok || c.tags != "ci" {
+		t.Errorf("ci.go covered by %v, %v: want a load with ci alone", c, ok)
+	}
+	if c, ok := covered[both]; !ok || c.tags != "a,b" {
+		t.Errorf("both.go covered by %v, %v: want a load with a and b", c, ok)
+	}
+	if _, ok := covered[mobile]; !ok {
+		t.Errorf("mobile.go is not covered: %v", covered)
+	}
+	if got := unloadedReason([]string{ci}); !strings.Contains(got, "with their tags") {
+		t.Errorf("reason %q, want that auto would load it with its tags", got)
+	}
+}
+
+// TestFewestTags: the smallest set of a file's own tags, the first of the
+// sorted tags among sets as small; none when no set includes it; and for a
+// file naming more than maxOwnTags, all of them or none.
+func TestFewestTags(t *testing.T) {
+	many := "t1 && t2 && t3 && t4 && t5 && t6 && t7 && t8 && t9"
+	for _, tt := range []struct {
+		expr string
+		want string
+		ok   bool
+	}{
+		{"x || y", "x", true},
+		{"!x", "", true},
+		{"x && !x", "", false},
+		{many, "t1,t2,t3,t4,t5,t6,t7,t8,t9", true},
+		{many + " && !t10", "", false},
+	} {
+		fc, err := readConstraint(writeFile(t, "f.go", "//go:build "+tt.expr+"\n\npackage p\n"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		got, ok := fc.fewestTags(config{goos: "linux", goarch: "amd64"})
+		if strings.Join(got, ",") != tt.want || ok != tt.ok {
+			t.Errorf("%s: fewestTags = %v, %v; want %q, %v", tt.expr, got, ok, tt.want, tt.ok)
+		}
 	}
 }
 

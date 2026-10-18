@@ -314,6 +314,14 @@ implementation detail of the surface, not of the core.
   brought in is now in the graph; trendvidia/govm 12 s, 4 loads against
   3; trendvidia/go 162 s against 1 min 52 s, at the same 12.9 GB peak.
   The default stays the host's alone.
+  *Widened, 2026-10-18 (#51, the owner's decision):* auto also considers
+  each platform with the fewest of one excluded file's own tags that
+  bring it in. A file needing one tag set and another unset
+  (`wayland && !x11`) is read by neither the load without tags nor the
+  one with all of them. On bellui that read 9 more files, in 13 loads
+  against 11 (75 s against 62 s on one run); govm and trendvidia/go kept
+  their load counts (5 and 10). `TestAutoReadsAFileNeedingATagUnset`
+  fails the day such a file is left out again.
   *Reached in another narrow form, 2026-09-12 (#67):* a repository of
   several Go modules is several loads, one per module, since a nested
   module with no go.work is what the go tool builds on its own. Measured

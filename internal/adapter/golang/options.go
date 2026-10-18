@@ -50,7 +50,8 @@ type Options struct {
 	// constraints of the files the host's load excluded and picks, from
 	// linux, darwin and windows on amd64 and arm64, js/wasm, wasip1/wasm,
 	// android/arm64 and ios/arm64, each also with every build tag those
-	// constraints name set (#48), the fewest configurations that bring
+	// constraints name set (#48) or with the fewest of one file's own tags
+	// that bring it in (#51), the fewest configurations that bring
 	// them in; "linux/amd64,windows/arm64+gl" names them, a configuration's
 	// build tags after its platform. Each extra configuration is a further
 	// load and call graph, and adds only what the ones before it did not,

@@ -9,6 +9,7 @@ import (
 	"go/build"
 	"go/build/constraint"
 	"maps"
+	"math/bits"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -125,12 +126,16 @@ var platforms = []config{
 }
 
 // candidates are the configurations "auto" chooses among: each platform,
-// and each platform with every build tag the excluded files' constraints
-// name set at once (#48, the owner's decision). One load with all the
-// tags reads, on belluikit/bellui, every declaration a load per tag
-// does, in 11 loads against 29: a file a tag excludes (//go:build !gl) is
-// read by the load without tags already, and each further load adds only
-// what the ones before it did not.
+// each platform with every build tag the excluded files' constraints
+// name set at once (#48, the owner's decision), and each platform with
+// the fewest of an excluded file's own tags it needs (#51, the owner's
+// decision). One load with all the tags reads, on belluikit/bellui, every
+// declaration a load per tag does, in 11 loads against 29: a file a tag
+// excludes (//go:build !gl) is read by the load without tags already, and
+// each further load adds only what the ones before it did not. A file
+// needing one tag set and another unset (//go:build wayland && !x11) is
+// read by neither; its own candidate reads it, and on bellui reads 9
+// such files in 13 loads against 11.
 func candidates(cv *coverage) []config {
 	tags := tagsOf(cv.cons)
 	out := slices.Clone(platforms)
@@ -139,7 +144,51 @@ func candidates(cv *coverage) []config {
 			out = append(out, p.withTags(tags))
 		}
 	}
+	seen := map[config]bool{}
+	for _, f := range slices.Sorted(maps.Keys(cv.cons)) {
+		for _, p := range platforms {
+			if own, ok := cv.cons[f].fewestTags(p); ok && len(own) > 0 && !seen[p.withTags(own)] {
+				seen[p.withTags(own)] = true
+				out = append(out, p.withTags(own))
+			}
+		}
+	}
 	return out
+}
+
+// maxOwnTags bounds the tags of one file fewestTags tries each subset of:
+// 2^8 evaluations a platform. A file naming more is tried with all of
+// them set only.
+const maxOwnTags = 8
+
+// fewestTags is the smallest set of the build tags the file's constraint
+// names under which the platform includes it, and whether there is one;
+// of sets as small, the first in the order of the sorted tags (#51).
+func (fc fileConstraint) fewestTags(p config) ([]string, bool) {
+	tags := tagsOf(map[string]fileConstraint{"": fc})
+	if len(tags) > maxOwnTags {
+		if fc.satisfied(p.withTags(tags)) {
+			return tags, true
+		}
+		return nil, false
+	}
+	var best []string
+	found := false
+	for mask := range 1 << len(tags) {
+		if found && bits.OnesCount(uint(mask)) >= len(best) {
+			continue
+		}
+		var set []string
+		for i, t := range tags {
+			if mask&(1<<i) != 0 {
+				set = append(set, t)
+			}
+		}
+		if fc.satisfied(p.withTags(set)) {
+			best, found = set, true
+		}
+	}
+	return best, found
 }
 
 // tagsOf are the build tags the files' constraints name, sorted: every
