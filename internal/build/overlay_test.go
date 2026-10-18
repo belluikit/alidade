@@ -347,6 +347,10 @@ func TestOverlayBuildsWholeWhenAutoWouldChooseOtherwise(t *testing.T) {
 			"u/t3_windows_amd64_test.go": file("u", "T3"), "u/t4_windows_amd64_test.go": file("u", "T4"),
 		}), map[string]string{"c/c_windows_amd64.go": file("c", "CW")}, tests, true},
 		{"the same choice", ordered, map[string]string{"l/l3_windows_amd64.go": file("l", "L3")}, DefaultOptions(), false},
+		// The load with tests gains windows/arm64 for t2; the load
+		// without them still chooses nothing.
+		{"another choice with tests", with(map[string]string{"u/u.go": file("u", "U"), "u/t_windows_amd64_test.go": file("u", "T")}),
+			map[string]string{"u/t2_windows_arm64_test.go": file("u", "T2")}, tests, true},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			main, wt := worktreeOf(t, tt.files, tt.change)
@@ -362,6 +366,112 @@ func TestOverlayBuildsWholeWhenAutoWouldChooseOtherwise(t *testing.T) {
 			}
 			if !slices.Equal(rep.Go.Configs, full.Go.Configs) || !slices.Equal(rep.Go.HostExcluded, full.Go.HostExcluded) {
 				t.Errorf("configs %v excluded %v, a full build's %v %v", rep.Go.Configs, rep.Go.HostExcluded, full.Go.Configs, full.Go.HostExcluded)
+			}
+		})
+	}
+}
+
+// TestOverlayChoosesAgainstTheBaseAsBuilt: the base's choice of
+// configurations is the one its graph was built under, as it recorded
+// it, not one made again from its checkout, which may have moved on
+// since without a build (#39). Here the base's checkout would now choose
+// windows/arm64 first; its graph, and the worktree, choose windows/amd64.
+func TestOverlayChoosesAgainstTheBaseAsBuilt(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the fixtures' configurations are the host's")
+	}
+	file := func(pkg, name string) string { return "package " + pkg + "\n\nfunc " + name + "() int { return 1 }\n" }
+	main, wt := worktreeOf(t, with(map[string]string{
+		"u/u.go":                file("u", "U"),
+		"u/v.go":                "//go:build windows\n\n" + file("u", "V"),
+		"l/l1_windows_amd64.go": file("l", "L1"),
+		"l/l2_windows_amd64.go": file("l", "L2"),
+		"w/w.go":                file("w", "W0"),
+		"w/w_windows_arm64.go":  file("w", "W"),
+	}), map[string]string{"l/l3_windows_amd64.go": file("l", "L3")})
+	opts := DefaultOptions()
+	opts.Go.Configs = "auto"
+	base, err := NewSession(main, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mustSessionBuild(t, base)
+	for _, f := range []string{"l/l1_windows_amd64.go", "l/l2_windows_amd64.go"} {
+		if err := os.WriteFile(filepath.Join(main, f), []byte("//go:build ignore\n\n"+file("l", "Gone")), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	o, err := base.Overlay(wt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	g, rep := mustSessionBuild(t, o)
+	if rep.Overlay.GoWhole {
+		t.Errorf("overlay %+v: want it laid over the base", rep.Overlay)
+	}
+	full, frep, err := Build(wt, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(rep.Go.Configs, frep.Go.Configs) {
+		t.Errorf("configs %v, a full build's %v", rep.Go.Configs, frep.Go.Configs)
+	}
+	if got, want := nodeLines(g), nodeLines(full); !slices.Equal(got, want) {
+		t.Errorf("nodes differ from a full build of the worktree:\n%s", diffLines(got, want))
+	}
+}
+
+// TestOverlayOfARemovalUnderAuto: a worktree that only removes packages
+// loads none again, and its host-excluded files are the base's less the
+// removed packages'. Removing the only package another configuration
+// brings in makes auto choose one fewer, which builds the layer whole;
+// removing a package of the host's does not (#39).
+func TestOverlayOfARemovalUnderAuto(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the fixture's configuration is the host's")
+	}
+	files := with(map[string]string{"plat/plat_windows.go": "package plat\n\nfunc Q() int { return 1 }\n"})
+	for _, tt := range []struct {
+		remove string
+		whole  bool
+	}{{"plat/plat_windows.go", true}, {"c/c.go", false}} {
+		t.Run(tt.remove, func(t *testing.T) {
+			main, wt := worktreeOf(t, files, nil)
+			gittest.Git(t, wt, "rm", "-q", tt.remove)
+			gittest.Commit(t, wt, nil, "remove")
+			opts := DefaultOptions()
+			opts.Go.Configs = "auto"
+			_, rep := overlayEqualsFullWith(t, main, wt, opts)
+			if rep.Overlay.GoWhole != tt.whole {
+				t.Errorf("overlay %+v: want GoWhole %v", rep.Overlay, tt.whole)
+			}
+			if !tt.whole && len(rep.Overlay.Removed) != 1 {
+				t.Errorf("overlay %+v: want one package removed", rep.Overlay)
+			}
+		})
+	}
+}
+
+// TestOverlayOfAnUnbuiltGoRepository: a checkout of the Go repository
+// with no compiled toolchain has its std and cmd modules skipped, by the
+// base's build and a full build of the worktree alike (#219). That skip
+// is no module failing to load, so a worktree changing std or cmd is
+// still laid over the base (#40).
+func TestOverlayOfAnUnbuiltGoRepository(t *testing.T) {
+	files := map[string]string{
+		"src/go.mod":         "module std\n\ngo 1.26\n",
+		"src/bytes/b.go":     "package bytes\n\nfunc B() {}\n",
+		"src/cmd/go.mod":     "module cmd\n\ngo 1.26\n",
+		"src/cmd/go/main.go": "package main\n\nfunc main() {}\n",
+		"misc/go.mod":        "module misc\n\ngo 1.26\n",
+		"misc/m.go":          "package misc\n\nfunc M() {}\n",
+	}
+	for _, change := range []string{"src/bytes/b.go", "src/cmd/go/main.go"} {
+		t.Run(change, func(t *testing.T) {
+			main, wt := worktreeOf(t, files, map[string]string{change: files[change] + "\nfunc More() {}\n"})
+			_, rep := overlayEqualsFullWith(t, main, wt, DefaultOptions())
+			if rep.Overlay.GoWhole {
+				t.Errorf("overlay %+v: want it laid over the base", rep.Overlay)
 			}
 		})
 	}
@@ -396,24 +506,49 @@ func TestOverlayBuildsWholeWhenAModuleDoesNotLoad(t *testing.T) {
 	})
 	// The root module loads for windows/amd64, though p alone does not.
 	lone := with(map[string]string{"p/p.go": plain("p", "P"), "p/p_windows.go": broken("p", "PW")})
+	// m3 does not load for the host: none of its packages type-checks.
+	m3 := with(map[string]string{
+		"m3/go.mod": "module example.com/m3\n\ngo 1.26\n",
+		"m3/p/p.go": broken("p", "P"),
+		"m3/r/r.go": broken("r", "R"),
+	})
+	// c's test files type-check in the base; the worktree breaks one.
+	tested := with(map[string]string{
+		"c/c_test.go": "package c\n\nimport \"testing\"\n\nfunc TestHelper(t *testing.T) { Helper() }\n",
+		"t/t_test.go": "package t\n\nimport \"testing\"\n\nfunc TestT(t *testing.T) {}\n",
+	})
+	brokenTest := func(pkg string) string {
+		return "package " + pkg + "\n\nimport \"testing\"\n\nfunc TestBroken(t *testing.T) { var _ NoSuchType }\n"
+	}
 	for _, tt := range []struct {
 		name          string
 		files, change map[string]string
 		configs       string
+		tests         bool
 		whole         bool
 	}{
-		{"fixed whole", m2, map[string]string{"m2/p/p_windows.go": plain("p", "PW"), "m2/r/r_windows.go": plain("r", "RW")}, "auto", true},
+		{"fixed whole", m2, map[string]string{"m2/p/p_windows.go": plain("p", "PW"), "m2/r/r_windows.go": plain("r", "RW")}, "auto", false, true},
 		// p, unchanged, is then read for windows/amd64.
-		{"fixed in part", m2, map[string]string{"m2/r/r_windows.go": plain("r", "RW")}, "auto", true},
-		{"still failing", m2, map[string]string{"m2/r/r.go": plain("r", "R") + "\nfunc R2() int { return 1 }\n"}, "auto", true},
-		{"another module", m2, map[string]string{"c/c.go": overlayRepo["c/c.go"] + "\nfunc More() int { return 0 }\n"}, "auto", false},
-		{"alone for a further configuration", lone, map[string]string{"p/p.go": plain("p", "P") + "\nfunc P2() int { return 1 }\n"}, "auto", true},
-		{"alone for the host", with(nil), map[string]string{"c/c.go": overlayRepo["c/c.go"] + "\nfunc Y() int { return nope }\n"}, "", true},
+		{"fixed in part", m2, map[string]string{"m2/r/r_windows.go": plain("r", "RW")}, "auto", false, true},
+		{"still failing", m2, map[string]string{"m2/r/r.go": plain("r", "R") + "\nfunc R2() int { return 1 }\n"}, "auto", false, true},
+		{"another module", m2, map[string]string{"c/c.go": overlayRepo["c/c.go"] + "\nfunc More() int { return 0 }\n"}, "auto", false, false},
+		{"alone for a further configuration", lone, map[string]string{"p/p.go": plain("p", "P") + "\nfunc P2() int { return 1 }\n"}, "auto", false, true},
+		{"alone for the host", with(nil), map[string]string{"c/c.go": overlayRepo["c/c.go"] + "\nfunc Y() int { return nope }\n"}, "", false, true},
+		// r then type-checks for the host, and p is read as a failed
+		// package of a module that loads.
+		{"fixed for the host", m3, map[string]string{"m3/r/r.go": plain("r", "R")}, "", false, true},
+		{"alone for a further configuration, with tests", lone, map[string]string{"p/p.go": plain("p", "P") + "\nfunc P2() int { return 1 }\n"}, "auto", true, true},
+		// A package whose test files do not type-check, loaded alone
+		// with -tests-exact, is a failed package of a module that loads,
+		// as in a full build: still laid over the base.
+		{"a test file, with tests", tested, map[string]string{"c/c_test.go": brokenTest("c")}, "", true, false},
+		{"a test-only package, with tests", tested, map[string]string{"t/t_test.go": brokenTest("t")}, "", true, false},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			main, wt := worktreeOf(t, tt.files, tt.change)
 			opts := DefaultOptions()
 			opts.Go.Configs = tt.configs
+			opts.Go.Tests, opts.Go.ExactTests = tt.tests, tt.tests
 			_, rep := overlayEqualsFullWith(t, main, wt, opts)
 			if rep.Overlay.GoWhole != tt.whole {
 				t.Errorf("overlay %+v: want GoWhole %v", rep.Overlay, tt.whole)
