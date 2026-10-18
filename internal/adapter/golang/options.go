@@ -3,7 +3,11 @@
 
 package golang
 
-import "github.com/belluikit/alidade/internal/scope"
+import (
+	"strings"
+
+	"github.com/belluikit/alidade/internal/scope"
+)
 
 // Options controls what the Go adapter loads and emits. Both inclusion
 // flags are explicit here because caliper's own defaults would decide them
@@ -72,6 +76,26 @@ type Options struct {
 	// configurations; with Configs a list, those of them that bring in a
 	// file of the packages asked for (#35).
 	Only []string
+	// testConfigs, when not "", are the configurations the load with
+	// tests takes in place of Configs under ExactTests: those a base's
+	// load with tests chose, which Reload sets.
+	testConfigs string
+}
+
+// Reload is opts for a load of only the packages of a worktree whose
+// other packages are base's graph's (#25). With Configs, the loads take
+// the configurations base's build chose from the whole module, so a
+// package another platform's brings in is read under the one a full
+// build reads it under (#35); with ExactTests the load with tests takes
+// those base's load with tests chose, which bring in test files the load
+// without tests has no configuration for.
+func Reload(opts Options, base *Report, only []string) Options {
+	opts.Only = only
+	if opts.Configs != "" {
+		opts.Configs = strings.Join(base.Configs, ",")
+		opts.testConfigs = strings.Join(base.testConfigs, ",")
+	}
+	return opts
 }
 
 // DefaultOptions returns the options ADR 004 asks for: tests out, module

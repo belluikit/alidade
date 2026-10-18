@@ -29,6 +29,14 @@ tracker's. From v0.12.1 on, every number is this repository's.
   `graph_stats` for the worktree shows the whole build. The Go report
   also keeps the list of files the host's load leaves out, which auto
   chooses from.
+- **Fixed: another worktree's Go graph no longer drops test
+  declarations only another platform builds** (found reviewing PR #42).
+  With `-go-configs auto -tests-exact`, the packages reloaded for the
+  worktree loaded their tests under the platforms the session's load
+  without tests chose. A test file only another platform builds, such as
+  `x_windows_test.go` on a macOS host, was then missing from the
+  worktree's graph. They now load under the platforms the session's load
+  with tests chose, as a full build does.
 - **Fixed: one Go module whose packages do not type-check for the host
   no longer fails the whole graph** (#37). Served from a folder of
   sibling modules, one such module (gl-js, whose cgo GLES types do not

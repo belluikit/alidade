@@ -229,6 +229,9 @@ func extractExact(b *graph.Builder, dir string, opts Options) (*Report, error) {
 	scratch := graph.NewBuilder(b.Minter().Root())
 	testOpts := opts
 	testOpts.ExactTests = false
+	if opts.testConfigs != "" {
+		testOpts.Configs = opts.testConfigs
+	}
 	tests, err := extractOnce(scratch, dir, testOpts)
 	if err != nil {
 		return nil, err

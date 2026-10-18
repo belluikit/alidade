@@ -133,11 +133,16 @@ persisted graph, no invalidation model, and no staleness policy.**
      it out. It is loaded under the further configurations the base's
      build chose, those of them that bring in a file of it, so it is read
      under the configuration a full build reads it under, or skipped as a
-     full build skips it. On trendvidia/go, a worktree changing
-     internal/syscall/windows/sysdll took 3.9 s against 22.5 s for a
-     full build, and 11.1 s against 2 min 4 s with `-go-configs auto`.
-     `TestOverlayOfAnotherPlatformsPackage` fails the day such a package
-     is read under another configuration than a full build's.
+     full build skips it. With `-tests-exact` the load with tests takes
+     those the base's load with tests chose, which bring in test files
+     the load without tests has no configuration for. On trendvidia/go,
+     a worktree changing internal/syscall/windows/sysdll took 3.9 s
+     against 22.5 s for a full build, and 11.1 s against 2 min 4 s with
+     `-go-configs auto`. `TestOverlayOfAnotherPlatformsPackage` fails the
+     day such a package is read under another configuration than a full
+     build's, and its case "the same choice, with tests" of
+     `TestOverlayBuildsWholeWhenAutoWouldChooseOtherwise` the day a test
+     file is.
      *Amended 2026-10-17 (#39 and #40, the owner's decisions):* the base's
      Go layer rests on two facts about whole modules. A load of only the
      differing packages cannot check either, so the layer is built whole

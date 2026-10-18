@@ -351,6 +351,10 @@ func TestOverlayBuildsWholeWhenAutoWouldChooseOtherwise(t *testing.T) {
 		// without them still chooses nothing.
 		{"another choice with tests", with(map[string]string{"u/u.go": file("u", "U"), "u/t_windows_amd64_test.go": file("u", "T")}),
 			map[string]string{"u/t2_windows_arm64_test.go": file("u", "T2")}, tests, true},
+		// The load with tests chooses windows/amd64 for u's test file;
+		// the load without them chooses nothing.
+		{"the same choice, with tests", with(map[string]string{"u/u.go": file("u", "U"), "u/t_windows_amd64_test.go": file("u", "T")}),
+			map[string]string{"u/u.go": file("u", "U") + "\nfunc U2() int { return 2 }\n"}, tests, false},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			main, wt := worktreeOf(t, tt.files, tt.change)

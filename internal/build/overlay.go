@@ -243,15 +243,7 @@ func (s *Session) overlayGo(lb *graph.Builder, root string, opts golang.Options)
 	var subEdges []graph.Edge
 	if len(present) > 0 {
 		scratch := graph.NewBuilder(root)
-		o := opts
-		o.Only = present
-		if opts.Configs != "" {
-			// The configurations the base's build chose, from the whole
-			// module, so a package another platform's brings in is read
-			// under the one a full build reads it under (#35).
-			o.Configs = strings.Join(base.Configs, ",")
-		}
-		if sub, err = extractGo(scratch, root, o); err != nil {
+		if sub, err = extractGo(scratch, root, golang.Reload(opts, base, present)); err != nil {
 			return nil, false, err
 		}
 		if !modulesLoaded(sub, paths, present) {
