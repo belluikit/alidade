@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -326,6 +327,47 @@ func configNames(host config, extra []config) []string {
 	out := []string{host.String()}
 	for _, c := range extra {
 		out = append(out, c.String())
+	}
+	return out
+}
+
+// SameAutoChoice reports whether -go-configs auto chooses, from a
+// worktree's host-excluded files relative to its root, the configurations
+// base was built under, in the same order (#39). The order is the choice
+// too: a file two configurations include is credited to the one chosen
+// first. base's own files are not read again: what its graph was built
+// under is what it recorded then, whatever its checkout holds now. With
+// ExactTests the files are a load with tests', and the load without
+// tests chooses from them less their _test.go files, which must agree
+// as well.
+func SameAutoChoice(base *Report, root string, files []string) bool {
+	host := hostConfig()
+	abs := make([]string, len(files))
+	for i, f := range files {
+		abs[i] = filepath.Join(root, filepath.FromSlash(f))
+	}
+	cv := readConstraints(abs)
+	choice := func(cv *coverage) []string { return configNames(host, autoConfigs(cv, host)) }
+	if !base.ExactTests {
+		return slices.Equal(choice(cv), base.Configs)
+	}
+	prod := &coverage{cons: map[string]fileConstraint{}, covered: map[string]config{}}
+	for f, fc := range cv.cons {
+		if !strings.HasSuffix(f, "_test.go") {
+			prod.cons[f] = fc
+		}
+	}
+	return slices.Equal(choice(prod), base.Configs) && slices.Equal(choice(cv), base.testConfigs)
+}
+
+// relativeTo names each file by its path relative to root, slash
+// separated; one outside the root is left out.
+func relativeTo(root string, files []string) []string {
+	out := make([]string, 0, len(files))
+	for _, f := range files {
+		if rel, err := filepath.Rel(root, f); err == nil && filepath.IsLocal(rel) {
+			out = append(out, filepath.ToSlash(rel))
+		}
 	}
 	return out
 }

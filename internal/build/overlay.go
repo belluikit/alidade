@@ -32,6 +32,10 @@ import (
 //     fewer packages does not see; the base's such edges from a
 //     declaration the worktree still has into a package it did not load
 //     again are kept, marked INFERRED and carried=base.
+//   - What a load of fewer packages cannot tell of a whole module — which
+//     configurations -go-configs auto chooses, whether the module loads
+//     for one — the layer is extracted whole for, when the worktree may
+//     not have the base's (#39, #40).
 //
 // Measured on #25 against a full build of each worktree, on six govm
 // worktrees and two of trendvidia/go: the Go layer missed at most 0.06%
@@ -59,9 +63,12 @@ type Overlay struct {
 	// packages that were kept, INFERRED.
 	Carried int
 	// GoWhole says the Go layer was extracted whole rather than laid
-	// over the base's: a go.mod, go.sum or go.work differs, or the base
-	// has no Go layer. A package to load again that holds no Go file the
-	// host builds is laid over the base too (#35).
+	// over the base's: a go.mod, go.sum or go.work differs, the base has
+	// no Go layer, or a fact of a whole module the base's layer rests on
+	// may not hold for the worktree — auto's choice of configurations,
+	// or whether a module loads for one (#39, #40). A package to load
+	// again that holds no Go file the host builds is laid over the base
+	// too (#35).
 	GoWhole bool
 }
 
@@ -108,8 +115,10 @@ func (s *Session) overBase(own map[string]string) map[string]string {
 }
 
 // goWhole reports whether a worktree's Go layer differing from the base's
-// is extracted whole rather than laid over the base's: the base has no Go
-// layer, or the module files differ.
+// is extracted whole without trying to lay it over the base's: the base
+// has no Go layer, or the module files differ. overlayGo may still find
+// it must be extracted whole (#39, #40); that layer is signed as over the
+// base all the same, since whether it is rests on the base's report.
 func (s *Session) goWhole() bool {
 	return s.base.rep.Go == nil || moduleFilesDiffer(s.base.goFiles, s.goFilesNow())
 }
@@ -166,7 +175,12 @@ func (s *Session) goLayer(root string, opts golang.Options) func(*graph.Builder)
 			return extractGo(lb, root, opts)
 		}
 		s.from["go"] = "over"
-		return s.overlayGo(lb, root, opts)
+		rep, whole, err := s.overlayGo(lb, root, opts)
+		if err != nil || !whole {
+			return rep, err
+		}
+		s.from["go"] = "own"
+		return extractGo(lb, root, opts)
 	}
 }
 
@@ -206,15 +220,55 @@ func differingGo(base, wt map[string]string) []string {
 // overlayGo lays the worktree's differing Go packages over the base's Go
 // layer: the base's contributions for every other package, the packages
 // loaded again, and the base's whole-program edges from them carried.
-func (s *Session) overlayGo(lb *graph.Builder, root string, opts golang.Options) (*golang.Report, error) {
+// It adds nothing and reports whole when a fact of a whole module the
+// base's graph rests on may not hold for the worktree (#39, #40); the
+// layer is then extracted whole.
+func (s *Session) overlayGo(lb *graph.Builder, root string, opts golang.Options) (rep *golang.Report, whole bool, err error) {
 	mods, _, err := golang.Modules(root, opts.Skip)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	differ := differingGo(s.base.goFiles, s.goFilesNow())
 	present, gone := golang.PackagesOf(root, mods, opts.Skip, differ)
-	owned := ownedBy(append(slices.Clone(present), gone...))
+	paths := make([]string, len(mods))
+	for i, m := range mods {
+		paths[i] = m.Path
+	}
+	base := s.base.rep.Go
+	if !modulesLoaded(base, paths, append(slices.Clone(present), gone...)) {
+		return nil, true, nil
+	}
+	sub := &golang.Report{}
+	var subNodes []graph.Node
+	var subEdges []graph.Edge
+	if len(present) > 0 {
+		scratch := graph.NewBuilder(root)
+		if sub, err = extractGo(scratch, root, golang.Reload(opts, base, present)); err != nil {
+			return nil, false, err
+		}
+		if !modulesLoaded(sub, paths, present) {
+			return nil, true, nil
+		}
+		subNodes, subEdges = scratch.Contributions("")
+	}
+	excluded := hostExcluded(base.HostExcluded, sub.HostExcluded, differ)
+	if opts.Configs == "auto" && !golang.SameAutoChoice(base, root, excluded) {
+		return nil, true, nil
+	}
 
+	owned := ownedBy(append(slices.Clone(present), gone...))
+	carried := s.layOver(lb, owned, subNodes, subEdges)
+	s.overlaid = &Overlay{Packages: present, Removed: gone, Carried: carried}
+	rep = overlaidGoReport(base, sub, owned)
+	rep.Skipped = overlaidSkips(base.Skipped, sub.Skipped, differ, s.base.root, s.root)
+	rep.HostExcluded = excluded
+	return rep, false, nil
+}
+
+// layOver adds the base's Go contributions outside the packages loaded
+// again, the load's own, and the base's whole-program edges from those
+// packages it did not find, carried; it returns how many were carried.
+func (s *Session) layOver(lb *graph.Builder, owned func(graph.ID) bool, subNodes []graph.Node, subEdges []graph.Edge) int {
 	nodes, edges := s.base.b.Contributions("go")
 	keptNodes := nodes[:0:0]
 	for _, n := range nodes {
@@ -232,33 +286,41 @@ func (s *Session) overlayGo(lb *graph.Builder, root string, opts golang.Options)
 		}
 	}
 	lb.Adopt(nil, keptEdges)
-
-	sub := &golang.Report{}
-	var subNodes []graph.Node
-	var subEdges []graph.Edge
-	if len(present) > 0 {
-		scratch := graph.NewBuilder(root)
-		o := opts
-		o.Only = present
-		if opts.Configs != "" {
-			// The configurations the base's build chose, from the whole
-			// module, so a package another platform's brings in is read
-			// under the one a full build reads it under (#35).
-			o.Configs = strings.Join(s.base.rep.Go.Configs, ",")
-		}
-		if sub, err = extractGo(scratch, root, o); err != nil {
-			return nil, err
-		}
-		subNodes, subEdges = scratch.Contributions("")
-		lb.Adopt(subNodes, subEdges)
-	}
+	lb.Adopt(subNodes, subEdges)
 	carried := carried(carry, subNodes, subEdges)
 	lb.Adopt(reached(keptNodes, keptEdges, carried), carried)
+	return len(carried)
+}
 
-	s.overlaid = &Overlay{Packages: present, Removed: gone, Carried: len(carried)}
-	rep := overlaidGoReport(s.base.rep.Go, sub, owned)
-	rep.Skipped = overlaidSkips(s.base.rep.Go.Skipped, sub.Skipped, differ, s.base.root, s.root)
-	return rep, nil
+// modulesLoaded reports whether every module holding one of the packages,
+// of the module paths given, loaded as rep found them: for the host and
+// each further configuration, with tests and without. Whether a module
+// loads is a fact of all its packages — caliper refuses a load only when
+// none of them type-checks — so a load of some of them can neither
+// confirm the base's failure nor stand for a whole module's, and only a
+// whole build can tell (#40).
+func modulesLoaded(rep *golang.Report, paths, pkgs []string) bool {
+	for _, p := range pkgs {
+		if !rep.Loaded(golang.Owner(p, paths)) {
+			return false
+		}
+	}
+	return true
+}
+
+// hostExcluded are the worktree's files its host's load leaves out: the
+// base's outside the packages loaded again, which are the directories of
+// the differing files, and the load's own in their place (#39).
+func hostExcluded(base, sub, differ []string) []string {
+	dirs := dirsOf(differ)
+	out := slices.Clone(sub)
+	for _, f := range base {
+		if !dirs[path.Dir(f)] {
+			out = append(out, f)
+		}
+	}
+	slices.Sort(out)
+	return slices.Compact(out)
 }
 
 // reached drops the base's external packages no edge kept from the base
@@ -362,10 +424,7 @@ func overlaidGoReport(base, sub *golang.Report, owned func(graph.ID) bool) *gola
 // a path of the base's names the worktree's instead, as a build of it
 // would.
 func overlaidSkips(base, sub []graph.Skip, differ []string, baseRoot, root string) []graph.Skip {
-	dirs := map[string]bool{}
-	for _, f := range differ {
-		dirs[path.Dir(f)] = true
-	}
+	dirs := dirsOf(differ)
 	out := slices.Clone(sub)
 	for _, sk := range base {
 		reloaded := dirs[sk.File] || strings.HasSuffix(sk.File, ".go") && dirs[path.Dir(sk.File)]
@@ -376,6 +435,16 @@ func overlaidSkips(base, sub []graph.Skip, differ []string, baseRoot, root strin
 	}
 	slices.SortStableFunc(out, func(a, b graph.Skip) int { return strings.Compare(a.File, b.File) })
 	return out
+}
+
+// dirsOf are the directories of the differing files: those of the
+// packages loaded again.
+func dirsOf(differ []string) map[string]bool {
+	dirs := map[string]bool{}
+	for _, f := range differ {
+		dirs[path.Dir(f)] = true
+	}
+	return dirs
 }
 
 // renameRoot names root wherever s names baseRoot or a path below it:
