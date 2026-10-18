@@ -488,8 +488,9 @@ func TestOverlayOfAnUnbuiltGoRepository(t *testing.T) {
 // base's build could not load for a configuration is built whole. One
 // whose differing packages none type-checks, for the host or a further
 // configuration, is laid over the base: the load keeps them as failed, as
-// a whole module's load, which its clean packages keep alive, does (#41).
-// So is a worktree changing another module.
+// a whole module's load, which its clean packages keep alive, does (#41),
+// while the module has another such package (#50). So is a worktree
+// changing another module.
 func TestOverlayBuildsWholeWhenAModuleDoesNotLoad(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("the fixtures' configuration is the host's")
@@ -562,36 +563,57 @@ func TestOverlayBuildsWholeWhenAModuleDoesNotLoad(t *testing.T) {
 	}
 }
 
-// TestOverlayLaysOverAModuleThatNoLongerLoads pins a divergence of #41:
-// the load of the differing packages keeps them as failed even when the
-// module has no other package that type-checks, where a full build of the
-// worktree fails the module. A module of one package, and one whose last
-// clean package breaks, are laid over the base, their packages read as
-// failed, and the module read as loaded. The day either is built whole,
-// this fails, and ADR 005's amendment for #41 should drop its exception
-// (#50).
-func TestOverlayLaysOverAModuleThatNoLongerLoads(t *testing.T) {
+// TestOverlayBuildsWholeWhenAModuleNoLongerLoads pins #50: the load of
+// the differing packages keeps them as failed when none type-checks
+// (#41), so whether their module still loads is told from the base: a
+// package of it that type-checked there, in the same configuration, and
+// that imports none of them at any depth. A module left with no such
+// package, its only package or its last clean one broken or removed, for
+// the host or a further configuration, is built whole, as a full build
+// fails it. One that has one is laid over the base.
+func TestOverlayBuildsWholeWhenAModuleNoLongerLoads(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the fixtures' configuration is the host's")
+	}
 	plain := func(pkg, name string) string { return "package " + pkg + "\n\nfunc " + name + "() int { return 2 }\n" }
+	m4 := func(files map[string]string) map[string]string {
+		out := with(map[string]string{"m4/go.mod": "module example.com/m4\n\ngo 1.26\n", "m4/q/q.go": plain("q", "Q")})
+		maps.Copy(out, files)
+		return out
+	}
+	broken := map[string]string{"m4/q/q.go": plain("q", "Q") + "\nfunc Q2() int { return nope }\n"}
 	for _, tt := range []struct {
-		name  string
-		files map[string]string
+		name          string
+		files, change map[string]string
+		remove        string
+		configs       string
+		whole         bool
 	}{
-		{"its only package", with(map[string]string{"m4/go.mod": "module example.com/m4\n\ngo 1.26\n", "m4/q/q.go": plain("q", "Q")})},
-		{"its last clean package", with(map[string]string{"m4/go.mod": "module example.com/m4\n\ngo 1.26\n", "m4/q/q.go": plain("q", "Q"),
-			"m4/r/r.go": "package r\n\nvar bad NoSuchType\n"})},
+		{"its only package", m4(nil), broken, "", "", true},
+		{"its last clean package", m4(map[string]string{"m4/r/r.go": "package r\n\nvar bad NoSuchType\n"}), broken, "", "", true},
+		{"its last clean package removed", m4(map[string]string{"m4/r/r.go": "package r\n\nvar bad NoSuchType\n"}), nil, "m4/q/q.go", "", true},
+		// q's windows file breaks it for windows/amd64 alone.
+		{"its only package, for a further configuration", m4(map[string]string{"m4/q/q_windows.go": plain("q", "QW")}),
+			map[string]string{"m4/q/q_windows.go": plain("q", "QW") + "\nvar bad NoSuchType\n"}, "", "auto", true},
+		// r type-checks in the worktree too, but imports q: only a whole
+		// build can tell.
+		{"only an importer of it clean", m4(map[string]string{"m4/r/r.go": "package r\n\nimport _ \"example.com/m4/q\"\n"}), broken, "", "", true},
+		{"its only package, still clean", m4(nil), map[string]string{"m4/q/q.go": plain("q", "Q") + "\nfunc Q2() int { return 1 }\n"}, "", "", false},
+		{"another clean package", m4(map[string]string{"m4/s/s.go": plain("s", "S")}), broken, "", "", false},
+		{"another clean package, for a further configuration", m4(map[string]string{"m4/q/q_windows.go": plain("q", "QW"), "m4/s/s.go": plain("s", "S")}),
+			map[string]string{"m4/q/q_windows.go": plain("q", "QW") + "\nvar bad NoSuchType\n"}, "", "auto", false},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			main, wt := worktreeOf(t, tt.files, map[string]string{"m4/q/q.go": plain("q", "Q") + "\nfunc Q2() int { return nope }\n"})
-			_, rep := overlayWith(t, main, wt, DefaultOptions())
-			_, full, err := Build(wt, DefaultOptions())
-			if err != nil {
-				t.Fatal(err)
+			main, wt := worktreeOf(t, tt.files, tt.change)
+			if tt.remove != "" {
+				gittest.Git(t, wt, "rm", "-q", tt.remove)
+				gittest.Commit(t, wt, nil, "remove")
 			}
-			if !slices.Contains(full.Go.Failed, "example.com/m4") {
-				t.Fatalf("a full build failed %v: the fixture no longer shows the divergence", full.Go.Failed)
-			}
-			if rep.Overlay.GoWhole || slices.Contains(rep.Go.Failed, "example.com/m4") {
-				t.Errorf("overlay %+v, failed %v: the module is built whole now; update ADR 005", rep.Overlay, rep.Go.Failed)
+			opts := DefaultOptions()
+			opts.Go.Configs = tt.configs
+			_, rep := overlayEqualsFullWith(t, main, wt, opts)
+			if rep.Overlay.GoWhole != tt.whole {
+				t.Errorf("overlay %+v: want GoWhole %v", rep.Overlay, tt.whole)
 			}
 		})
 	}
