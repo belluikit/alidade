@@ -9,7 +9,7 @@ require (
 	github.com/microsoft/typescript-go/shim v0.0.0
 	github.com/sqlc-dev/oliphant v0.2.0
 	github.com/tommie/v8go v0.37.0
-	github.com/trendvidia/caliper v1.6.3-0.20261018014921-c88a51bfec16
+	github.com/trendvidia/caliper v1.7.0
 	github.com/trendvidia/chameleon v0.25.2
 	github.com/trendvidia/goasm v1.1.1
 	github.com/trendvidia/protocompile v0.34.0
