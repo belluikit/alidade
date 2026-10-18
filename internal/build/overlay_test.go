@@ -5,6 +5,7 @@ package build
 
 import (
 	"cmp"
+	"errors"
 	"fmt"
 	"maps"
 	"os"
@@ -15,6 +16,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/belluikit/alidade/internal/adapter/golang"
 	"github.com/belluikit/alidade/internal/adapter/py"
 	"github.com/belluikit/alidade/internal/graph"
 	"github.com/belluikit/alidade/internal/worktree/gittest"
@@ -434,17 +436,30 @@ func TestOverlayOfARemovalUnderAuto(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("the fixture's configuration is the host's")
 	}
-	files := with(map[string]string{"plat/plat_windows.go": "package plat\n\nfunc Q() int { return 1 }\n"})
+	file := func(pkg, name string) string { return "package " + pkg + "\n\nfunc " + name + "() int { return 1 }\n" }
+	files := with(map[string]string{"plat/plat_windows.go": file("plat", "Q")})
+	// Under -tests-exact the load without tests chooses windows/amd64
+	// for d and then windows/arm64 for b2; without d it chooses
+	// windows/arm64 alone. The load with tests, whose u test files choose
+	// windows/amd64 first, is unmoved (#43: no reload asks it).
+	tested := with(map[string]string{
+		"d/d_windows_amd64.go": file("d", "D"), "b2/b_windows_arm64.go": file("b2", "B"), "u/u.go": file("u", "U"),
+		"u/t1_windows_amd64_test.go": file("u", "T1"), "u/t2_windows_amd64_test.go": file("u", "T2"),
+		"u/t3_windows_amd64_test.go": file("u", "T3"), "u/t4_windows_amd64_test.go": file("u", "T4"),
+	})
 	for _, tt := range []struct {
+		files  map[string]string
 		remove string
+		tests  bool
 		whole  bool
-	}{{"plat/plat_windows.go", true}, {"c/c.go", false}} {
+	}{{files, "plat/plat_windows.go", false, true}, {files, "c/c.go", false, false}, {tested, "d/d_windows_amd64.go", true, true}} {
 		t.Run(tt.remove, func(t *testing.T) {
-			main, wt := worktreeOf(t, files, nil)
+			main, wt := worktreeOf(t, tt.files, nil)
 			gittest.Git(t, wt, "rm", "-q", tt.remove)
 			gittest.Commit(t, wt, nil, "remove")
 			opts := DefaultOptions()
 			opts.Go.Configs = "auto"
+			opts.Go.Tests, opts.Go.ExactTests = tt.tests, tt.tests
 			_, rep := overlayEqualsFullWith(t, main, wt, opts)
 			if rep.Overlay.GoWhole != tt.whole {
 				t.Errorf("overlay %+v: want GoWhole %v", rep.Overlay, tt.whole)
@@ -476,6 +491,76 @@ func TestOverlayOfAnUnbuiltGoRepository(t *testing.T) {
 			_, rep := overlayEqualsFullWith(t, main, wt, DefaultOptions())
 			if rep.Overlay.GoWhole {
 				t.Errorf("overlay %+v: want it laid over the base", rep.Overlay)
+			}
+		})
+	}
+}
+
+// TestOverlayStopsTheReloadBeforeItsCallGraph pins #43: a worktree auto
+// would choose other configurations for is found out after its reload's
+// load and before any call graph or emit of it, and is then built whole.
+// The reload ends with ErrStopped having emitted nothing; the one call
+// after it is the whole layer's. Under -tests-exact it is the load
+// without tests, made first, that stops.
+func TestOverlayStopsTheReloadBeforeItsCallGraph(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the fixtures' configurations are the host's")
+	}
+	file := func(pkg, name string) string { return "package " + pkg + "\n\nfunc " + name + "() int { return 1 }\n" }
+	tests := DefaultOptions()
+	tests.Go.Tests, tests.Go.ExactTests = true, true
+	for _, tt := range []struct {
+		name          string
+		files, change map[string]string
+		opts          Options
+	}{
+		{"another configuration", with(nil), map[string]string{"plat/plat_windows.go": file("plat", "Q")}, DefaultOptions()},
+		{"another choice without tests", with(map[string]string{
+			"u/u.go": file("u", "U"), "b2/b_windows_arm64.go": file("b2", "B"),
+			"u/t1_windows_amd64_test.go": file("u", "T1"), "u/t2_windows_amd64_test.go": file("u", "T2"),
+			"u/t3_windows_amd64_test.go": file("u", "T3"), "u/t4_windows_amd64_test.go": file("u", "T4"),
+		}), map[string]string{"c/c_windows_amd64.go": file("c", "CW")}, tests},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			main, wt := worktreeOf(t, tt.files, tt.change)
+			opts := tt.opts
+			opts.Go.Configs = "auto"
+			base, err := NewSession(main, opts)
+			if err != nil {
+				t.Fatal(err)
+			}
+			mustSessionBuild(t, base)
+			type call struct {
+				reload bool
+				err    error
+				nodes  int
+			}
+			var calls []call
+			t.Cleanup(func() { extractGo = golang.Extract })
+			extractGo = func(b *graph.Builder, root string, o golang.Options) (*golang.Report, error) {
+				rep, err := golang.Extract(b, root, o)
+				nodes, _ := b.Contributions("")
+				calls = append(calls, call{o.Only != nil, err, len(nodes)})
+				return rep, err
+			}
+			o, err := base.Overlay(wt)
+			if err != nil {
+				t.Fatal(err)
+			}
+			g, rep := mustSessionBuild(t, o)
+			if len(calls) != 2 || !calls[0].reload || !errors.Is(calls[0].err, golang.ErrStopped) || calls[0].nodes != 0 || calls[1].reload || calls[1].err != nil {
+				t.Errorf("extractGo calls %+v: want the reload stopped with nothing emitted, then the whole layer", calls)
+			}
+			if !rep.Overlay.GoWhole {
+				t.Errorf("overlay %+v: want the Go layer built whole", rep.Overlay)
+			}
+			extractGo = golang.Extract
+			full, _, err := Build(wt, opts)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got, want := nodeLines(g), nodeLines(full); !slices.Equal(got, want) {
+				t.Errorf("nodes differ from a full build of the worktree:\n%s", diffLines(got, want))
 			}
 		})
 	}

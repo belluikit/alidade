@@ -4,6 +4,7 @@
 package build
 
 import (
+	"errors"
 	"maps"
 	"path"
 	"slices"
@@ -243,7 +244,20 @@ func (s *Session) overlayGo(lb *graph.Builder, root string, opts golang.Options)
 	var subEdges []graph.Edge
 	if len(present) > 0 {
 		scratch := graph.NewBuilder(root)
-		if sub, err = extractGo(scratch, root, golang.Reload(opts, base, present)); err != nil {
+		o := golang.Reload(opts, base, present)
+		if opts.Configs == "auto" {
+			// Asked of the load before anything else is made of it, so a
+			// worktree auto would choose otherwise for costs a load, not a
+			// whole reload, before the layer is built whole (#43).
+			o.Proceed = func(sub []string, tests bool) bool {
+				return golang.SameAutoChoice(base, tests, root, hostExcluded(base.HostExcluded, sub, differ))
+			}
+		}
+		sub, err = extractGo(scratch, root, o)
+		if errors.Is(err, golang.ErrStopped) {
+			return nil, true, nil
+		}
+		if err != nil {
 			return nil, false, err
 		}
 		if !modulesLoaded(sub, paths, present) {
@@ -252,7 +266,7 @@ func (s *Session) overlayGo(lb *graph.Builder, root string, opts golang.Options)
 		subNodes, subEdges = scratch.Contributions("")
 	}
 	excluded := hostExcluded(base.HostExcluded, sub.HostExcluded, differ)
-	if opts.Configs == "auto" && !golang.SameAutoChoice(base, root, excluded) {
+	if opts.Configs == "auto" && len(present) == 0 && !sameChoiceUnloaded(base, opts, root, excluded) {
 		return nil, true, nil
 	}
 
@@ -306,6 +320,16 @@ func modulesLoaded(rep *golang.Report, paths, pkgs []string) bool {
 		}
 	}
 	return true
+}
+
+// sameChoiceUnloaded is SameAutoChoice for a worktree that loads no
+// package again, only removes some: no load asks it of Proceed, so it is
+// asked here of each load the base's build made (#39, #43).
+func sameChoiceUnloaded(base *golang.Report, opts golang.Options, root string, excluded []string) bool {
+	if !golang.SameAutoChoice(base, opts.Tests, root, excluded) {
+		return false
+	}
+	return !base.ExactTests || golang.SameAutoChoice(base, false, root, excluded)
 }
 
 // hostExcluded are the worktree's files its host's load leaves out: the

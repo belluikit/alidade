@@ -8,6 +8,14 @@ tracker's. From v0.12.1 on, every number is this repository's.
 
 ## Unreleased
 
+- **Changed: a worktree that auto would choose other platforms for no
+  longer reloads its changed packages in full before it is built whole**
+  (#43). With `-go-configs auto`, the check whether the worktree's files
+  would change auto's choice used to run after the reload's call graph
+  and emit, and all of that work was then thrown away. It now runs right
+  after the reload's load, before anything else is made of it. On
+  trendvidia/go's go-notiny worktree that reload's call graph and emit
+  are 5.2 s of its 12 s.
 - **Fixed: another worktree's Go graph no longer differs from a full
   build of it when a fact of a whole module changes** (#39, #40; ADR 005
   amended). The worktree's Go layer reloads only the packages whose files
