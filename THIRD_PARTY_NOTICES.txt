@@ -1697,13 +1697,13 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ==============================================================================
-github.com/trendvidia/caliper v1.6.2
+github.com/trendvidia/caliper v1.6.3-0.20261018014921-c88a51bfec16
 
 --- LICENSE
 
 MIT License
 
-Copyright (c) 2026 TrendVidia LLC
+Copyright (c) 2026 TrendVidia, LLC.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal

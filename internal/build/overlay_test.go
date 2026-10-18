@@ -570,10 +570,11 @@ func TestOverlayStopsTheReloadBeforeItsCallGraph(t *testing.T) {
 // loads for a configuration is a fact of all its packages, as caliper
 // refuses a load only when none of them type-checks, so a load of the
 // packages that differ cannot tell it. A worktree changing a module the
-// base's build could not load for a configuration is built whole, and so
-// is one whose load of its differing packages fails, for the host or a
-// further configuration, where a whole module's would not. A worktree
-// changing another module is still laid over the base.
+// base's build could not load for a configuration is built whole. One
+// whose differing packages none type-checks, for the host or a further
+// configuration, is laid over the base: the load keeps them as failed, as
+// a whole module's load, which its clean packages keep alive, does (#41).
+// So is a worktree changing another module.
 func TestOverlayBuildsWholeWhenAModuleDoesNotLoad(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("the fixtures' configuration is the host's")
@@ -621,12 +622,12 @@ func TestOverlayBuildsWholeWhenAModuleDoesNotLoad(t *testing.T) {
 		{"fixed in part", m2, map[string]string{"m2/r/r_windows.go": plain("r", "RW")}, "auto", false, true},
 		{"still failing", m2, map[string]string{"m2/r/r.go": plain("r", "R") + "\nfunc R2() int { return 1 }\n"}, "auto", false, true},
 		{"another module", m2, map[string]string{"c/c.go": overlayRepo["c/c.go"] + "\nfunc More() int { return 0 }\n"}, "auto", false, false},
-		{"alone for a further configuration", lone, map[string]string{"p/p.go": plain("p", "P") + "\nfunc P2() int { return 1 }\n"}, "auto", false, true},
-		{"alone for the host", with(nil), map[string]string{"c/c.go": overlayRepo["c/c.go"] + "\nfunc Y() int { return nope }\n"}, "", false, true},
+		{"alone for a further configuration", lone, map[string]string{"p/p.go": plain("p", "P") + "\nfunc P2() int { return 1 }\n"}, "auto", false, false},
+		{"alone for the host", with(nil), map[string]string{"c/c.go": overlayRepo["c/c.go"] + "\nfunc Y() int { return nope }\n"}, "", false, false},
 		// r then type-checks for the host, and p is read as a failed
 		// package of a module that loads.
 		{"fixed for the host", m3, map[string]string{"m3/r/r.go": plain("r", "R")}, "", false, true},
-		{"alone for a further configuration, with tests", lone, map[string]string{"p/p.go": plain("p", "P") + "\nfunc P2() int { return 1 }\n"}, "auto", true, true},
+		{"alone for a further configuration, with tests", lone, map[string]string{"p/p.go": plain("p", "P") + "\nfunc P2() int { return 1 }\n"}, "auto", true, false},
 		// A package whose test files do not type-check, loaded alone
 		// with -tests-exact, is a failed package of a module that loads,
 		// as in a full build: still laid over the base.
@@ -641,6 +642,41 @@ func TestOverlayBuildsWholeWhenAModuleDoesNotLoad(t *testing.T) {
 			_, rep := overlayEqualsFullWith(t, main, wt, opts)
 			if rep.Overlay.GoWhole != tt.whole {
 				t.Errorf("overlay %+v: want GoWhole %v", rep.Overlay, tt.whole)
+			}
+		})
+	}
+}
+
+// TestOverlayLaysOverAModuleThatNoLongerLoads pins a divergence of #41:
+// the load of the differing packages keeps them as failed even when the
+// module has no other package that type-checks, where a full build of the
+// worktree fails the module. A module of one package, and one whose last
+// clean package breaks, are laid over the base, their packages read as
+// failed, and the module read as loaded. The day either is built whole,
+// this fails, and ADR 005's amendment for #41 should drop its exception
+// (#50).
+func TestOverlayLaysOverAModuleThatNoLongerLoads(t *testing.T) {
+	plain := func(pkg, name string) string { return "package " + pkg + "\n\nfunc " + name + "() int { return 2 }\n" }
+	for _, tt := range []struct {
+		name  string
+		files map[string]string
+	}{
+		{"its only package", with(map[string]string{"m4/go.mod": "module example.com/m4\n\ngo 1.26\n", "m4/q/q.go": plain("q", "Q")})},
+		{"its last clean package", with(map[string]string{"m4/go.mod": "module example.com/m4\n\ngo 1.26\n", "m4/q/q.go": plain("q", "Q"),
+			"m4/r/r.go": "package r\n\nvar bad NoSuchType\n"})},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			main, wt := worktreeOf(t, tt.files, map[string]string{"m4/q/q.go": plain("q", "Q") + "\nfunc Q2() int { return nope }\n"})
+			_, rep := overlayWith(t, main, wt, DefaultOptions())
+			_, full, err := Build(wt, DefaultOptions())
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !slices.Contains(full.Go.Failed, "example.com/m4") {
+				t.Fatalf("a full build failed %v: the fixture no longer shows the divergence", full.Go.Failed)
+			}
+			if rep.Overlay.GoWhole || slices.Contains(rep.Go.Failed, "example.com/m4") {
+				t.Errorf("overlay %+v, failed %v: the module is built whole now; update ADR 005", rep.Overlay, rep.Go.Failed)
 			}
 		})
 	}
@@ -816,6 +852,94 @@ func TestOverlaidSkipsNameTheWorktree(t *testing.T) {
 	got = overlaidSkips([]graph.Skip{{File: "go.mod", Reason: "load " + base + ": no C; " + base + "-old"}}, nil, nil, base, wt)
 	if want := "load " + wt + ": no C; " + base + "-old"; len(got) != 1 || got[0].Reason != want {
 		t.Errorf("skips %+v, want the reason %q", got, want)
+	}
+}
+
+// TestOverlayCarriesNoCallsFromABrokenPackage: a package the load of the
+// differing packages found broken has no calls in a full build, where the
+// call graph leaves it out, so the base's calls from it are not carried.
+// b, changed and clean, keeps the load alive.
+func TestOverlayCarriesNoCallsFromABrokenPackage(t *testing.T) {
+	main, wt := worktreeOf(t, overlayRepo, map[string]string{
+		"b/b.go": overlayRepo["b/b.go"] + "\nfunc More() int { return 0 }\n",
+		"c/c.go": overlayRepo["c/c.go"] + "\nfunc Y() int { return nope }\n",
+	})
+	_, rep := overlayEqualsFullWith(t, main, wt, DefaultOptions())
+	if o := rep.Overlay; o.GoWhole || len(o.Packages) != 2 {
+		t.Errorf("overlay %+v: want b and c laid over the base", o)
+	}
+}
+
+// TestOverlayCarriesWhatAFullBuildHas: whether a full build has a
+// package's whole-program edges is a fact of its variants, not of its
+// path. One cut off from the call graph by a broken import has no calls
+// but keeps its implements edges; one whose test variant alone fails, and
+// the external test package of a broken one, keep their calls. The base's
+// such edges are carried, and none the full build lacks; each case checks
+// the base has the edge, so that it is about something.
+func TestOverlayCarriesWhatAFullBuildHas(t *testing.T) {
+	viaShape := "package c\n\nimport \"example.com/w/a\"\n\nfunc Helper(s a.Shape) int { return s.Area() }\n"
+	brokenTest := "package c\n\nimport \"testing\"\n\nfunc TestBroken(t *testing.T) { var _ NoSuchType }\n"
+	cutOff := with(map[string]string{
+		"bad/bad.go": "package bad\n\nvar X NoSuchType\n\nfunc F() int { return 1 }\n",
+		"r/r.go":     "package r\n\ntype I interface{ M() int }\n",
+		"p/p.go":     "package p\n\nimport \"example.com/w/bad\"\n\ntype T struct{}\n\nfunc (T) M() int { return bad.F() }\n",
+	})
+	// p calls through a.Shape in the base; the worktree breaks bad.
+	cutLater := with(map[string]string{
+		"bad/bad.go": "package bad\n\nfunc F() int { return 1 }\n",
+		"p/p.go":     "package p\n\nimport (\n\t\"example.com/w/a\"\n\t\"example.com/w/bad\"\n)\n\nfunc Use(s a.Shape) int { return s.Area() + bad.F() }\n",
+	})
+	testOf := with(map[string]string{
+		"c/c.go":      viaShape,
+		"c/c_test.go": "package c\n\nimport \"testing\"\n\nfunc TestHelper(t *testing.T) { Helper(nil) }\n",
+	})
+	external := with(map[string]string{
+		"c/c.go":      "package c\n\nfunc Helper() int { return 1 }\n",
+		"c/x_test.go": "package c_test\n\nimport (\n\t\"testing\"\n\n\t\"example.com/w/a\"\n)\n\nfunc use(s a.Shape) int { return s.Area() }\n\nfunc TestUse(t *testing.T) { use(nil) }\n",
+	})
+	for _, tt := range []struct {
+		name          string
+		files, change map[string]string
+		tests, exact  bool
+		edge          string
+		carry         bool
+	}{
+		{"implements, cut off from the call graph", cutOff,
+			map[string]string{"p/p.go": cutOff["p/p.go"] + "\nfunc More() int { return 0 }\n"}, false, false,
+			"go://example.com/w/p#T -implements-> go://example.com/w/r#I", true},
+		{"no calls, cut off from the call graph", cutLater,
+			map[string]string{"bad/bad.go": "package bad\n\nvar X NoSuchType\n\nfunc F() int { return 1 }\n", "p/p.go": cutLater["p/p.go"] + "\nfunc More() int { return 0 }\n"}, false, false,
+			"go://example.com/w/p#Use -calls-> go://example.com/w/b#Sq.Area", false},
+		{"calls, the test variant alone failing", testOf,
+			map[string]string{"c/c_test.go": brokenTest}, true, false,
+			"go://example.com/w/c#Helper -calls-> go://example.com/w/b#Sq.Area", true},
+		{"calls, the test variant alone failing, exact", testOf,
+			map[string]string{"c/c_test.go": brokenTest}, true, true,
+			"go://example.com/w/c#Helper -calls-> go://example.com/w/b#Sq.Area", true},
+		{"calls, the external test package of a broken one", external,
+			map[string]string{"c/c.go": external["c/c.go"] + "\nfunc Y() int { return nope }\n"}, true, false,
+			"go://example.com/w/c_test#use -calls-> go://example.com/w/b#Sq.Area", true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			main, wt := worktreeOf(t, tt.files, tt.change)
+			opts := DefaultOptions()
+			opts.Go.Tests, opts.Go.ExactTests = tt.tests, tt.exact
+			base, _, err := Build(main, opts)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if all, _ := edgeLines(base); !slices.Contains(all, tt.edge+" RESOLVED") {
+				t.Fatalf("the base lacks %s: the fixture no longer shows the case", tt.edge)
+			}
+			g, rep := overlayEqualsFullWith(t, main, wt, opts)
+			if rep.Overlay.GoWhole {
+				t.Fatalf("overlay %+v: want it laid over the base", rep.Overlay)
+			}
+			if _, carried := edgeLines(g); slices.Contains(carried, tt.edge) != tt.carry {
+				t.Errorf("carried %v: want %s carried %v, as a full build has it or not", carried, tt.edge, tt.carry)
+			}
+		})
 	}
 }
 

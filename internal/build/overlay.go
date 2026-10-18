@@ -271,7 +271,7 @@ func (s *Session) overlayGo(lb *graph.Builder, root string, opts golang.Options)
 	}
 
 	owned := ownedBy(append(slices.Clone(present), gone...))
-	carried := s.layOver(lb, owned, subNodes, subEdges)
+	carried := s.layOver(lb, owned, sub, subNodes, subEdges)
 	s.overlaid = &Overlay{Packages: present, Removed: gone, Carried: carried}
 	rep = overlaidGoReport(base, sub, owned)
 	rep.Skipped = overlaidSkips(base.Skipped, sub.Skipped, differ, s.base.root, s.root)
@@ -282,7 +282,8 @@ func (s *Session) overlayGo(lb *graph.Builder, root string, opts golang.Options)
 // layOver adds the base's Go contributions outside the packages loaded
 // again, the load's own, and the base's whole-program edges from those
 // packages it did not find, carried; it returns how many were carried.
-func (s *Session) layOver(lb *graph.Builder, owned func(graph.ID) bool, subNodes []graph.Node, subEdges []graph.Edge) int {
+// Only an edge a full build could have is carried; see carries.
+func (s *Session) layOver(lb *graph.Builder, owned func(graph.ID) bool, sub *golang.Report, subNodes []graph.Node, subEdges []graph.Edge) int {
 	nodes, edges := s.base.b.Contributions("go")
 	keptNodes := nodes[:0:0]
 	for _, n := range nodes {
@@ -295,7 +296,7 @@ func (s *Session) layOver(lb *graph.Builder, owned func(graph.ID) bool, subNodes
 		switch {
 		case !owned(e.From):
 			keptEdges = append(keptEdges, e)
-		case !owned(e.To) && (e.Kind == graph.KindCalls || e.Kind == graph.KindImplements):
+		case !owned(e.To) && carries(sub, e):
 			carry = append(carry, e)
 		}
 	}
@@ -304,6 +305,27 @@ func (s *Session) layOver(lb *graph.Builder, owned func(graph.ID) bool, subNodes
 	carried := carried(carry, subNodes, subEdges)
 	lb.Adopt(reached(keptNodes, keptEdges, carried), carried)
 	return len(carried)
+}
+
+// carries reports whether a whole-program edge of the base, from a
+// package loaded again, is one a full build of the worktree could have,
+// as the load of the packages found them: a call only from a package its
+// call graph reached, and an implements edge only from one that
+// type-checked. A package the load found broken has neither, and one a
+// broken import cut off from the call graph keeps its implements edges,
+// as in a full build. Which packages those are is a fact of each
+// package's variants, not of its path: one whose test variant alone
+// failed is in FailedPackages, and its plain variant still has calls
+// (#41).
+func carries(sub *golang.Report, e graph.Edge) bool {
+	typed, called := sub.Reached(goPackage(e.From))
+	switch e.Kind {
+	case graph.KindCalls:
+		return called
+	case graph.KindImplements:
+		return typed
+	}
+	return false
 }
 
 // modulesLoaded reports whether every module holding one of the packages,
@@ -375,13 +397,20 @@ func ownedBy(pkgs []string) func(graph.ID) bool {
 		set[p], set[p+"_test"] = true, true
 	}
 	return func(id graph.ID) bool {
-		rest, ok := strings.CutPrefix(string(id), "go://")
-		if !ok {
-			return false
-		}
-		pkg, _, _ := strings.Cut(rest, "#")
-		return set[pkg]
+		pkg := goPackage(id)
+		return pkg != "" && set[pkg]
 	}
+}
+
+// goPackage is the import path of the package a Go ID is of, "" for an
+// ID of another layer.
+func goPackage(id graph.ID) string {
+	rest, ok := strings.CutPrefix(string(id), "go://")
+	if !ok {
+		return ""
+	}
+	pkg, _, _ := strings.Cut(rest, "#")
+	return pkg
 }
 
 // carried keeps the base's whole-program edges from a declaration the
