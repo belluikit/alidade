@@ -532,11 +532,15 @@ func TestBrokenPackagesAreThereAndSaySo(t *testing.T) {
 // TestPlatformOnlyPackages pins #95: a package whose every file is for
 // another platform is never matched by ./..., so no load names it. It is
 // recorded as skipped on the host, and -go-configs auto brings it in.
+// Since #48 so is one only a build tag includes, read with the tag set;
+// one no platform auto considers builds, with its tags or without, stays
+// skipped.
 func TestPlatformOnlyPackages(t *testing.T) {
 	files := func() map[string]string {
 		return map[string]string{
 			"win/w_windows.go": "package win\n\nfunc W() {}\n",
-			"plug/main.go":     "//go:build plugin\n\npackage main\n",
+			"plug/main.go":     "//go:build plugin\n\npackage main\n\nfunc Plug() {}\n",
+			"nine/n.go":        "//go:build plan9\n\npackage nine\n",
 			"p/p.go":           "package p\n\nfunc P() {}\n",
 		}
 	}
@@ -554,8 +558,11 @@ func TestPlatformOnlyPackages(t *testing.T) {
 	if !strings.Contains(reasons["win"], "-go-configs auto would load another platform's") {
 		t.Errorf("win: reason %q", reasons["win"])
 	}
-	if !strings.Contains(reasons["plug"], "only a build tag includes them") {
+	if !strings.Contains(reasons["plug"], "-go-configs auto would load them with their tags") {
 		t.Errorf("plug: reason %q", reasons["plug"])
+	}
+	if !strings.Contains(reasons["nine"], "for every platform -go-configs auto considers") {
+		t.Errorf("nine: reason %q", reasons["nine"])
 	}
 	// A reason reaches the build's output, where something
 	// machine-specific makes two builds of one tree disagree
@@ -572,8 +579,11 @@ func TestPlatformOnlyPackages(t *testing.T) {
 	if _, ok := g.Node("go://example.com/m/win#W"); !ok {
 		t.Errorf("-go-configs auto did not bring in win#W; configs %v", rep.Configs)
 	}
-	if len(rep.Skipped) != 1 || rep.Skipped[0].File != "plug" {
-		t.Errorf("Skipped = %+v after auto; want only plug, which no platform builds", rep.Skipped)
+	if len(rep.Skipped) != 1 || rep.Skipped[0].File != "nine" {
+		t.Errorf("Skipped = %+v after auto; want only nine, which no platform auto considers builds", rep.Skipped)
+	}
+	if n, ok := g.Node("go://example.com/m/plug#Plug"); !ok || !strings.HasSuffix(n.Attrs["build"], "+plugin") {
+		t.Errorf("plug#Plug = %+v, %v; want it read with the plugin tag set, and its build attribute saying so", n, ok)
 	}
 }
 
@@ -624,7 +634,7 @@ func TestRecoveredDirectoryIsNotSkipped(t *testing.T) {
 	opts.Configs = "auto"
 	g, rep := module(t, map[string]string{
 		"win/w_windows.go": "package win\n\nfunc W() {}\n",
-		"win/tagged.go":    "//go:build plugin\n\npackage win\n\nfunc T() {}\n",
+		"win/tagged.go":    "//go:build plan9\n\npackage win\n\nfunc T() {}\n",
 		"p/p.go":           "package p\n\nfunc P() {}\n",
 	}, opts)
 	if _, ok := g.Node("go://example.com/m/win#W"); !ok {
@@ -940,5 +950,45 @@ func TestBuiltGoRepositoryIsKept(t *testing.T) {
 	}
 	if kept, skipped := unbuiltGoRepository(graph.NewMinter(dir), mods, nil); len(kept) != 3 || len(skipped) != 0 {
 		t.Errorf("built: kept %d modules and skipped %v, want all three and none", len(kept), skipped)
+	}
+}
+
+// TestTaggedVariantIsRead pins #48 end to end: under auto, the variant
+// of a declaration that only a build tag includes is read with the tag
+// set. Its declaration keeps the untagged variant's node — one name, one
+// ID — and what only it has, a call and a declaration of its own, is in
+// the graph, marked with the configuration that brought it in, every tag
+// named.
+func TestTaggedVariantIsRead(t *testing.T) {
+	opts := DefaultOptions()
+	opts.Configs = "auto"
+	g, rep := module(t, map[string]string{
+		"p/draw_gl.go":   "//go:build gl\n\npackage p\n\nfunc Draw() int { return glOnly() }\n\nfunc glOnly() int { return 1 }\n",
+		"p/draw_nogl.go": "//go:build !gl\n\npackage p\n\nfunc Draw() int { return 0 }\n",
+		"p/mobile.go":    "//go:build mobile\n\npackage p\n\nfunc Touch() {}\n",
+	}, opts)
+	if n, ok := g.Node("go://example.com/m/p#Draw"); !ok || n.Attrs["build"] != "" || n.Pos.File != "p/draw_nogl.go" {
+		t.Errorf("p#Draw = %+v, %v; want the host's, untagged variant", n, ok)
+	}
+	n, ok := g.Node("go://example.com/m/p#glOnly")
+	if !ok || !strings.HasSuffix(n.Attrs["build"], "+gl+mobile") {
+		t.Fatalf("p#glOnly = %+v, %v; want it read with gl and mobile set; configs %v", n, ok, rep.Configs)
+	}
+	if !slices.ContainsFunc(g.Out("go://example.com/m/p#Draw"), func(e graph.Edge) bool {
+		return e.To == "go://example.com/m/p#glOnly" && e.Kind == graph.KindCalls && e.Attrs["build"] == n.Attrs["build"]
+	}) {
+		t.Errorf("no calls edge p#Draw -> p#glOnly marked %s: %+v", n.Attrs["build"], g.Out("go://example.com/m/p#Draw"))
+	}
+	if _, ok := g.Node("go://example.com/m/p#Touch"); !ok {
+		t.Error("p#Touch, behind mobile, is not in the graph")
+	}
+	explicit := DefaultOptions()
+	explicit.Configs = "linux/amd64+gl"
+	g, _ = module(t, map[string]string{
+		"p/p.go":       "package p\n\nfunc P() {}\n",
+		"p/draw_gl.go": "//go:build gl\n\npackage p\n\nfunc GL() {}\n",
+	}, explicit)
+	if n, ok := g.Node("go://example.com/m/p#GL"); !ok || n.Attrs["build"] != "linux/amd64+gl" {
+		t.Errorf("explicit linux/amd64+gl: p#GL = %+v, %v", n, ok)
 	}
 }

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"go/build"
 	"go/build/constraint"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -18,28 +19,128 @@ import (
 	"sync"
 )
 
-// A config is one GOOS/GOARCH pair the packages can be loaded for.
-type config struct{ goos, goarch string }
+// A config is one GOOS/GOARCH pair the packages can be loaded for, and
+// the build tags set for the load, sorted and comma-separated, "" for
+// none (#48).
+type config struct{ goos, goarch, tags string }
 
-func (c config) String() string { return c.goos + "/" + c.goarch }
+// String names the configuration as -go-configs and a node's build
+// attribute do: "linux/amd64", or with tags "linux/amd64+gl+mobile".
+func (c config) String() string {
+	if c.tags != "" {
+		return c.goos + "/" + c.goarch + "+" + strings.ReplaceAll(c.tags, ",", "+")
+	}
+	return c.goos + "/" + c.goarch
+}
 
-// parseConfig reads "linux/amd64".
+// env is the load's environment for the configuration's platform.
+func (c config) env() []string { return []string{"GOOS=" + c.goos, "GOARCH=" + c.goarch} }
+
+// buildTags are the tags the load sets, nil for none.
+func (c config) buildTags() []string {
+	if c.tags == "" {
+		return nil
+	}
+	return strings.Split(c.tags, ",")
+}
+
+func (c config) hasTag(t string) bool { return slices.Contains(c.buildTags(), t) }
+
+// withTags is the configuration with these build tags set, sorted.
+func (c config) withTags(tags []string) config {
+	tags = slices.Clone(tags)
+	slices.Sort(tags)
+	c.tags = strings.Join(slices.Compact(tags), ",")
+	return c
+}
+
+// parseConfig reads "linux/amd64", or "linux/amd64+gl+mobile" for a
+// load with build tags (#48).
 func parseConfig(s string) (config, error) {
+	platform, tags, hasTags := strings.Cut(strings.TrimSpace(s), "+")
+	c, err := parsePlatform(platform)
+	if err != nil || !hasTags {
+		return c, err
+	}
+	list := strings.Split(tags, "+")
+	if slices.Contains(list, "") {
+		return config{}, fmt.Errorf("golang: configuration %q has an empty build tag", s)
+	}
+	return c.withTags(list), nil
+}
+
+func parsePlatform(s string) (config, error) {
 	goos, goarch, ok := strings.Cut(strings.TrimSpace(s), "/")
 	if !ok || goos == "" || goarch == "" || strings.Contains(goarch, "/") {
 		return config{}, fmt.Errorf("golang: configuration %q is not GOOS/GOARCH", s)
 	}
-	return config{goos, goarch}, nil
+	return config{goos, goarch, ""}, nil
 }
 
-// candidates are the configurations "auto" chooses among, beyond the
-// host's: the platforms the repositories here build for. A file whose
-// constraint none of them satisfies stays excluded and is reported so.
-var candidates = []config{
-	{"linux", "amd64"}, {"linux", "arm64"},
-	{"darwin", "amd64"}, {"darwin", "arm64"},
-	{"windows", "amd64"}, {"windows", "arm64"},
+// platforms are the GOOS/GOARCH pairs "auto" chooses among, beyond the
+// host's: the platforms the repositories here build for, the desktop
+// ones and, since #48, the browser's, WASI's and the mobile ones. A file
+// whose constraint none of them satisfies, with or without the build
+// tags found, stays excluded and is reported so.
+var platforms = []config{
+	{"linux", "amd64", ""}, {"linux", "arm64", ""},
+	{"darwin", "amd64", ""}, {"darwin", "arm64", ""},
+	{"windows", "amd64", ""}, {"windows", "arm64", ""},
+	{"js", "wasm", ""}, {"wasip1", "wasm", ""},
+	{"android", "arm64", ""}, {"ios", "arm64", ""},
 }
+
+// candidates are the configurations "auto" chooses among: each platform,
+// and each platform with every build tag the excluded files' constraints
+// name set at once (#48, the owner's decision). One load with all the
+// tags reads, on belluikit/bellui, every declaration a load per tag
+// does, in 11 loads against 29: a file a tag excludes (//go:build !gl) is
+// read by the load without tags already, and each further load adds only
+// what the ones before it did not.
+func candidates(cv *coverage) []config {
+	tags := tagsOf(cv)
+	out := slices.Clone(platforms)
+	if len(tags) > 0 {
+		for _, p := range platforms {
+			out = append(out, p.withTags(tags))
+		}
+	}
+	return out
+}
+
+// tagsOf are the build tags the files' constraints name: every one but a
+// GOOS, a GOARCH, a release tag, and those a load sets or never can —
+// unix, gc, cgo, gccgo, ignore.
+func tagsOf(cv *coverage) []string {
+	seen := map[string]bool{}
+	for _, fc := range cv.cons {
+		if fc.expr != nil {
+			collectTags(fc.expr, seen)
+		}
+	}
+	return slices.Sorted(maps.Keys(seen))
+}
+
+func collectTags(e constraint.Expr, seen map[string]bool) {
+	switch e := e.(type) {
+	case *constraint.TagExpr:
+		t := e.Tag
+		if !knownOS[t] && !knownArch[t] && !nonTags[t] && !minorRE.MatchString(t) {
+			seen[t] = true
+		}
+	case *constraint.NotExpr:
+		collectTags(e.X, seen)
+	case *constraint.AndExpr:
+		collectTags(e.X, seen)
+		collectTags(e.Y, seen)
+	case *constraint.OrExpr:
+		collectTags(e.X, seen)
+		collectTags(e.Y, seen)
+	}
+}
+
+// nonTags are the constraint words that are not tags a load can set.
+var nonTags = map[string]bool{"unix": true, "gc": true, "gccgo": true, "cgo": true, "ignore": true}
 
 var unixOS = map[string]bool{
 	"aix": true, "android": true, "darwin": true, "dragonfly": true, "freebsd": true, "hurd": true,
@@ -162,7 +263,7 @@ func (fc fileConstraint) satisfied(c config) bool {
 		case "unix":
 			return unixOS[c.goos]
 		}
-		return fc.release[tag]
+		return c.hasTag(tag) || fc.release[tag]
 	})
 }
 
@@ -287,11 +388,12 @@ func chooseConfigs(mode string, host config, excluded []string, gaining bool) (c
 // autoConfigs is the greedy cover: the candidate bringing in the most
 // uncovered files, repeated until none brings in any.
 func autoConfigs(cv *coverage, host config) []config {
+	cands := candidates(cv)
 	var configs []config
 	chosen := map[config]bool{host: true}
 	for {
 		best, bestN := config{}, 0
-		for _, c := range candidates {
+		for _, c := range cands {
 			if n := cv.gain(c); !chosen[c] && n > bestN {
 				best, bestN = c, n
 			}

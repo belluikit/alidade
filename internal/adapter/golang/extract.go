@@ -578,7 +578,11 @@ func excludedInModules(loaded []loadedModule, tests bool) []string {
 // every package of the module: import paths, not ./dir, since caliper
 // loads a checkout of the Go repository from no directory, GOROOT
 // naming it, and ./dir would match nothing there (#25).
-func load(dir string, opts Options, env, patterns []string) (*analysis.Engine, error) {
+func load(dir string, opts Options, c *config, patterns []string) (*analysis.Engine, error) {
+	var env, tags []string
+	if c != nil {
+		env, tags = c.env(), c.buildTags()
+	}
 	eng, err := analysis.NewEngineWithOptions(dir, analysis.EngineOptions{
 		// Never inherited from analysis.DefaultOptions: both flags are
 		// alidade's decision (ADR 004). SkipGenerated is off so the AST
@@ -587,6 +591,7 @@ func load(dir string, opts Options, env, patterns []string) (*analysis.Engine, e
 		SkipCgo:       true,
 		Tests:         opts.Tests,
 		Env:           env,
+		BuildTags:     tags,
 
 		DepsFromExportData: opts.DepsFromExportData,
 	}, patterns...)
@@ -605,7 +610,7 @@ func load(dir string, opts Options, env, patterns []string) (*analysis.Engine, e
 // layer that returns an error is dropped whole (#93).
 func extraPass(rec *recorder, m *graph.Minter, mod loadedModule, modules []string, opts Options, c config, report *Report) error {
 	start := time.Now()
-	eng, err := load(mod.Dir, opts, []string{"GOOS=" + c.goos, "GOARCH=" + c.goarch}, mod.only)
+	eng, err := load(mod.Dir, opts, &c, mod.only)
 	report.Load += time.Since(start)
 	if err != nil {
 		report.Skipped = append(report.Skipped, m.Skip(filepath.Join(mod.Dir, "go.mod"), 0,
@@ -759,7 +764,7 @@ func hostConfig() config {
 	if goarch == "" {
 		goarch = runtime.GOARCH
 	}
-	return config{goos, goarch}
+	return config{goos, goarch, ""}
 }
 
 // excludedIn lists the Go files the load left out across the module's
