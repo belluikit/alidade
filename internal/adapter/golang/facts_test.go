@@ -200,6 +200,40 @@ func TestTestDirectoryNameIsNotATest(t *testing.T) {
 	}
 }
 
+// TestRootExternalTestPackage pins #45: the external test package of a
+// module's root package, m_test, is the module's, and with tests its
+// declarations are in the graph as those of a subpackage's are. A module
+// whose path is m_test itself is still its own.
+func TestRootExternalTestPackage(t *testing.T) {
+	opts := DefaultOptions()
+	opts.Tests = true
+	g, rep := module(t, map[string]string{
+		"m.go":      "package m\n\nfunc M() {}\n",
+		"m_test.go": "package m_test\n\nimport (\n\t\"testing\"\n\n\t\"example.com/m\"\n)\n\nfunc BenchmarkM(b *testing.B) { m.M() }\n",
+	}, opts)
+	if n, ok := g.Node("go://example.com/m_test#BenchmarkM"); !ok || !n.Test {
+		t.Errorf("m_test#BenchmarkM = %+v, %v; want a test declaration", n, ok)
+	}
+	if !slices.ContainsFunc(g.Out("go://example.com/m_test#BenchmarkM"), func(e graph.Edge) bool { return e.To == "go://example.com/m#M" }) {
+		t.Error("m_test#BenchmarkM has no edge to m#M")
+	}
+	if rep.Tests == 0 {
+		t.Error("Tests = 0")
+	}
+	for _, tt := range []struct{ pkg, want string }{
+		{"example.com/m_test", "example.com/m"},
+		{"example.com/m_testing", ""},
+		{"example.com/m/q_test", "example.com/m"},
+	} {
+		if got := Owner(tt.pkg, []string{"example.com/m"}); got != tt.want {
+			t.Errorf("Owner(%s) = %q, want %q", tt.pkg, got, tt.want)
+		}
+	}
+	if got := Owner("example.com/m_test", []string{"example.com/m", "example.com/m_test"}); got != "example.com/m_test" {
+		t.Errorf("Owner(example.com/m_test) beside a module of that path = %q, want that module", got)
+	}
+}
+
 // TestPackagesWithNoProductionFilesAreTests pins #113 (the owner's
 // decision, ADR 004 rule 4): a package whose files on disk are all
 // _test.go files is a test package, with tests loaded or not — a build

@@ -99,6 +99,8 @@ func modulePathOf(gomod string) (string, error) {
 // Owner returns which of the graph's module paths a package path belongs
 // to — the longest one it sits under, since a nested module's path
 // extends its parent's — or "" for a package of no module in the graph.
+// The external test package of a module's root package, m_test, is m's:
+// its files are in m's root directory (#45).
 //
 // The standard library is the one module whose packages are not under
 // its path: the module is std, its packages bytes and net/http. In a
@@ -110,7 +112,7 @@ func modulePathOf(gomod string) (string, error) {
 func Owner(pkgPath string, modules []string) string {
 	best := ""
 	for _, m := range modules {
-		if (pkgPath == m || strings.HasPrefix(pkgPath, m+"/")) && len(m) > len(best) {
+		if (pkgPath == m || pkgPath == m+"_test" || strings.HasPrefix(pkgPath, m+"/")) && len(m) > len(best) {
 			best = m
 		}
 	}

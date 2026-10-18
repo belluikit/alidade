@@ -16,6 +16,14 @@ tracker's. From v0.12.1 on, every number is this repository's.
   after the reload's load, before anything else is made of it. On
   trendvidia/go's go-notiny worktree that reload's call graph and emit
   are 5.2 s of its 12 s.
+  
+- **Fixed: with `-tests`, the tests of a module's root package written
+  as `package <root>_test` are in the graph** (#45). Every test,
+  benchmark and example in such a file was missing, because its package
+  path, `github.com/x/m_test`, sat under no module path. On
+  belluikit/bellui the graph listed 74 of the root module's 78
+  benchmarks; it now lists all 78.
+  
 - **Fixed: another worktree's Go graph no longer differs from a full
   build of it when a fact of a whole module changes** (#39, #40; ADR 005
   amended). The worktree's Go layer reloads only the packages whose files
