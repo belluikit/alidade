@@ -155,9 +155,17 @@ persisted graph, no invalidation model, and no staleness policy.**
        could not load for some configuration. It is also built whole when
        the load of the differing packages fails where the whole module's
        load would not, which includes a package with a type error loaded
-       alone for the host (#40). A worktree mid-edit, whose every
-       differing package has a type error, is built whole until one
-       compiles.
+       alone for the host (#40). The load of the differing packages runs
+       module by module, so one module is enough: a worktree mid-edit is
+       built whole while the only differing package of some module has a
+       type error, even when differing packages of other modules compile.
+       On trendvidia/go that took 22.0 s against 4.7 s laid over the base
+       (#41 is the way back to the shorter time). Whether a module loads
+       for another configuration also depends on the environment:
+       `CGO_ENABLED` decides whether a file importing C is read there,
+       and trendvidia/go's misc module fails for windows only when it is
+       set. The base and the worktree are built in one process, under
+       one environment, so the comparison holds either way.
      `TestOverlayBuildsWholeWhenAutoWouldChooseOtherwise` and
      `TestOverlayBuildsWholeWhenAModuleDoesNotLoad` fail the day such a
      worktree is laid over the base instead.
