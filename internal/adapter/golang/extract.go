@@ -65,6 +65,11 @@ type Report struct {
 	// unloaded names the modules that did not load for some further
 	// configuration, in either load with ExactTests (#40). See Loaded.
 	unloaded []string
+	// typed and called name, by package path, the packages of the
+	// modules a variant of which type-checked, and a variant of which the
+	// call graph reached, for any configuration and in either load with
+	// ExactTests. See Reached.
+	typed, called []string
 	// Packages, Decls and Calls count emitted nodes and calls edges
 	// within the module. With ExactTests they and Boundary are the load
 	// without tests' counts, so they leave out the test declarations and
@@ -143,6 +148,18 @@ type Report struct {
 // stand for (#40).
 func (r *Report) Loaded(module string) bool {
 	return !slices.Contains(r.Failed, module) && !slices.Contains(r.unloaded, module)
+}
+
+// Reached reports whether the load type-checked a variant of the package
+// at path, and whether its call graph reached one. A package the load
+// found broken has neither; one a broken import cut off from the call
+// graph, or whose module's call graph failed, has only the first. A
+// package whose test variant alone failed has both, from its plain
+// variant, though FailedPackages names it (#41).
+func (r *Report) Reached(path string) (typed, called bool) {
+	_, typed = slices.BinarySearch(r.typed, path)
+	_, called = slices.BinarySearch(r.called, path)
+	return typed, called
 }
 
 // A ModuleEdge is one line of Report.ModuleEdges: the edges of one kind
@@ -253,6 +270,8 @@ func exactReport(prod, tests *Report) *Report {
 	rep.ExactTests = true
 	rep.HostExcluded, rep.testConfigs = tests.HostExcluded, tests.Configs
 	rep.unloaded = mergePaths(slices.Clone(prod.unloaded), tests.unloaded)
+	rep.typed = unionPaths(slices.Clone(prod.typed), tests.typed)
+	rep.called = unionPaths(slices.Clone(prod.called), tests.called)
 	rep.Tests = tests.Tests
 	rep.TestModuleEdges = tests.TestModuleEdges
 	rep.Skipped = nil
@@ -627,6 +646,8 @@ func extraPass(rec *recorder, m *graph.Minter, mod loadedModule, modules []strin
 	report.Added += o.nodes + o.edges
 	report.FailedPackages = mergePaths(report.FailedPackages, o.onlyAdded(m, x.report.FailedPackages))
 	report.WithoutCalls = mergePaths(report.WithoutCalls, o.onlyAdded(m, x.report.WithoutCalls))
+	report.typed = unionPaths(report.typed, x.report.typed)
+	report.called = unionPaths(report.called, x.report.called)
 	return nil
 }
 
@@ -670,14 +691,17 @@ func newExtractor(s sink, m *graph.Minter, eng *analysis.Engine, module string, 
 // and the call graph.
 func (x *extractor) pass(pkgs []*packages.Package) error {
 	loaded := time.Now()
+	var typed []string
 	for _, pkg := range pkgs {
 		if !x.inModule(pkg.PkgPath) {
 			continue
 		}
+		typed = append(typed, pkg.PkgPath)
 		if err := x.declarations(pkg); err != nil {
 			return err
 		}
 	}
+	x.report.typed = unionPaths(x.report.typed, typed)
 	if err := x.failedPackages(pkgs); err != nil {
 		return err
 	}
@@ -695,6 +719,8 @@ func (x *extractor) pass(pkgs []*packages.Package) error {
 		return err
 	} else if err := x.calls(ipc, newCallGraph(ipc)); err != nil {
 		return err
+	} else {
+		x.report.called = unionPaths(x.report.called, x.reachedByCalls(ipc.Skipped))
 	}
 	if err := x.flushInits(); err != nil {
 		return err
@@ -702,6 +728,30 @@ func (x *extractor) pass(pkgs []*packages.Package) error {
 	x.report.CallGraph += built.Sub(emitted)
 	x.report.Emit += emitted.Sub(loaded) + time.Since(built)
 	return nil
+}
+
+// reachedByCalls lists the module's packages a variant of which the call
+// graph reached: every one the load type-checked but those it skipped.
+func (x *extractor) reachedByCalls(skipped []analysis.SkippedPackage) []string {
+	out := make(map[string]bool)
+	for _, s := range skipped {
+		out[s.Package.ID] = true
+	}
+	var paths []string
+	for _, pkg := range x.eng.Packages() {
+		if x.inModule(pkg.PkgPath) && !out[pkg.ID] {
+			paths = append(paths, pkg.PkgPath)
+		}
+	}
+	return paths
+}
+
+// unionPaths is the sorted union of two lists of package paths, the
+// first already sorted: mergePaths for lists as long as a module.
+func unionPaths(out, add []string) []string {
+	out = append(out, add...)
+	slices.Sort(out)
+	return slices.Compact(out)
 }
 
 // callGraphOf builds a module's call graph: caliper's, which a test

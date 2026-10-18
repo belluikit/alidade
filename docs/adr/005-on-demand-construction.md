@@ -176,11 +176,16 @@ persisted graph, no invalidation model, and no staleness policy.**
        against 22.0 s built whole and 23.9 s for a full build, and the
        graph equals a full build's but for the edges already known to
        differ. `TestOverlayBuildsWholeWhenAModuleDoesNotLoad` fails the
-       day such a worktree is built whole again. Whether a module loads
-       for another configuration also depends on the environment:
-       `CGO_ENABLED` decides whether a file importing C is read there,
-       and trendvidia/go's misc module fails for windows only when it is
-       set. The base and the worktree are built in one process, under
+       day such a worktree is built whole again. The assumption is not
+       checked: a change that leaves a module no package that
+       type-checks, its only package or its last clean one broken, is
+       laid over too, though a full build fails the module.
+       `TestOverlayLaysOverAModuleThatNoLongerLoads` pins that
+       divergence, and #50 is the way to a full build's result. Whether
+       a module loads for another configuration also depends on the
+       environment: `CGO_ENABLED` decides whether a file importing C is
+       read there, and trendvidia/go's misc module fails for windows only
+       when it is set. The base and the worktree are built in one process, under
        one environment, so the comparison holds either way.
      `TestOverlayBuildsWholeWhenAutoWouldChooseOtherwise`,
      `TestOverlayBuildsWholeWhenAModuleDoesNotLoad` and
@@ -194,7 +199,11 @@ persisted graph, no invalidation model, and no staleness policy.**
      interface outside the load. The base's such edges from a declaration
      the worktree still has, into a package not loaded again, are kept,
      INFERRED with carried=base (ADR 006: the ends are real nodes, the
-     relationship may be stale).
+     relationship may be stale). None is kept that a full build could
+     not have: no call from a package of which the load's call graph
+     reached no variant, and no implements edge from one of which no
+     variant type-checked (#41). `TestOverlayCarriesWhatAFullBuildHas`
+     fails the day a package's path rather than its variants decides.
    - **Freshness is the base's rule:** a worktree's graph is made again
      when its files change or when the base's graph does. Nothing is
      persisted. The server holds at most four worktrees' graphs and lets
