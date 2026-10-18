@@ -125,7 +125,7 @@ func collectTags(e constraint.Expr, seen map[string]bool) {
 	switch e := e.(type) {
 	case *constraint.TagExpr:
 		t := e.Tag
-		if !knownOS[t] && !knownArch[t] && !nonTags[t] && !minorRE.MatchString(t) {
+		if !knownOS[t] && !knownArch[t] && !nonTags[t] && !minorRE.MatchString(t) && !archLevel(t) {
 			seen[t] = true
 		}
 	case *constraint.NotExpr:
@@ -137,6 +137,14 @@ func collectTags(e constraint.Expr, seen map[string]bool) {
 		collectTags(e.X, seen)
 		collectTags(e.Y, seen)
 	}
+}
+
+// archLevel reports whether a constraint word is a GOARCH's
+// microarchitecture level — amd64.v3, arm64.v8.1 — which the go command
+// sets from GOAMD64 and its kin, not from -tags.
+func archLevel(t string) bool {
+	arch, _, ok := strings.Cut(t, ".")
+	return ok && knownArch[arch]
 }
 
 // nonTags are the constraint words that are not tags a load can set.
@@ -153,9 +161,14 @@ var knownOS = map[string]bool{
 	"plan9": true, "solaris": true, "wasip1": true, "windows": true, "zos": true,
 }
 
+// knownArch are the GOARCH values go/build knows, as its internal/syslist
+// lists them: one ending a file name constrains it, and none is a build
+// tag a load can set.
 var knownArch = map[string]bool{
-	"386": true, "amd64": true, "arm": true, "arm64": true, "loong64": true, "mips": true, "mips64": true,
-	"mips64le": true, "mipsle": true, "ppc64": true, "ppc64le": true, "riscv64": true, "s390x": true, "wasm": true,
+	"386": true, "amd64": true, "amd64p32": true, "arm": true, "armbe": true, "arm64": true, "arm64be": true,
+	"loong64": true, "mips": true, "mipsle": true, "mips64": true, "mips64le": true, "mips64p32": true,
+	"mips64p32le": true, "ppc": true, "ppc64": true, "ppc64le": true, "riscv": true, "riscv64": true,
+	"s390": true, "s390x": true, "sparc": true, "sparc64": true, "wasm": true,
 }
 
 // fileConstraint is what decides whether one file is in a configuration:

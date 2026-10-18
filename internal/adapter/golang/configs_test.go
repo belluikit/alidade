@@ -38,6 +38,9 @@ func TestFileConstraintSatisfied(t *testing.T) {
 		{"linux.go", "package p\n", map[config]bool{win: true, linux: true}},
 		{"both_amd64.go", "//go:build !windows\n\npackage p\n", map[config]bool{linux: true, {"windows", "amd64", ""}: false, amd: false}},
 		{"late.go", "package p\n\n//go:build windows\n", map[config]bool{linux: true}},
+		// Every GOARCH go/build knows ends a file name as a constraint.
+		{"x_armbe.go", "package p\n", map[config]bool{linux: false, amd: false}},
+		{"x_mips64p32le.go", "package p\n", map[config]bool{linux: false}},
 	} {
 		fc, err := readConstraint(write(tt.file, tt.body))
 		if err != nil {
@@ -163,7 +166,7 @@ func TestAutoChoosesTagsAndMorePlatforms(t *testing.T) {
 	dir := t.TempDir()
 	var files []string
 	for name, body := range map[string]string{
-		"gl.go":      "//go:build gl && unix && go1.21\n\npackage p\n",
+		"gl.go":      "//go:build gl && unix && go1.21 && !amd64.v3 && !arm64be\n\npackage p\n",
 		"mobile.go":  "//go:build mobile || ios\n\npackage p\n",
 		"browser.go": "//go:build js && wasm\n\npackage p\n",
 		"nine.go":    "//go:build plan9\n\npackage p\n",
