@@ -37,10 +37,18 @@ tracker's. From v0.12.1 on, every number is this repository's.
     that didn't load for some platform in the session's build, such as
     trendvidia/go's misc module for Windows. The worktree kept that
     failure even after fixing it.
-  - **A package fails when loaded alone.** caliper refuses a load in
-    which no package type-checks. So a changed package with a type error
-    lost all its declarations and was reported as a failed module, though
-    a full build keeps it.
+  - **The changed packages don't load on their own.** caliper refused a
+    load in which no package type-checks. So a changed package with a
+    type error lost all its declarations and was reported as a failed
+    module, though a full build keeps it. That case no longer builds
+    whole (#41): with caliper's new `KeepWhenAllFail`, the load keeps
+    the broken package as failed, as a full build does, and the worktree
+    stays laid over the base. On trendvidia/go that is 4.6 s instead of
+    22 s. A package it had the base's calls copied for, though its own
+    calls could not be computed, no longer has them. One exception
+    remains: when the change leaves a module no package that
+    type-checks, the worktree is still laid over the base, though a full
+    build fails that module (#50).
   
   `graph_stats` for the worktree shows the whole build. The Go report
   also keeps the list of files the host's load leaves out, which auto

@@ -164,18 +164,28 @@ persisted graph, no invalidation model, and no staleness policy.**
        another reason is skipped by a full build of the worktree too,
        and is laid over: std and cmd of an unbuilt checkout of the Go
        repository (#219). It is also built whole when the load of the
-       differing packages fails where the whole module's load would not,
-       which includes a package with a type error loaded alone for the
-       host (#40). The load of the differing packages runs module by
-       module, so one module is enough: a worktree mid-edit is built
-       whole while the only differing package of some module has a type
-       error, even when differing packages of other modules compile. On
-       trendvidia/go that took 22.0 s against 4.7 s laid over the base
-       (#41 is the way back to the shorter time). Whether a module loads
-       for another configuration also depends on the environment:
-       `CGO_ENABLED` decides whether a file importing C is read there,
-       and trendvidia/go's misc module fails for windows only when it is
-       set. The base and the worktree are built in one process, under
+       differing packages fails where the whole module's load would not
+       (#40).
+       *Amended 2026-10-18 (#41, the owner's decision):* a load of the
+       differing packages none of which type-checks no longer fails. A
+       whole module's load has clean packages to keep it alive, and the
+       load of a few packages now keeps the broken ones as failed in the
+       same way, through caliper's KeepWhenAllFail. A worktree mid-edit,
+       where the only differing package of some module has a type error,
+       is therefore laid over the base. On trendvidia/go that took 4.6 s,
+       against 22.0 s built whole and 23.9 s for a full build, and the
+       graph equals a full build's but for the edges already known to
+       differ. `TestOverlayBuildsWholeWhenAModuleDoesNotLoad` fails the
+       day such a worktree is built whole again. The assumption is not
+       checked: a change that leaves a module no package that
+       type-checks, its only package or its last clean one broken, is
+       laid over too, though a full build fails the module.
+       `TestOverlayLaysOverAModuleThatNoLongerLoads` pins that
+       divergence, and #50 is the way to a full build's result. Whether
+       a module loads for another configuration also depends on the
+       environment: `CGO_ENABLED` decides whether a file importing C is
+       read there, and trendvidia/go's misc module fails for windows only
+       when it is set. The base and the worktree are built in one process, under
        one environment, so the comparison holds either way.
      `TestOverlayBuildsWholeWhenAutoWouldChooseOtherwise`,
      `TestOverlayBuildsWholeWhenAModuleDoesNotLoad` and
@@ -189,7 +199,11 @@ persisted graph, no invalidation model, and no staleness policy.**
      interface outside the load. The base's such edges from a declaration
      the worktree still has, into a package not loaded again, are kept,
      INFERRED with carried=base (ADR 006: the ends are real nodes, the
-     relationship may be stale).
+     relationship may be stale). None is kept that a full build could
+     not have: no call from a package of which the load's call graph
+     reached no variant, and no implements edge from one of which no
+     variant type-checked (#41). `TestOverlayCarriesWhatAFullBuildHas`
+     fails the day a package's path rather than its variants decides.
    - **Freshness is the base's rule:** a worktree's graph is made again
      when its files change or when the base's graph does. Nothing is
      persisted. The server holds at most four worktrees' graphs and lets
