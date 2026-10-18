@@ -164,14 +164,19 @@ persisted graph, no invalidation model, and no staleness policy.**
        another reason is skipped by a full build of the worktree too,
        and is laid over: std and cmd of an unbuilt checkout of the Go
        repository (#219). It is also built whole when the load of the
-       differing packages fails where the whole module's load would not,
-       which includes a package with a type error loaded alone for the
-       host (#40). The load of the differing packages runs module by
-       module, so one module is enough: a worktree mid-edit is built
-       whole while the only differing package of some module has a type
-       error, even when differing packages of other modules compile. On
-       trendvidia/go that took 22.0 s against 4.7 s laid over the base
-       (#41 is the way back to the shorter time). Whether a module loads
+       differing packages fails where the whole module's load would not
+       (#40).
+       *Amended 2026-10-18 (#41, the owner's decision):* a load of the
+       differing packages none of which type-checks no longer fails. A
+       whole module's load has clean packages to keep it alive, and the
+       load of a few packages now keeps the broken ones as failed in the
+       same way, through caliper's KeepWhenAllFail. A worktree mid-edit,
+       where the only differing package of some module has a type error,
+       is therefore laid over the base. On trendvidia/go that took 4.6 s,
+       against 22.0 s built whole and 23.9 s for a full build, and the
+       graph equals a full build's but for the edges already known to
+       differ. `TestOverlayBuildsWholeWhenAModuleDoesNotLoad` fails the
+       day such a worktree is built whole again. Whether a module loads
        for another configuration also depends on the environment:
        `CGO_ENABLED` decides whether a file importing C is read there,
        and trendvidia/go's misc module fails for windows only when it is

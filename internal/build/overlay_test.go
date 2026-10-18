@@ -485,10 +485,11 @@ func TestOverlayOfAnUnbuiltGoRepository(t *testing.T) {
 // loads for a configuration is a fact of all its packages, as caliper
 // refuses a load only when none of them type-checks, so a load of the
 // packages that differ cannot tell it. A worktree changing a module the
-// base's build could not load for a configuration is built whole, and so
-// is one whose load of its differing packages fails, for the host or a
-// further configuration, where a whole module's would not. A worktree
-// changing another module is still laid over the base.
+// base's build could not load for a configuration is built whole. One
+// whose differing packages none type-checks, for the host or a further
+// configuration, is laid over the base: the load keeps them as failed, as
+// a whole module's load, which its clean packages keep alive, does (#41).
+// So is a worktree changing another module.
 func TestOverlayBuildsWholeWhenAModuleDoesNotLoad(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("the fixtures' configuration is the host's")
@@ -536,12 +537,12 @@ func TestOverlayBuildsWholeWhenAModuleDoesNotLoad(t *testing.T) {
 		{"fixed in part", m2, map[string]string{"m2/r/r_windows.go": plain("r", "RW")}, "auto", false, true},
 		{"still failing", m2, map[string]string{"m2/r/r.go": plain("r", "R") + "\nfunc R2() int { return 1 }\n"}, "auto", false, true},
 		{"another module", m2, map[string]string{"c/c.go": overlayRepo["c/c.go"] + "\nfunc More() int { return 0 }\n"}, "auto", false, false},
-		{"alone for a further configuration", lone, map[string]string{"p/p.go": plain("p", "P") + "\nfunc P2() int { return 1 }\n"}, "auto", false, true},
-		{"alone for the host", with(nil), map[string]string{"c/c.go": overlayRepo["c/c.go"] + "\nfunc Y() int { return nope }\n"}, "", false, true},
+		{"alone for a further configuration", lone, map[string]string{"p/p.go": plain("p", "P") + "\nfunc P2() int { return 1 }\n"}, "auto", false, false},
+		{"alone for the host", with(nil), map[string]string{"c/c.go": overlayRepo["c/c.go"] + "\nfunc Y() int { return nope }\n"}, "", false, false},
 		// r then type-checks for the host, and p is read as a failed
 		// package of a module that loads.
 		{"fixed for the host", m3, map[string]string{"m3/r/r.go": plain("r", "R")}, "", false, true},
-		{"alone for a further configuration, with tests", lone, map[string]string{"p/p.go": plain("p", "P") + "\nfunc P2() int { return 1 }\n"}, "auto", true, true},
+		{"alone for a further configuration, with tests", lone, map[string]string{"p/p.go": plain("p", "P") + "\nfunc P2() int { return 1 }\n"}, "auto", true, false},
 		// A package whose test files do not type-check, loaded alone
 		// with -tests-exact, is a failed package of a module that loads,
 		// as in a full build: still laid over the base.

@@ -589,6 +589,10 @@ func load(dir string, opts Options, env, patterns []string) (*analysis.Engine, e
 		Env:           env,
 
 		DepsFromExportData: opts.DepsFromExportData,
+		// A load of a few packages, none of which type-checks, is not a
+		// module that does not load: a whole module's clean packages keep
+		// its load alive, and the broken ones are read as failed (#41).
+		KeepWhenAllFail: opts.Only != nil,
 	}, patterns...)
 	if err != nil {
 		return nil, fmt.Errorf("golang: load %s: %w", dir, err)
