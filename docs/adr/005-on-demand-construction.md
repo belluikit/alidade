@@ -138,6 +138,29 @@ persisted graph, no invalidation model, and no staleness policy.**
      full build, and 11.1 s against 2 min 4 s with `-go-configs auto`.
      `TestOverlayOfAnotherPlatformsPackage` fails the day such a package
      is read under another configuration than a full build's.
+     *Amended 2026-10-17 (#39 and #40, the owner's decisions):* the base's
+     Go layer rests on two facts about whole modules. A load of only the
+     differing packages cannot check either, so the layer is built whole
+     when either may not hold for the worktree.
+     - **Which further configurations `-go-configs auto` chooses, in what
+       order.** The choice is made from every file the host's load leaves
+       out. The base's report keeps that list. The worktree's list is the
+       base's, with the directories loaded again replaced by that load's
+       own. If auto would choose differently from it, the layer is built
+       whole (#39). Across the last 300 Go commits of trendvidia/go and of
+       trendvidia/govm, no commit changed the choice.
+     - **Whether each module loads for each configuration.** caliper
+       refuses a load only when none of its packages type-checks. So the
+       layer is built whole when the worktree changes a module the base
+       could not load for some configuration. It is also built whole when
+       the load of the differing packages fails where the whole module's
+       load would not, which includes a package with a type error loaded
+       alone for the host (#40). A worktree mid-edit, whose every
+       differing package has a type error, is built whole until one
+       compiles.
+     `TestOverlayBuildsWholeWhenAutoWouldChooseOtherwise` and
+     `TestOverlayBuildsWholeWhenAModuleDoesNotLoad` fail the day such a
+     worktree is laid over the base instead.
    - **What a load of fewer packages cannot see** is a package's
      whole-program edges: every implementation an interface call reaches,
      every function value reaching a call, an implements edge to an

@@ -52,6 +52,12 @@ type Report struct {
 	Excluded  int
 	Recovered int
 	Added     int
+	// HostExcluded are the files the host's load left out, by path
+	// relative to the root: what -go-configs auto chooses among, so a
+	// worktree laid over this graph can tell whether its own files would
+	// choose differently (#39). With ExactTests they are the load with
+	// tests'.
+	HostExcluded []string
 	// Packages, Decls and Calls count emitted nodes and calls edges
 	// within the module. With ExactTests they and Boundary are the load
 	// without tests' counts, so they leave out the test declarations and
@@ -226,6 +232,7 @@ func extractExact(b *graph.Builder, dir string, opts Options) (*Report, error) {
 func exactReport(prod, tests *Report) *Report {
 	rep := *prod
 	rep.ExactTests = true
+	rep.HostExcluded = tests.HostExcluded
 	rep.Tests = tests.Tests
 	rep.TestModuleEdges = tests.TestModuleEdges
 	rep.Skipped = nil
@@ -523,6 +530,7 @@ func configsFor(m *graph.Minter, loaded []loadedModule, opts Options, host confi
 	}
 	excluded := append(excludedInModules(loaded, opts.Tests), unloaded...)
 	sort.Strings(excluded)
+	report.HostExcluded = relativeTo(m.Root(), excluded)
 	extra, covered, unread, err := chooseConfigs(opts.Configs, host, excluded, opts.Only != nil)
 	if err != nil {
 		return nil, nil, err
