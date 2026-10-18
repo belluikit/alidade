@@ -4,8 +4,10 @@
 package golang
 
 import (
+	"errors"
 	"github.com/trendvidia/caliper/pkg/analysis"
 	"go/build"
+	"maps"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -975,4 +977,60 @@ func TestBuiltGoRepositoryIsKept(t *testing.T) {
 	if kept, skipped := unbuiltGoRepository(graph.NewMinter(dir), mods, nil); len(kept) != 3 || len(skipped) != 0 {
 		t.Errorf("built: kept %d modules and skipped %v, want all three and none", len(kept), skipped)
 	}
+}
+
+// TestProceedStopsBeforeEmit pins #43's hook: Options.Proceed is asked
+// after the host's load with the files it leaves out and whether it has
+// tests, and false ends the extraction with ErrStopped before anything
+// is emitted.
+func TestProceedStopsBeforeEmit(t *testing.T) {
+	files := map[string]string{
+		"p/p.go":       "package p\n\nfunc P() {}\n",
+		"p/p_other.go": "//go:build " + otherGOOS() + "\n\npackage p\n\nfunc Q() {}\n",
+	}
+	for _, proceed := range []bool{false, true} {
+		var asked [][]string
+		var askedTests []bool
+		opts := DefaultOptions()
+		opts.Tests = true
+		opts.Proceed = func(excluded []string, tests bool) bool {
+			asked = append(asked, slices.Clone(excluded))
+			askedTests = append(askedTests, tests)
+			return proceed
+		}
+		dir := moduleDir(t, files)
+		b := graph.NewBuilder(dir)
+		_, err := Extract(b, dir, opts)
+		if len(asked) != 1 || !slices.Equal(asked[0], []string{"p/p_other.go"}) || !askedTests[0] {
+			t.Errorf("proceed=%v: asked %q tests %v, want once, p/p_other.go, with tests", proceed, asked, askedTests)
+		}
+		nodes, _ := b.Contributions("")
+		switch {
+		case !proceed && (!errors.Is(err, ErrStopped) || len(nodes) != 0):
+			t.Errorf("proceed=false: err %v, %d nodes; want ErrStopped and none", err, len(nodes))
+		case proceed && (err != nil || len(nodes) == 0):
+			t.Errorf("proceed=true: err %v, %d nodes; want the graph", err, len(nodes))
+		}
+	}
+}
+
+// moduleDir writes files, and a go.mod of example.com/m unless they hold
+// one, into a new directory.
+func moduleDir(t *testing.T, files map[string]string) string {
+	t.Helper()
+	dir := t.TempDir()
+	files = maps.Clone(files)
+	if _, ok := files["go.mod"]; !ok {
+		files["go.mod"] = "module example.com/m\n\ngo 1.26\n"
+	}
+	for name, body := range files {
+		p := filepath.Join(dir, name)
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return dir
 }

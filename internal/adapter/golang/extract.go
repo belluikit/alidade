@@ -338,6 +338,9 @@ func testEdges(g *graph.Graph) ([]graph.Edge, map[graph.ID]bool) {
 	return edges, ends
 }
 
+// ErrStopped is the error of an extraction Options.Proceed ended.
+var ErrStopped = errors.New("golang: extraction stopped: Options.Proceed said no")
+
 func extractOnce(b *graph.Builder, dir string, opts Options) (*Report, error) {
 	mods, skipped, err := Modules(dir, opts.Skip)
 	if err != nil {
@@ -570,6 +573,9 @@ func configsFor(m *graph.Minter, loaded []loadedModule, opts Options, host confi
 	excluded := append(excludedInModules(loaded, opts.Tests), unloaded...)
 	sort.Strings(excluded)
 	report.HostExcluded = relativeTo(m.Root(), excluded)
+	if opts.Proceed != nil && !opts.Proceed(report.HostExcluded, opts.Tests) {
+		return nil, nil, ErrStopped
+	}
 	extra, covered, unread, err := chooseConfigs(opts.Configs, host, excluded, opts.Only != nil)
 	if err != nil {
 		return nil, nil, err
