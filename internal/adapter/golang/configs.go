@@ -329,3 +329,40 @@ func configNames(host config, extra []config) []string {
 	}
 	return out
 }
+
+// SameAutoChoice reports whether -go-configs auto chooses the same
+// configurations, in the same order, from two lists of host-excluded
+// files, each relative to its own root: a worktree's against the base's
+// it is laid over (#39). The order is the choice too: a file two
+// configurations include is credited to the one chosen first. With
+// exactTests the lists are a load with tests', and the load without
+// tests chooses from them less their _test.go files, which must agree as
+// well.
+func SameAutoChoice(baseRoot string, base []string, root string, wt []string, exactTests bool) bool {
+	host := hostConfig()
+	choice := func(root string, files []string, tests bool) string {
+		var abs []string
+		for _, f := range files {
+			if tests || !strings.HasSuffix(f, "_test.go") {
+				abs = append(abs, filepath.Join(root, filepath.FromSlash(f)))
+			}
+		}
+		return strings.Join(configNames(host, autoConfigs(readConstraints(abs), host)), ",")
+	}
+	if choice(baseRoot, base, true) != choice(root, wt, true) {
+		return false
+	}
+	return !exactTests || choice(baseRoot, base, false) == choice(root, wt, false)
+}
+
+// relativeTo names each file by its path relative to root, slash
+// separated; one outside the root is left out.
+func relativeTo(root string, files []string) []string {
+	out := make([]string, 0, len(files))
+	for _, f := range files {
+		if rel, err := filepath.Rel(root, f); err == nil && filepath.IsLocal(rel) {
+			out = append(out, filepath.ToSlash(rel))
+		}
+	}
+	return out
+}
