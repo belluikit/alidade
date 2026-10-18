@@ -133,11 +133,56 @@ persisted graph, no invalidation model, and no staleness policy.**
      it out. It is loaded under the further configurations the base's
      build chose, those of them that bring in a file of it, so it is read
      under the configuration a full build reads it under, or skipped as a
-     full build skips it. On trendvidia/go, a worktree changing
-     internal/syscall/windows/sysdll took 3.9 s against 22.5 s for a
-     full build, and 11.1 s against 2 min 4 s with `-go-configs auto`.
-     `TestOverlayOfAnotherPlatformsPackage` fails the day such a package
-     is read under another configuration than a full build's.
+     full build skips it. With `-tests-exact` the load with tests takes
+     those the base's load with tests chose, which bring in test files
+     the load without tests has no configuration for. On trendvidia/go,
+     a worktree changing internal/syscall/windows/sysdll took 3.9 s
+     against 22.5 s for a full build, and 11.1 s against 2 min 4 s with
+     `-go-configs auto`. `TestOverlayOfAnotherPlatformsPackage` fails the
+     day such a package is read under another configuration than a full
+     build's, and its case "the same choice, with tests" of
+     `TestOverlayBuildsWholeWhenAutoWouldChooseOtherwise` the day a test
+     file is.
+     *Amended 2026-10-17 (#39 and #40, the owner's decisions):* the base's
+     Go layer rests on two facts about whole modules. A load of only the
+     differing packages cannot check either, so the layer is built whole
+     when either may not hold for the worktree.
+     - **Which further configurations `-go-configs auto` chooses, in
+       what order.** The choice is made from every file the host's load
+       leaves out. The base's report keeps that list, and the
+       configurations its build chose from it. The worktree's list is
+       the base's, with the directories loaded again replaced by that
+       load's own. If auto would choose from it otherwise than the
+       base's build chose, the layer is built whole (#39). The base's
+       checkout is not read again: it may have moved on since the build
+       its graph is of. Across the last 300 Go commits of trendvidia/go
+       and of trendvidia/govm, no commit changed the choice.
+     - **Whether each module loads for each configuration.** caliper
+       refuses a load only when none of its packages type-checks. So the
+       layer is built whole when the worktree changes a module the base
+       could not load for some configuration. A module skipped for
+       another reason is skipped by a full build of the worktree too,
+       and is laid over: std and cmd of an unbuilt checkout of the Go
+       repository (#219). It is also built whole when the load of the
+       differing packages fails where the whole module's load would not,
+       which includes a package with a type error loaded alone for the
+       host (#40). The load of the differing packages runs module by
+       module, so one module is enough: a worktree mid-edit is built
+       whole while the only differing package of some module has a type
+       error, even when differing packages of other modules compile. On
+       trendvidia/go that took 22.0 s against 4.7 s laid over the base
+       (#41 is the way back to the shorter time). Whether a module loads
+       for another configuration also depends on the environment:
+       `CGO_ENABLED` decides whether a file importing C is read there,
+       and trendvidia/go's misc module fails for windows only when it is
+       set. The base and the worktree are built in one process, under
+       one environment, so the comparison holds either way.
+     `TestOverlayBuildsWholeWhenAutoWouldChooseOtherwise`,
+     `TestOverlayBuildsWholeWhenAModuleDoesNotLoad` and
+     `TestOverlayChoosesAgainstTheBaseAsBuilt` fail the day such a
+     worktree is laid over the base instead, and
+     `TestOverlayOfAnUnbuiltGoRepository` the day a skipped module builds
+     it whole.
    - **What a load of fewer packages cannot see** is a package's
      whole-program edges: every implementation an interface call reaches,
      every function value reaching a call, an implements edge to an

@@ -14,6 +14,36 @@ tracker's. From v0.12.1 on, every number is this repository's.
   path, `github.com/x/m_test`, sat under no module path. On
   belluikit/bellui the graph listed 74 of the root module's 78
   benchmarks; it now lists all 78.
+  
+- **Fixed: another worktree's Go graph no longer differs from a full
+  build of it when a fact of a whole module changes** (#39, #40; ADR 005
+  amended). The worktree's Go layer reloads only the packages whose files
+  differ, and takes everything else from the session's graph. Three cases
+  broke that, and each now builds the worktree's Go layer whole:
+  - **auto would choose differently.** With `-go-configs auto`, the
+    worktree's files would make auto pick another platform, or the same
+    platforms in another order. A platform-specific declaration could
+    then be missing, or credited to the wrong platform.
+  - **A module didn't load in the base.** The worktree changes a module
+    that didn't load for some platform in the session's build, such as
+    trendvidia/go's misc module for Windows. The worktree kept that
+    failure even after fixing it.
+  - **A package fails when loaded alone.** caliper refuses a load in
+    which no package type-checks. So a changed package with a type error
+    lost all its declarations and was reported as a failed module, though
+    a full build keeps it.
+  
+  `graph_stats` for the worktree shows the whole build. The Go report
+  also keeps the list of files the host's load leaves out, which auto
+  chooses from.
+- **Fixed: another worktree's Go graph no longer drops test
+  declarations only another platform builds** (found reviewing PR #42).
+  With `-go-configs auto -tests-exact`, the packages reloaded for the
+  worktree loaded their tests under the platforms the session's load
+  without tests chose. A test file only another platform builds, such as
+  `x_windows_test.go` on a macOS host, was then missing from the
+  worktree's graph. They now load under the platforms the session's load
+  with tests chose, as a full build does.
 - **Fixed: one Go module whose packages do not type-check for the host
   no longer fails the whole graph** (#37). Served from a folder of
   sibling modules, one such module (gl-js, whose cgo GLES types do not

@@ -52,6 +52,19 @@ type Report struct {
 	Excluded  int
 	Recovered int
 	Added     int
+	// HostExcluded are the files the host's load left out, by path
+	// relative to the root: what -go-configs auto chooses among, so a
+	// worktree laid over this graph can tell whether its own files would
+	// choose differently (#39). With ExactTests they are the load with
+	// tests'.
+	HostExcluded []string
+	// testConfigs are, with ExactTests, the configurations the load with
+	// tests loaded, chosen from HostExcluded; Configs are the load without
+	// tests'. SameAutoChoice compares a worktree's choice with both.
+	testConfigs []string
+	// unloaded names the modules that did not load for some further
+	// configuration, in either load with ExactTests (#40). See Loaded.
+	unloaded []string
 	// Packages, Decls and Calls count emitted nodes and calls edges
 	// within the module. With ExactTests they and Boundary are the load
 	// without tests' counts, so they leave out the test declarations and
@@ -121,6 +134,15 @@ type Report struct {
 	// five seconds as the point to revisit it; the split says which
 	// stage to look at when it does.
 	Load, CallGraph, Emit time.Duration
+}
+
+// Loaded reports whether a module loaded for the host and for every
+// further configuration, in both loads with ExactTests. caliper
+// refuses a load only when none of its packages type-checks, so whether
+// a module loads is a fact of all of them, which a load of some cannot
+// stand for (#40).
+func (r *Report) Loaded(module string) bool {
+	return !slices.Contains(r.Failed, module) && !slices.Contains(r.unloaded, module)
 }
 
 // A ModuleEdge is one line of Report.ModuleEdges: the edges of one kind
@@ -207,6 +229,9 @@ func extractExact(b *graph.Builder, dir string, opts Options) (*Report, error) {
 	scratch := graph.NewBuilder(b.Minter().Root())
 	testOpts := opts
 	testOpts.ExactTests = false
+	if opts.testConfigs != "" {
+		testOpts.Configs = opts.testConfigs
+	}
 	tests, err := extractOnce(scratch, dir, testOpts)
 	if err != nil {
 		return nil, err
@@ -226,6 +251,8 @@ func extractExact(b *graph.Builder, dir string, opts Options) (*Report, error) {
 func exactReport(prod, tests *Report) *Report {
 	rep := *prod
 	rep.ExactTests = true
+	rep.HostExcluded, rep.testConfigs = tests.HostExcluded, tests.Configs
+	rep.unloaded = mergePaths(slices.Clone(prod.unloaded), tests.unloaded)
 	rep.Tests = tests.Tests
 	rep.TestModuleEdges = tests.TestModuleEdges
 	rep.Skipped = nil
@@ -523,6 +550,7 @@ func configsFor(m *graph.Minter, loaded []loadedModule, opts Options, host confi
 	}
 	excluded := append(excludedInModules(loaded, opts.Tests), unloaded...)
 	sort.Strings(excluded)
+	report.HostExcluded = relativeTo(m.Root(), excluded)
 	extra, covered, unread, err := chooseConfigs(opts.Configs, host, excluded, opts.Only != nil)
 	if err != nil {
 		return nil, nil, err
@@ -582,6 +610,7 @@ func extraPass(rec *recorder, m *graph.Minter, mod loadedModule, modules []strin
 	if err != nil {
 		report.Skipped = append(report.Skipped, m.Skip(filepath.Join(mod.Dir, "go.mod"), 0,
 			fmt.Errorf("the module does not load for %s: %s", c, loadError(err))))
+		report.unloaded = mergePaths(report.unloaded, []string{mod.Path})
 		return nil
 	}
 	o := newOverlay(rec, c.String())

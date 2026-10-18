@@ -445,6 +445,9 @@ func TestBuildConfigurationIsReported(t *testing.T) {
 	if rep.Excluded != want {
 		t.Errorf("report.Excluded = %d, want %d (%s)", rep.Excluded, want, files)
 	}
+	if !slices.Contains(rep.HostExcluded, "app/plan9.go") {
+		t.Errorf("report.HostExcluded = %q, want app/plan9.go among them, relative to the root", rep.HostExcluded)
+	}
 	if n, ok := g.Node(graph.ID("go://" + fixtureModule + "/app")); !ok || n.Attrs["excluded"] != files {
 		t.Errorf("app package excluded attr = %q, want %q", n.Attrs["excluded"], files)
 	}

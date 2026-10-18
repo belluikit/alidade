@@ -93,7 +93,8 @@ type OverlayInfo struct {
 	// packages does not read.
 	Carried int
 	// GoWhole says the Go layer was built whole: the module files differ,
-	// or the base has no Go layer.
+	// the base has no Go layer, or a fact of a whole module may not hold
+	// for the worktree (#39, #40).
 	GoWhole bool
 }
 
