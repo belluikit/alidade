@@ -107,7 +107,7 @@ For `alidade serve` and `alidade graph`:
 | `-root DIR` | the repository. Default `.` |
 | `-schema-root DIR` | a repository whose `.proto` files this one's generated code comes from. Its messages join the graph, and its files are labelled `@<dirname>/` ([ADR 002](adr/002-node-identity.md) rule 12). Repeatable |
 | `-go-deps-source` | type-check Go dependencies from source. The default takes their types from export data: the same module graph, 3 to 4 times cheaper, and a boundary with no class-hierarchy fan-out into dependencies |
-| `-go-configs auto` | also load the Go build configurations that bring in files the host's constraints exclude. Or give a `GOOS/GOARCH` list |
+| `-go-configs auto` | also load the Go build configurations that bring in files the host's constraints exclude: other platforms, including js/wasm, wasip1/wasm, android and ios, and each with the custom build tags (`//go:build gl`) those files name. Or give a `GOOS/GOARCH` list, with a configuration's tags after it: `linux/amd64+gl+mobile` |
 | `-tests` | include `_test.go` files |
 | `-tests-exact` | with `-tests`, make the production graph exactly the no-tests build's, at the cost of a second load |
 

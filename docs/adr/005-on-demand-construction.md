@@ -313,6 +313,26 @@ implementation detail of the surface, not of the core.
   for the host alone. The default is unchanged (host only, 3.0s); the cost
   is the price of a graph that does not depend on the machine it was built
   on, paid only by a session that asks for it.
+  *Widened, 2026-10-18 (#48, the owner's decision):* `auto` also reads
+  what only a custom build tag or a platform beyond the desktop six brings
+  in. A configuration is a platform with build tags, and auto chooses
+  among ten platforms (adding js/wasm, wasip1/wasm, android/arm64 and
+  ios/arm64), each with or without every tag the excluded files name. A
+  node or edge such a load added says so in full,
+  `build=windows/amd64+gl+mobile`. Measured with auto, against auto
+  before: belluikit/bellui 74 s against 37 s (11 loads against 3), and
+  every declaration of the 126 files only a tag or another platform
+  brought in is now in the graph; trendvidia/govm 12 s, 4 loads against
+  3; trendvidia/go 162 s against 1 min 52 s, at the same 12.9 GB peak.
+  The default stays the host's alone.
+  *Widened, 2026-10-18 (#51, the owner's decision):* auto also considers
+  each platform with the fewest of one excluded file's own tags that
+  bring it in. A file needing one tag set and another unset
+  (`wayland && !x11`) is read by neither the load without tags nor the
+  one with all of them. On bellui that read 9 more files, in 13 loads
+  against 11 (75 s against 62 s on one run); govm and trendvidia/go kept
+  their load counts (5 and 10). `TestAutoReadsAFileNeedingATagUnset`
+  fails the day such a file is left out again.
   *Reached in another narrow form, 2026-09-12 (#67):* a repository of
   several Go modules is several loads, one per module, since a nested
   module with no go.work is what the go tool builds on its own. Measured

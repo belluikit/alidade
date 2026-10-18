@@ -48,10 +48,14 @@ type Options struct {
 	// files behind //go:build constraints the host does not satisfy are
 	// in the graph too (#43). "" loads the host's only; "auto" reads the
 	// constraints of the files the host's load excluded and picks, from
-	// linux, darwin and windows on amd64 and arm64, the fewest
-	// configurations that bring them in; "linux/amd64,windows/arm64"
-	// names them. Each extra configuration is a further load and call
-	// graph, and adds only what the host's did not, marked build=<config>.
+	// linux, darwin and windows on amd64 and arm64, js/wasm, wasip1/wasm,
+	// android/arm64 and ios/arm64, each also with every build tag those
+	// constraints name set (#48) or with the fewest of one file's own tags
+	// that bring it in (#51), the fewest configurations that bring
+	// them in; "linux/amd64,windows/arm64+gl" names them, a configuration's
+	// build tags after its platform. Each extra configuration is a further
+	// load and call graph, and adds only what the ones before it did not,
+	// marked build=<config>.
 	Configs string
 	// DepsFromExportData takes dependencies' types from the compiler's
 	// export data instead of type-checking their source (caliper v1.5.0).

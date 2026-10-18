@@ -8,6 +8,26 @@ tracker's. From v0.12.1 on, every number is this repository's.
 
 ## Unreleased
 
+- **Added: `-go-configs auto` reads Go files behind custom build tags and
+  on more platforms** (#48). A file only a tag brings in (`//go:build gl`,
+  `mobile`, `plugin`) was never read, and neither were js/wasm,
+  wasip1/wasm, android and ios unless listed: their declarations, calls
+  and references were missing from the graph with nothing in an answer
+  saying so. auto now also considers those four platforms, every
+  platform with all the tags the excluded files name, and every platform
+  with the fewest of one file's own tags it needs, so a file needing one
+  tag set and another unset (`//go:build wayland && !x11`) is read too
+  (#51). A configuration can be given with tags:
+  `-go-configs linux/amd64+gl+mobile`. What such a load adds is marked
+  with its full configuration. On belluikit/bellui every declaration of
+  the 126 files that were missing is now in the graph, and 9 more files
+  than with all the tags alone, in 13 loads; on trendvidia/go auto takes
+  162 s against 1 min 52 s. The default, the host's configuration alone,
+  is unchanged.
+- **Fixed: a file named for a GOARCH such as armbe or mips64p32le is read
+  as constrained to it** (#48). alidade knew 14 of the 24 GOARCH values
+  go/build does, so such a file looked unconstrained to auto, which then
+  counted it as one a configuration would bring in.
 - **Changed: a worktree that auto would choose other platforms for no
   longer reloads its changed packages in full before it is built whole**
   (#43). With `-go-configs auto`, the check whether the worktree's files
