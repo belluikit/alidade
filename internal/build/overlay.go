@@ -265,6 +265,9 @@ func (s *Session) overlayGo(lb *graph.Builder, root string, opts golang.Options)
 		}
 		subNodes, subEdges = scratch.Contributions("")
 	}
+	if !s.stillLoad(sub, paths, append(slices.Clone(present), gone...)) {
+		return nil, true, nil
+	}
 	excluded := hostExcluded(base.HostExcluded, sub.HostExcluded, differ)
 	if opts.Configs == "auto" && len(present) == 0 && !sameChoiceUnloaded(base, opts, root, excluded) {
 		return nil, true, nil
@@ -342,6 +345,54 @@ func modulesLoaded(rep *golang.Report, paths, pkgs []string) bool {
 		}
 	}
 	return true
+}
+
+// stillLoad reports whether each module holding one of the packages
+// changed still loads as the base's did, by golang.StillLoads: the
+// packages the change cannot reach are the base's that import none of
+// them, at any depth (#50).
+func (s *Session) stillLoad(sub *golang.Report, paths, changed []string) bool {
+	reached := importersOf(s.base.b, changed)
+	unreached := func(p string) bool { return !reached[p] }
+	seen := map[string]bool{}
+	for _, p := range changed {
+		m := golang.Owner(p, paths)
+		if seen[m] {
+			continue
+		}
+		seen[m] = true
+		if !golang.StillLoads(s.base.rep.Go, sub, m, paths, unreached) {
+			return false
+		}
+	}
+	return true
+}
+
+// importersOf are the packages of the base's Go layer that are, or
+// import at any depth, one of pkgs or its external test package.
+func importersOf(b *graph.Builder, pkgs []string) map[string]bool {
+	_, edges := b.Contributions("go")
+	by := map[string][]string{}
+	for _, e := range edges {
+		if e.Kind == graph.KindImports {
+			by[goPackage(e.To)] = append(by[goPackage(e.To)], goPackage(e.From))
+		}
+	}
+	out := map[string]bool{}
+	var queue []string
+	for _, p := range pkgs {
+		queue = append(queue, p, p+"_test")
+	}
+	for len(queue) > 0 {
+		p := queue[0]
+		queue = queue[1:]
+		if out[p] {
+			continue
+		}
+		out[p] = true
+		queue = append(queue, by[p]...)
+	}
+	return out
 }
 
 // sameChoiceUnloaded is SameAutoChoice for a worktree that loads no

@@ -176,12 +176,23 @@ persisted graph, no invalidation model, and no staleness policy.**
        against 22.0 s built whole and 23.9 s for a full build, and the
        graph equals a full build's but for the edges already known to
        differ. `TestOverlayBuildsWholeWhenAModuleDoesNotLoad` fails the
-       day such a worktree is built whole again. The assumption is not
-       checked: a change that leaves a module no package that
-       type-checks, its only package or its last clean one broken, is
-       laid over too, though a full build fails the module.
-       `TestOverlayLaysOverAModuleThatNoLongerLoads` pins that
-       divergence, and #50 is the way to a full build's result. Whether
+       day such a worktree is built whole again.
+       *Amended 2026-10-18 (#50):* the assumption is checked, from the
+       base and with no further load. For each load the base made of a
+       module the worktree changes, by configuration and with tests or
+       without, the module still loads when the reload type-checked a
+       package of it there, or the base did one that imports none of the
+       changed packages at any depth: that package's files and imports
+       are the base's, so it type-checks as it did. Otherwise the layer
+       is built whole. That covers a module's only package broken, its
+       last clean one broken or removed, and the same for a further
+       configuration alone. A module whose one clean package imports the
+       broken one is built whole too, though it may still load: only a
+       whole build can tell. The check rests on the base's imports edges,
+       which hold every configuration's and the tests'. go-notiny with a
+       type error is still laid over: 5.5 s, against 31.9 s for a full
+       build on the same run. `TestOverlayBuildsWholeWhenAModuleNoLongerLoads`
+       fails the day any of these is laid over the base again. Whether
        a module loads for another configuration also depends on the
        environment: `CGO_ENABLED` decides whether a file importing C is
        read there, and trendvidia/go's misc module fails for windows only

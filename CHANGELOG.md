@@ -65,10 +65,11 @@ tracker's. From v0.12.1 on, every number is this repository's.
     the broken package as failed, as a full build does, and the worktree
     stays laid over the base. On trendvidia/go that is 4.6 s instead of
     22 s. A package it had the base's calls copied for, though its own
-    calls could not be computed, no longer has them. One exception
-    remains: when the change leaves a module no package that
-    type-checks, the worktree is still laid over the base, though a full
-    build fails that module (#50).
+    calls could not be computed, no longer has them. When the change
+    leaves a module no package that type-checks, its only package or its
+    last clean one broken or removed, the worktree is built whole, as a
+    full build fails that module (#50). The session's graph tells which
+    packages the change cannot reach, so this costs no further load.
   
   `graph_stats` for the worktree shows the whole build. The Go report
   also keeps the list of files the host's load leaves out, which auto

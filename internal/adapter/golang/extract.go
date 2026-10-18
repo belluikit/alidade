@@ -70,6 +70,10 @@ type Report struct {
 	// call graph reached, for any configuration and in either load with
 	// ExactTests. See Reached.
 	typed, called []string
+	// typedIn names the packages that type-checked in each load the
+	// build made, by its configuration, and with ExactTests the load with
+	// tests' under "tests " and its configuration. See StillLoads.
+	typedIn map[string][]string
 	// Packages, Decls and Calls count emitted nodes and calls edges
 	// within the module. With ExactTests they and Boundary are the load
 	// without tests' counts, so they leave out the test declarations and
@@ -160,6 +164,43 @@ func (r *Report) Reached(path string) (typed, called bool) {
 	_, typed = slices.BinarySearch(r.typed, path)
 	_, called = slices.BinarySearch(r.called, path)
 	return typed, called
+}
+
+// StillLoads reports whether module still loads, in every load base
+// made of it, once the packages sub read again are the worktree's: sub
+// is the report of the load of those packages alone, Reload's. caliper
+// refuses a load none of whose packages type-checks, and the load of a
+// few packages keeps them as failed instead (#41), so it cannot say so
+// itself. A load of the module still loads if sub type-checked a
+// package of it there, or base did one that unreached says the
+// worktree's change cannot reach: its files, and every package it
+// imports, the base's. When neither holds only a whole build can tell
+// (#50). A load base has nothing of the module from is one it skipped
+// the module in, as a full build of the worktree does: std and cmd of
+// an unbuilt checkout of the Go repository (#219).
+func StillLoads(base, sub *Report, module string, paths []string, unreached func(pkg string) bool) bool {
+	in := func(p string) bool { return Owner(p, paths) == module }
+	for label, typed := range base.typedIn {
+		if !slices.ContainsFunc(typed, in) {
+			continue
+		}
+		if !slices.ContainsFunc(sub.typedIn[label], in) &&
+			!slices.ContainsFunc(typed, func(p string) bool { return in(p) && unreached(p) }) {
+			return false
+		}
+	}
+	return true
+}
+
+// typedAt records the packages that type-checked in the load labelled.
+func (r *Report) typedAt(label string, paths []string) {
+	if len(paths) == 0 {
+		return
+	}
+	if r.typedIn == nil {
+		r.typedIn = map[string][]string{}
+	}
+	r.typedIn[label] = unionPaths(r.typedIn[label], paths)
 }
 
 // A ModuleEdge is one line of Report.ModuleEdges: the edges of one kind
@@ -272,6 +313,13 @@ func exactReport(prod, tests *Report) *Report {
 	rep.unloaded = mergePaths(slices.Clone(prod.unloaded), tests.unloaded)
 	rep.typed = unionPaths(slices.Clone(prod.typed), tests.typed)
 	rep.called = unionPaths(slices.Clone(prod.called), tests.called)
+	rep.typedIn = nil
+	for label, typed := range prod.typedIn {
+		rep.typedAt(label, typed)
+	}
+	for label, typed := range tests.typedIn {
+		rep.typedAt("tests "+label, typed)
+	}
 	rep.Tests = tests.Tests
 	rep.TestModuleEdges = tests.TestModuleEdges
 	rep.Skipped = nil
@@ -391,7 +439,7 @@ func hostPass(rec *recorder, m *graph.Minter, lm loadedModule, modules []string,
 		return nil
 	}
 	x := newExtractor(rec, m, lm.eng, lm.Path, modules, opts, report)
-	x.recovered = covered
+	x.recovered, x.label = covered, report.Build
 	return x.pass(lm.pkgs)
 }
 
@@ -650,6 +698,7 @@ func extraPass(rec *recorder, m *graph.Minter, mod loadedModule, modules []strin
 	}
 	o := newOverlay(rec, c.String())
 	x := newExtractor(o, m, eng, mod.Path, modules, opts, &Report{})
+	x.label = c.String()
 	if err := x.pass(targetPackages(eng.Packages())); err != nil {
 		return err
 	}
@@ -660,6 +709,7 @@ func extraPass(rec *recorder, m *graph.Minter, mod loadedModule, modules []strin
 	report.WithoutCalls = mergePaths(report.WithoutCalls, o.onlyAdded(m, x.report.WithoutCalls))
 	report.typed = unionPaths(report.typed, x.report.typed)
 	report.called = unionPaths(report.called, x.report.called)
+	report.typedAt(x.label, x.report.typedIn[x.label])
 	return nil
 }
 
@@ -714,6 +764,7 @@ func (x *extractor) pass(pkgs []*packages.Package) error {
 		}
 	}
 	x.report.typed = unionPaths(x.report.typed, typed)
+	x.report.typedAt(x.label, typed)
 	if err := x.failedPackages(pkgs); err != nil {
 		return err
 	}
@@ -881,6 +932,9 @@ type extractor struct {
 	module  string
 	modules []string
 	opts    Options
+	// label names the load this pass emits, for Report.typedIn: its
+	// configuration.
+	label string
 	// ext records external package nodes already emitted, so a boundary
 	// call and an import to the same package share one node.
 	ext map[string]bool
