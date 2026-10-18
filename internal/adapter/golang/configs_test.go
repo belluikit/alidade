@@ -6,6 +6,7 @@ package golang
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -19,8 +20,9 @@ func TestFileConstraintSatisfied(t *testing.T) {
 		}
 		return p
 	}
-	linux, amd := config{"linux", "amd64"}, config{"linux", "arm64"}
-	win, mac := config{"windows", "arm64"}, config{"darwin", "arm64"}
+	linux, amd := config{"linux", "amd64", ""}, config{"linux", "arm64", ""}
+	win, mac := config{"windows", "arm64", ""}, config{"darwin", "arm64", ""}
+	droid, ios := config{"android", "arm64", ""}, config{"ios", "arm64", ""}
 	for _, tt := range []struct {
 		file string
 		body string
@@ -35,8 +37,20 @@ func TestFileConstraintSatisfied(t *testing.T) {
 		{"x_arm64.go", "package p\n", map[config]bool{amd: true, mac: true, linux: false}},
 		{"x_darwin_test.go", "package p\n", map[config]bool{mac: true, linux: false}},
 		{"linux.go", "package p\n", map[config]bool{win: true, linux: true}},
-		{"both_amd64.go", "//go:build !windows\n\npackage p\n", map[config]bool{linux: true, {"windows", "amd64"}: false, amd: false}},
+		{"both_amd64.go", "//go:build !windows\n\npackage p\n", map[config]bool{linux: true, {"windows", "amd64", ""}: false, amd: false}},
 		{"late.go", "package p\n\n//go:build windows\n", map[config]bool{linux: true}},
+		// Every GOARCH go/build knows ends a file name as a constraint.
+		{"x_armbe.go", "package p\n", map[config]bool{linux: false, amd: false}},
+		{"x_mips64p32le.go", "package p\n", map[config]bool{linux: false}},
+		// android builds linux's files and ios darwin's, by name and by
+		// tag, as go/build's matchTag has it; a BSD fallback is neither's.
+		{"y_linux.go", "package p\n", map[config]bool{droid: true, ios: false}},
+		{"y_darwin_arm64.go", "package p\n", map[config]bool{ios: true, droid: false}},
+		{"y.go", "//go:build linux\n\npackage p\n", map[config]bool{droid: true}},
+		{"bsd.go", "//go:build unix && !linux && !darwin\n\npackage p\n", map[config]bool{droid: false, ios: false, {"freebsd", "amd64", ""}: true}},
+		// The tags a configuration sets are true, and only those.
+		{"gl.go", "//go:build gl && !mobile\n\npackage p\n", map[config]bool{linux: false, linux.withTags([]string{"gl"}): true, linux.withTags([]string{"gl", "mobile"}): false}},
+		{"boring.go", "//go:build boringcrypto\n\npackage p\n", map[config]bool{linux.withTags([]string{"boringcrypto"}): false, linux.withTags([]string{"goexperiment.boringcrypto"}): true}},
 	} {
 		fc, err := readConstraint(write(tt.file, tt.body))
 		if err != nil {
@@ -73,7 +87,7 @@ func constraintFiles(t *testing.T) (string, []string) {
 	return dir, files
 }
 
-var host = config{"darwin", "arm64"}
+var host = config{"darwin", "arm64", ""}
 
 func TestChooseConfigsHostOnly(t *testing.T) {
 	_, files := constraintFiles(t)
@@ -94,10 +108,10 @@ func TestChooseConfigsAuto(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(configs) != 2 || configs[0] != (config{"linux", "amd64"}) || configs[1].goos != "windows" {
+	if len(configs) != 2 || configs[0] != (config{"linux", "amd64", ""}) || configs[1].goos != "windows" {
 		t.Errorf("auto configs = %v", configs)
 	}
-	if len(covered) != 3 || covered[filepath.Join(dir, "b.go")] != (config{"linux", "amd64"}) || covered[filepath.Join(dir, "c.go")].goos != "windows" {
+	if len(covered) != 3 || covered[filepath.Join(dir, "b.go")] != (config{"linux", "amd64", ""}) || covered[filepath.Join(dir, "c.go")].goos != "windows" {
 		t.Errorf("auto covered = %v", covered)
 	}
 }
@@ -108,7 +122,7 @@ func TestChooseConfigsExplicit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(configs) != 1 || configs[0] != (config{"windows", "arm64"}) || len(covered) != 1 {
+	if len(configs) != 1 || configs[0] != (config{"windows", "arm64", ""}) || len(covered) != 1 {
 		t.Errorf("explicit: configs %v covered %v (the host is skipped, not loaded twice)", configs, covered)
 	}
 	if got := configNames(host, configs); strings.Join(got, ",") != "darwin/arm64,windows/arm64" {
@@ -132,4 +146,153 @@ func TestChooseConfigsGaining(t *testing.T) {
 	if all, _, _, _ := chooseConfigs("linux/amd64,linux/arm64,windows/arm64", host, files, false); len(all) != 3 {
 		t.Errorf("not gaining: %v, want every one listed", all)
 	}
+}
+
+// TestConfigTags pins #48's configuration syntax: build tags follow the
+// platform, joined by "+", sorted, and name the configuration as written
+// back; an empty tag is an error.
+func TestConfigTags(t *testing.T) {
+	c, err := parseConfig(" linux/amd64+mobile+gl ")
+	if err != nil || c != (config{"linux", "amd64", "gl,mobile"}) || c.String() != "linux/amd64+gl+mobile" {
+		t.Errorf("parseConfig = %+v %q, %v", c, c.String(), err)
+	}
+	if !slices.Equal(c.buildTags(), []string{"gl", "mobile"}) || (config{"linux", "amd64", ""}).buildTags() != nil {
+		t.Errorf("buildTags = %q", c.buildTags())
+	}
+	if c := (config{"linux", "amd64", "gl,mobile"}); !c.hasTag("gl") || !c.hasTag("mobile") || c.hasTag("g") || (config{}).hasTag("gl") {
+		t.Errorf("hasTag on %q is wrong", c.tags)
+	}
+	// A tag the go command would split or refuse is refused here, where
+	// the flag is read, not by the load.
+	for _, bad := range []string{"linux/amd64+", "linux/amd64+gl++x", "linux+gl", "linux/amd64+ gl", "linux/amd64+gl mobile", "linux/amd64+-x"} {
+		if _, err := parseConfig(bad); err == nil {
+			t.Errorf("parseConfig(%q) took it", bad)
+		}
+	}
+}
+
+// TestAutoChoosesTagsAndMorePlatforms pins #48 (the owner's decision):
+// auto's candidates are the platforms, now with js/wasm, wasip1/wasm,
+// android/arm64 and ios/arm64, and each platform with every build tag the
+// excluded files name set at once. A file a tag brings in, a file only the
+// browser builds, and one the tag pass reads beside its !tag variant are
+// covered; release tags, unix and the platform words are no tags.
+func TestAutoChoosesTagsAndMorePlatforms(t *testing.T) {
+	dir := t.TempDir()
+	var files []string
+	for name, body := range map[string]string{
+		"gl.go":      "//go:build gl && unix && go1.21 && !amd64.v3 && !arm64be\n\npackage p\n",
+		"mobile.go":  "//go:build mobile || ios\n\npackage p\n",
+		"browser.go": "//go:build js && wasm\n\npackage p\n",
+		"nine.go":    "//go:build plan9\n\npackage p\n",
+	} {
+		p := filepath.Join(dir, name)
+		if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		files = append(files, p)
+	}
+	cv := readConstraints(files)
+	if got := tagsOf(cv.cons); !slices.Equal(got, []string{"gl", "mobile"}) {
+		t.Errorf("tagsOf = %q, want gl and mobile", got)
+	}
+	configs, covered, _, err := chooseConfigs("auto", host, files, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var names []string
+	for _, c := range configs {
+		names = append(names, c.String())
+	}
+	if len(covered) != 3 || covered[filepath.Join(dir, "nine.go")] != (config{}) {
+		t.Errorf("covered %v by %q: want all but nine.go", covered, names)
+	}
+	if !slices.ContainsFunc(configs, func(c config) bool { return c.tags == "gl,mobile" }) ||
+		!slices.ContainsFunc(configs, func(c config) bool { return c.goos == "js" || c.goos == "ios" }) {
+		t.Errorf("configs %q: want a configuration with gl and mobile set, and the browser's or iOS's", names)
+	}
+}
+
+// TestTagsOfReadsCustomTagsOnly: a custom tag that merely contains a
+// release tag's text is still a tag, and boringcrypto is go/build's old
+// name for goexperiment.boringcrypto, the tag a load must set (#48).
+func TestTagsOfReadsCustomTagsOnly(t *testing.T) {
+	cv := readConstraints([]string{writeFile(t, "a.go", "//go:build cargo1.5 && go1.21 && boringcrypto\n\npackage p\n")})
+	if got := tagsOf(cv.cons); !slices.Equal(got, []string{"cargo1.5", "goexperiment.boringcrypto"}) {
+		t.Errorf("tagsOf = %q, want cargo1.5 and goexperiment.boringcrypto", got)
+	}
+}
+
+// TestUnloadedReasonForBSDOnly: a directory only a BSD builds is one no
+// platform auto considers builds — not android's, which go/build reads
+// linux's files for, nor ios's, which it reads darwin's for.
+func TestUnloadedReasonForBSDOnly(t *testing.T) {
+	f := writeFile(t, "bsd.go", "//go:build unix && !linux && !darwin\n\npackage p\n")
+	if got := unloadedReason([]string{f}); !strings.Contains(got, "for every platform -go-configs auto considers") {
+		t.Errorf("reason %q, want that no platform auto considers builds it", got)
+	}
+}
+
+// TestAutoReadsAFileNeedingATagUnset pins #51, the owner's decision: a
+// file needing one found tag set and another unset is read by neither the
+// load without tags nor the one with every tag, and auto reads it under
+// the fewest of its own tags it needs. So is one needing two set and a
+// third unset; and a directory of such files is reported as one auto
+// would load with its tags.
+func TestAutoReadsAFileNeedingATagUnset(t *testing.T) {
+	ci := writeFile(t, "ci.go", "//go:build ci && !mobile\n\npackage p\n")
+	mobile := writeFile(t, "mobile.go", "//go:build mobile\n\npackage p\n")
+	both := writeFile(t, "both.go", "//go:build linux && a && b && !mobile\n\npackage p\n")
+	_, covered, _, err := chooseConfigs("auto", host, []string{ci, mobile, both}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c, ok := covered[ci]; !ok || c.tags != "ci" {
+		t.Errorf("ci.go covered by %v, %v: want a load with ci alone", c, ok)
+	}
+	if c, ok := covered[both]; !ok || c.tags != "a,b" {
+		t.Errorf("both.go covered by %v, %v: want a load with a and b", c, ok)
+	}
+	if _, ok := covered[mobile]; !ok {
+		t.Errorf("mobile.go is not covered: %v", covered)
+	}
+	if got := unloadedReason([]string{ci}); !strings.Contains(got, "with their tags") {
+		t.Errorf("reason %q, want that auto would load it with its tags", got)
+	}
+}
+
+// TestFewestTags: the smallest set of a file's own tags, the first of the
+// sorted tags among sets as small; none when no set includes it; and for a
+// file naming more than maxOwnTags, all of them or none.
+func TestFewestTags(t *testing.T) {
+	many := "t1 && t2 && t3 && t4 && t5 && t6 && t7 && t8 && t9"
+	for _, tt := range []struct {
+		expr string
+		want string
+		ok   bool
+	}{
+		{"x || y", "x", true},
+		{"!x", "", true},
+		{"x && !x", "", false},
+		{many, "t1,t2,t3,t4,t5,t6,t7,t8,t9", true},
+		{many + " && !t10", "", false},
+	} {
+		fc, err := readConstraint(writeFile(t, "f.go", "//go:build "+tt.expr+"\n\npackage p\n"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		got, ok := fc.fewestTags(config{goos: "linux", goarch: "amd64"})
+		if strings.Join(got, ",") != tt.want || ok != tt.ok {
+			t.Errorf("%s: fewestTags = %v, %v; want %q, %v", tt.expr, got, ok, tt.want, tt.ok)
+		}
+	}
+}
+
+func writeFile(t *testing.T, name, body string) string {
+	t.Helper()
+	p := filepath.Join(t.TempDir(), name)
+	if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return p
 }

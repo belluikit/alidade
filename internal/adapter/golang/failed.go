@@ -225,9 +225,9 @@ func hasGoMod(dir string) bool {
 // unloadedDirs records, once per directory, the directories of unloaded
 // files that no further configuration brought in: a package the host
 // cannot build, which no node can say is missing since there is none.
-// The reason says whether another platform would build it — what
-// -go-configs auto loads — or only a build tag would, a custom one or
-// "ignore", which no configuration alidade loads sets.
+// The reason says whether -go-configs auto would read it, under another
+// platform or with the build tags its files name (#48), or whether no
+// platform auto considers builds it, with those tags or without.
 //
 // A directory one chosen configuration does bring in is not skipped,
 // however many of its other files stay excluded: its package is in the
@@ -263,28 +263,39 @@ func unloadedDirs(m *graph.Minter, unloaded []string, covered map[string]config,
 		if recovered[d] || len(byDir[d]) == 0 {
 			continue
 		}
-		reason := "build constraints exclude every Go file for the host platform, and every other platform's too: only a build tag includes them"
-		if anyPlatformBuilds(byDir[d]) {
-			reason = "build constraints exclude every Go file for the host platform; -go-configs auto would load another platform's"
-		}
-		out = append(out, m.Skip(d, 0, errors.New(reason)))
+		out = append(out, m.Skip(d, 0, errors.New(unloadedReason(byDir[d]))))
 	}
 	return out
 }
 
-// anyPlatformBuilds reports whether some candidate configuration
-// includes one of the files.
-func anyPlatformBuilds(files []string) bool {
+// unloadedReason says why the host's load left a directory's files out,
+// and whether -go-configs auto would read them: under another platform,
+// or with the build tags their constraints name (#48).
+func unloadedReason(files []string) string {
+	platform, tagged := autoBuilds(files)
+	switch {
+	case platform:
+		return "build constraints exclude every Go file for the host platform; -go-configs auto would load another platform's"
+	case tagged:
+		return "build constraints exclude every Go file without build tags; -go-configs auto would load them with their tags"
+	}
+	return "build constraints exclude every Go file for every platform -go-configs auto considers, with their build tags or without"
+}
+
+// autoBuilds reports whether some platform auto chooses among includes
+// one of the files without build tags, and whether one does with some of
+// the tags the file's own constraint names (#51).
+func autoBuilds(files []string) (platform, tagged bool) {
 	for _, f := range files {
 		fc, err := readConstraint(f)
 		if err != nil {
 			continue
 		}
-		for _, c := range candidates {
-			if fc.satisfied(c) {
-				return true
-			}
+		for _, p := range platforms {
+			own, ok := fc.fewestTags(p)
+			platform = platform || ok && len(own) == 0
+			tagged = tagged || ok && len(own) > 0
 		}
 	}
-	return false
+	return platform, tagged
 }
