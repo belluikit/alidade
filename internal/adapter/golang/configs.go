@@ -17,6 +17,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"unicode"
 )
 
 // A config is one GOOS/GOARCH pair the packages can be loaded for, and
@@ -44,7 +45,24 @@ func (c config) buildTags() []string {
 	return strings.Split(c.tags, ",")
 }
 
-func (c config) hasTag(t string) bool { return slices.Contains(c.buildTags(), t) }
+// hasTag reports whether the load sets build tag t. It is asked once a
+// tag per file per candidate, so it reads c.tags in place.
+func (c config) hasTag(t string) bool {
+	for s := range strings.SplitSeq(c.tags, ",") {
+		if s == t {
+			return true
+		}
+	}
+	return false
+}
+
+// isOS reports whether the configuration builds the files of GOOS goos:
+// its own, and for android linux's, for ios darwin's and for illumos
+// solaris's, as go/build's matchTag has it.
+func (c config) isOS(goos string) bool { return goos == c.goos || impliedOS[c.goos] == goos }
+
+// impliedOS are the GOOS values go/build takes another GOOS's files for.
+var impliedOS = map[string]string{"android": "linux", "ios": "darwin", "illumos": "solaris"}
 
 // withTags is the configuration with these build tags set, sorted.
 func (c config) withTags(tags []string) config {
@@ -63,10 +81,26 @@ func parseConfig(s string) (config, error) {
 		return c, err
 	}
 	list := strings.Split(tags, "+")
-	if slices.Contains(list, "") {
-		return config{}, fmt.Errorf("golang: configuration %q has an empty build tag", s)
+	for _, t := range list {
+		if t == "" {
+			return config{}, fmt.Errorf("golang: configuration %q has an empty build tag", s)
+		}
+		if !validTag(t) {
+			return config{}, fmt.Errorf("golang: configuration %q: %q is not a build tag", s, t)
+		}
 	}
 	return c.withTags(list), nil
+}
+
+// validTag reports whether t is a word a //go:build line can name:
+// letters, digits, '_' and '.', as go/build/constraint reads one.
+func validTag(t string) bool {
+	for _, r := range t {
+		if !unicode.IsLetter(r) && !unicode.IsDigit(r) && r != '_' && r != '.' {
+			return false
+		}
+	}
+	return true
 }
 
 func parsePlatform(s string) (config, error) {
@@ -98,7 +132,7 @@ var platforms = []config{
 // read by the load without tags already, and each further load adds only
 // what the ones before it did not.
 func candidates(cv *coverage) []config {
-	tags := tagsOf(cv)
+	tags := tagsOf(cv.cons)
 	out := slices.Clone(platforms)
 	if len(tags) > 0 {
 		for _, p := range platforms {
@@ -108,12 +142,13 @@ func candidates(cv *coverage) []config {
 	return out
 }
 
-// tagsOf are the build tags the files' constraints name: every one but a
-// GOOS, a GOARCH, a release tag, and those a load sets or never can —
-// unix, gc, cgo, gccgo, ignore.
-func tagsOf(cv *coverage) []string {
+// tagsOf are the build tags the files' constraints name, sorted: every
+// one but a GOOS, a GOARCH, a release tag, and those a load sets or never
+// can — unix, gc, cgo, gccgo, ignore. Both what auto loads and the reason
+// a skipped directory gives are read from it.
+func tagsOf(cons map[string]fileConstraint) []string {
 	seen := map[string]bool{}
-	for _, fc := range cv.cons {
+	for _, fc := range cons {
 		if fc.expr != nil {
 			collectTags(fc.expr, seen)
 		}
@@ -125,7 +160,10 @@ func collectTags(e constraint.Expr, seen map[string]bool) {
 	switch e := e.(type) {
 	case *constraint.TagExpr:
 		t := e.Tag
-		if !knownOS[t] && !knownArch[t] && !nonTags[t] && !minorRE.MatchString(t) && !archLevel(t) {
+		if t == "boringcrypto" {
+			t = "goexperiment.boringcrypto" // go/build's old name for it
+		}
+		if !knownOS[t] && !knownArch[t] && !nonTags[t] && !releaseRE.MatchString(t) && !archLevel(t) {
 			seen[t] = true
 		}
 	case *constraint.NotExpr:
@@ -208,6 +246,10 @@ var goVersion = func(dir string) (string, error) {
 
 var minorRE = regexp.MustCompile(`go1\.(\d+)`)
 
+// releaseRE is a release tag, go1.N, and only that: a custom tag such as
+// cargo1.5 is not one.
+var releaseRE = regexp.MustCompile(`^go1\.\d+$`)
+
 // releaseTagsFor returns the release tags true for the toolchain loading
 // the module dir is in: go1.1 through go1.N for its go1.N. When the go
 // command cannot say, the tags of the toolchain alidade was built with
@@ -257,24 +299,28 @@ func moduleRootLocked(dir string) string {
 }
 
 // satisfied reports whether the configuration includes the file. Tags
-// true for a configuration are its GOOS and GOARCH, "unix" for a Unix
-// GOOS, "gc", and a "go1.N" release tag the loading toolchain has reached
-// (#95, #112);
-// every other tag — a custom one, "cgo", another platform — is false,
-// which is how the load treats them here.
+// true for a configuration are its GOOS and GOARCH, the GOOS it implies
+// (linux for android, darwin for ios), "unix" for a Unix GOOS, "gc", the
+// build tags it sets (#48), and a "go1.N" release tag the loading
+// toolchain has reached (#95, #112); every other tag — a custom one the
+// configuration does not set, "cgo", another platform — is false, which
+// is how the load treats them here. A file name's GOOS is matched the
+// same way, as go/build does.
 func (fc fileConstraint) satisfied(c config) bool {
-	if fc.goos != "" && fc.goos != c.goos || fc.goarch != "" && fc.goarch != c.goarch {
+	if fc.goos != "" && !c.isOS(fc.goos) || fc.goarch != "" && fc.goarch != c.goarch {
 		return false
 	}
 	if fc.expr == nil {
 		return true
 	}
 	return fc.expr.Eval(func(tag string) bool {
-		switch tag {
-		case c.goos, c.goarch, "gc":
+		switch {
+		case tag == c.goarch || tag == "gc" || c.isOS(tag):
 			return true
-		case "unix":
+		case tag == "unix":
 			return unixOS[c.goos]
+		case tag == "boringcrypto":
+			tag = "goexperiment.boringcrypto"
 		}
 		return c.hasTag(tag) || fc.release[tag]
 	})
@@ -381,8 +427,8 @@ func (cv *coverage) take(c config) {
 // and which of the host's excluded files each brings in. mode is "" for
 // none, "auto" to pick from candidates greedily until no candidate
 // covers a further file, or a comma-separated list of GOOS/GOARCH, each
-// with build tags if any (linux/amd64+gl), to take as given; with gaining, a listed one that brings in no further file is
-// left out (#35). covered maps a file to the configuration that includes
+// with build tags if any (linux/amd64+gl), to take as given; with
+// gaining, a listed one that brings in no further file is left out (#35). covered maps a file to the configuration that includes
 // it, and unread the files no constraint could be read from, each with
 // why. Only a malformed mode is an error.
 func chooseConfigs(mode string, host config, excluded []string, gaining bool) (configs []config, covered map[string]config, unread map[string]error, err error) {

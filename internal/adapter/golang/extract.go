@@ -592,7 +592,8 @@ func excludedInModules(loaded []loadedModule, tests bool) []string {
 }
 
 // load runs caliper over the module for one configuration: the host's
-// when env is nil, otherwise the GOOS and GOARCH env carries.
+// when c is nil, otherwise c's GOOS and GOARCH with the build tags it
+// sets (#48).
 // patterns, when not empty, are the import paths to load in place of
 // every package of the module: import paths, not ./dir, since caliper
 // loads a checkout of the Go repository from no directory, GOROOT

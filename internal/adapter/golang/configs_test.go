@@ -22,6 +22,7 @@ func TestFileConstraintSatisfied(t *testing.T) {
 	}
 	linux, amd := config{"linux", "amd64", ""}, config{"linux", "arm64", ""}
 	win, mac := config{"windows", "arm64", ""}, config{"darwin", "arm64", ""}
+	droid, ios := config{"android", "arm64", ""}, config{"ios", "arm64", ""}
 	for _, tt := range []struct {
 		file string
 		body string
@@ -41,6 +42,15 @@ func TestFileConstraintSatisfied(t *testing.T) {
 		// Every GOARCH go/build knows ends a file name as a constraint.
 		{"x_armbe.go", "package p\n", map[config]bool{linux: false, amd: false}},
 		{"x_mips64p32le.go", "package p\n", map[config]bool{linux: false}},
+		// android builds linux's files and ios darwin's, by name and by
+		// tag, as go/build's matchTag has it; a BSD fallback is neither's.
+		{"y_linux.go", "package p\n", map[config]bool{droid: true, ios: false}},
+		{"y_darwin_arm64.go", "package p\n", map[config]bool{ios: true, droid: false}},
+		{"y.go", "//go:build linux\n\npackage p\n", map[config]bool{droid: true}},
+		{"bsd.go", "//go:build unix && !linux && !darwin\n\npackage p\n", map[config]bool{droid: false, ios: false, {"freebsd", "amd64", ""}: true}},
+		// The tags a configuration sets are true, and only those.
+		{"gl.go", "//go:build gl && !mobile\n\npackage p\n", map[config]bool{linux: false, linux.withTags([]string{"gl"}): true, linux.withTags([]string{"gl", "mobile"}): false}},
+		{"boring.go", "//go:build boringcrypto\n\npackage p\n", map[config]bool{linux.withTags([]string{"boringcrypto"}): false, linux.withTags([]string{"goexperiment.boringcrypto"}): true}},
 	} {
 		fc, err := readConstraint(write(tt.file, tt.body))
 		if err != nil {
@@ -149,7 +159,12 @@ func TestConfigTags(t *testing.T) {
 	if !slices.Equal(c.buildTags(), []string{"gl", "mobile"}) || (config{"linux", "amd64", ""}).buildTags() != nil {
 		t.Errorf("buildTags = %q", c.buildTags())
 	}
-	for _, bad := range []string{"linux/amd64+", "linux/amd64+gl++x", "linux+gl"} {
+	if c := (config{"linux", "amd64", "gl,mobile"}); !c.hasTag("gl") || !c.hasTag("mobile") || c.hasTag("g") || (config{}).hasTag("gl") {
+		t.Errorf("hasTag on %q is wrong", c.tags)
+	}
+	// A tag the go command would split or refuse is refused here, where
+	// the flag is read, not by the load.
+	for _, bad := range []string{"linux/amd64+", "linux/amd64+gl++x", "linux+gl", "linux/amd64+ gl", "linux/amd64+gl mobile", "linux/amd64+-x"} {
 		if _, err := parseConfig(bad); err == nil {
 			t.Errorf("parseConfig(%q) took it", bad)
 		}
@@ -178,7 +193,7 @@ func TestAutoChoosesTagsAndMorePlatforms(t *testing.T) {
 		files = append(files, p)
 	}
 	cv := readConstraints(files)
-	if got := tagsOf(cv); !slices.Equal(got, []string{"gl", "mobile"}) {
+	if got := tagsOf(cv.cons); !slices.Equal(got, []string{"gl", "mobile"}) {
 		t.Errorf("tagsOf = %q, want gl and mobile", got)
 	}
 	configs, covered, _, err := chooseConfigs("auto", host, files, false)
@@ -196,4 +211,48 @@ func TestAutoChoosesTagsAndMorePlatforms(t *testing.T) {
 		!slices.ContainsFunc(configs, func(c config) bool { return c.goos == "js" || c.goos == "ios" }) {
 		t.Errorf("configs %q: want a configuration with gl and mobile set, and the browser's or iOS's", names)
 	}
+}
+
+// TestTagsOfReadsCustomTagsOnly: a custom tag that merely contains a
+// release tag's text is still a tag, and boringcrypto is go/build's old
+// name for goexperiment.boringcrypto, the tag a load must set (#48).
+func TestTagsOfReadsCustomTagsOnly(t *testing.T) {
+	cv := readConstraints([]string{writeFile(t, "a.go", "//go:build cargo1.5 && go1.21 && boringcrypto\n\npackage p\n")})
+	if got := tagsOf(cv.cons); !slices.Equal(got, []string{"cargo1.5", "goexperiment.boringcrypto"}) {
+		t.Errorf("tagsOf = %q, want cargo1.5 and goexperiment.boringcrypto", got)
+	}
+}
+
+// TestUnloadedReasonForBSDOnly: a directory only a BSD builds is one no
+// platform auto considers builds — not android's, which go/build reads
+// linux's files for, nor ios's, which it reads darwin's for.
+func TestUnloadedReasonForBSDOnly(t *testing.T) {
+	f := writeFile(t, "bsd.go", "//go:build unix && !linux && !darwin\n\npackage p\n")
+	if got := unloadedReason([]string{f}); !strings.Contains(got, "for every platform -go-configs auto considers") {
+		t.Errorf("reason %q, want that no platform auto considers builds it", got)
+	}
+}
+
+// TestAutoTagsAllAtOnce pins a documented divergence (#51): auto sets
+// every tag it finds at once, so a file needing one set and another
+// unset is read by none of its candidates, and stays out.
+func TestAutoTagsAllAtOnce(t *testing.T) {
+	ci := writeFile(t, "ci.go", "//go:build ci && !mobile\n\npackage p\n")
+	mobile := writeFile(t, "mobile.go", "//go:build mobile\n\npackage p\n")
+	_, covered, _, err := chooseConfigs("auto", host, []string{ci, mobile}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := covered[ci]; ok || len(covered) != 1 {
+		t.Errorf("covered = %v: want mobile.go only, until #51 decides otherwise", covered)
+	}
+}
+
+func writeFile(t *testing.T, name, body string) string {
+	t.Helper()
+	p := filepath.Join(t.TempDir(), name)
+	if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return p
 }

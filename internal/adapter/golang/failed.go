@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
-	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -292,12 +291,7 @@ func autoBuilds(files []string) (platform, tagged bool) {
 		if err != nil {
 			continue
 		}
-		var tags []string
-		if fc.expr != nil {
-			seen := map[string]bool{}
-			collectTags(fc.expr, seen)
-			tags = slices.Sorted(maps.Keys(seen))
-		}
+		tags := tagsOf(map[string]fileConstraint{f: fc})
 		for _, p := range platforms {
 			platform = platform || fc.satisfied(p)
 			tagged = tagged || len(tags) > 0 && fc.satisfied(p.withTags(tags))
