@@ -10,10 +10,11 @@ require (
 	github.com/sqlc-dev/oliphant v0.2.0
 	github.com/tommie/v8go v0.37.0
 	github.com/trendvidia/caliper v1.7.0
-	github.com/trendvidia/chameleon v0.25.2
+	github.com/trendvidia/chameleon v0.26.0
 	github.com/trendvidia/goasm v1.1.1
-	github.com/trendvidia/protocompile v0.34.0
-	github.com/trendvidia/protowire-go v1.8.1
+	github.com/trendvidia/protocompile v0.36.1
+	github.com/trendvidia/protos v0.1.2
+	github.com/trendvidia/protowire-go v1.12.1
 	github.com/trendvidia/pylib v0.1.0
 	github.com/yuin/goldmark v1.8.6
 	golang.org/x/mod v0.42.0
@@ -23,8 +24,6 @@ require (
 )
 
 require (
-	buf.build/gen/go/bufbuild/protodescriptor/protocolbuffers/go v1.36.12-20250109164928-1da0de137947.1 // indirect
-	buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go v1.36.12-20240920164238-5a7b106cbb87.1 // indirect
 	github.com/fzipp/gocyclo v0.6.0 // indirect
 	github.com/go-json-experiment/json v0.0.0-20260623181947-01eb4420fa68 // indirect
 	github.com/google/jsonschema-go v0.4.2 // indirect
@@ -35,7 +34,7 @@ require (
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2 // indirect
 	github.com/spf13/cast v1.7.1 // indirect
-	github.com/tidwall/btree v1.8.1 // indirect
+	github.com/tidwall/btree v1.8.2 // indirect
 	github.com/tommie/v8go/deps/android_amd64 v0.0.0-20261002084705-a57e453c0be5 // indirect
 	github.com/tommie/v8go/deps/android_arm64 v0.0.0-20261002084705-a57e453c0be5 // indirect
 	github.com/tommie/v8go/deps/darwin_amd64 v0.0.0-20261002084705-a57e453c0be5 // indirect

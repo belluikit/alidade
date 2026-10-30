@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/belluikit/alidade/internal/scope"
+	"io"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -17,6 +18,7 @@ import (
 	_ "github.com/trendvidia/protocompile/experimentalcompile" // wires Compiler.Compile
 	"github.com/trendvidia/protocompile/linker"
 	"github.com/trendvidia/protocompile/reporter"
+	"github.com/trendvidia/protos"
 	"google.golang.org/protobuf/reflect/protoreflect"
 
 	"github.com/belluikit/alidade/internal/graph"
@@ -142,8 +144,12 @@ func (x *extractor) compile(file string) (linker.File, error) {
 	var mu sync.Mutex
 	var first error
 	c := protocompile.Compiler{
-		Resolver: protocompile.WithStandardImports(&protocompile.SourceResolver{
-			ImportPaths: x.cur,
+		// The repository first, so its own copy of a shared schema wins;
+		// then the schemas pxf build bundles, which a repository imports
+		// and does not hold (#59); then the standard imports.
+		Resolver: protocompile.WithStandardImports(protocompile.CompositeResolver{
+			&protocompile.SourceResolver{ImportPaths: x.cur},
+			&protocompile.SourceResolver{Accessor: func(p string) (io.ReadCloser, error) { return protos.Files.Open(p) }},
 		}),
 		SourceInfoMode: protocompile.SourceInfoStandard,
 		Reporter: reporter.NewReporter(func(err reporter.ErrorWithPos) error {

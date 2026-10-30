@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/trendvidia/protowire-go/encoding/pxf"
@@ -24,13 +25,12 @@ import (
 // of proto fields the document's entries reference.
 
 // SchemaFields decodes every document of types — file to message — and
-// returns, by file, the full names of the proto fields it sets, the
-// fields a default inside a list element may be (the decoder records it
-// without its place), and the documents the decoder or schema refused.
-func SchemaFields(root string, types map[string]string, protos *Proto) (sets, unplaced map[string]map[string]bool, failed []string) {
-	sets, unplaced = map[string]map[string]bool{}, map[string]map[string]bool{}
+// returns, by file, the full names of the proto fields it sets, and the
+// documents the decoder or schema refused.
+func SchemaFields(root string, types map[string]string, protos *Proto) (sets map[string]map[string]bool, failed []string) {
+	sets = map[string]map[string]bool{}
 	if protos == nil || len(protos.Descriptors) == 0 {
-		return sets, unplaced, nil
+		return sets, nil
 	}
 	for file, typ := range types {
 		md, err := messageDescriptor(protos.Descriptors, typ)
@@ -52,14 +52,12 @@ func SchemaFields(root string, types map[string]string, protos *Proto) (sets, un
 		}
 		set := map[string]bool{}
 		setFields(msg, set)
-		msgs := reachable(md)
-		un := map[string]bool{}
 		for _, path := range res.PresentFields() {
-			presentField(msgs, strings.Split(path, "."), set, un)
+			presentField(md, path, set)
 		}
-		sets[file], unplaced[file] = set, un
+		sets[file] = set
 	}
-	return sets, unplaced, failed
+	return sets, failed
 }
 
 // CensusTypes gives each layer of a judged chain (the chain census) that
@@ -180,41 +178,20 @@ func setFields(m protoreflect.Message, set map[string]bool) {
 }
 
 // presentField records a path the decoder saw written, default values
-// included, which a decoded message does not hold. The decoder records a
-// path inside a list element relative to the element, so the path is
-// resolved from every message the document's type reaches and recorded
-// when exactly one of them has it.
-func presentField(msgs []protoreflect.MessageDescriptor, segs []string, set, unplaced map[string]bool) {
-	if countResolving(msgs, segs) != 1 {
-		// Two messages have the path: the decoder wrote it without its
-		// place, a default value inside a list element. Note every
-		// field it could be, so the comparison can say why.
-		for _, md := range msgs {
-			if names, ok := pathFields(md, segs); ok {
-				unplaced[names[len(names)-1]] = true
-			}
-		}
+// included, which a decoded message does not hold. The decoder writes the
+// place of a list element or map entry, as items[0].label; a field is the
+// same field in each of them.
+func presentField(md protoreflect.MessageDescriptor, path string, set map[string]bool) {
+	names, ok := pathFields(md, strings.Split(elementPlace.ReplaceAllString(path, ""), "."))
+	if !ok {
 		return
 	}
-	for _, md := range msgs {
-		if names, ok := pathFields(md, segs); ok {
-			for _, n := range names {
-				set[n] = true
-			}
-			return
-		}
+	for _, n := range names {
+		set[n] = true
 	}
 }
 
-func countResolving(msgs []protoreflect.MessageDescriptor, segs []string) int {
-	n := 0
-	for _, md := range msgs {
-		if _, ok := pathFields(md, segs); ok {
-			n++
-		}
-	}
-	return n
-}
+var elementPlace = regexp.MustCompile(`\[[^\]]*\]`)
 
 // pathFields resolves a field path from a message, returning each
 // field's full name.
@@ -237,32 +214,6 @@ func pathFields(md protoreflect.MessageDescriptor, segs []string) ([]string, boo
 	return out, true
 }
 
-// reachable lists a message and every message its fields reach, the
-// well-known types left out: PXF writes those as one value.
-func reachable(md protoreflect.MessageDescriptor) []protoreflect.MessageDescriptor {
-	seen := map[protoreflect.FullName]bool{}
-	var out []protoreflect.MessageDescriptor
-	var walk func(m protoreflect.MessageDescriptor)
-	walk = func(m protoreflect.MessageDescriptor) {
-		if m == nil || seen[m.FullName()] || wellKnown(m) {
-			return
-		}
-		seen[m.FullName()] = true
-		out = append(out, m)
-		fs := m.Fields()
-		for i := range fs.Len() {
-			fd := fs.Get(i)
-			if fd.IsMap() {
-				walk(fd.MapValue().Message())
-			} else {
-				walk(fd.Message())
-			}
-		}
-	}
-	walk(md)
-	return out
-}
-
 // wellKnown is a message PXF writes as one value: a protobuf well-known
 // type (7d for a Duration) or protowire's own pxf.Secret.
 func wellKnown(m protoreflect.MessageDescriptor) bool {
@@ -277,14 +228,11 @@ type PXFSchemaResult struct {
 	Fields         [2]int
 	Missing, Extra []string
 	Failed         []string
-	// Unplaced are graph references the decoder confirms only as a
-	// default written inside a list element, without its place.
-	Unplaced int
 }
 
 // ComparePXFSchema measures the graph's .pxf → .proto field references
 // for the documents the decoder read.
-func ComparePXFSchema(g *graph.Graph, sets, unplaced map[string]map[string]bool, failed []string) *PXFSchemaResult {
+func ComparePXFSchema(g *graph.Graph, sets map[string]map[string]bool, failed []string) *PXFSchemaResult {
 	r := &PXFSchemaResult{Files: len(sets), Failed: failed}
 	have := map[string]map[string]bool{}
 	for e := range g.Edges() {
@@ -309,11 +257,7 @@ func ComparePXFSchema(g *graph.Graph, sets, unplaced map[string]map[string]bool,
 			}
 		}
 		for f := range have[file] {
-			switch {
-			case set[f]:
-			case unplaced[file][f]:
-				r.Unplaced++
-			default:
+			if !set[f] {
 				r.Extra = append(r.Extra, file+" -> "+f)
 			}
 		}
@@ -324,8 +268,8 @@ func ComparePXFSchema(g *graph.Graph, sets, unplaced map[string]map[string]bool,
 
 func (r *PXFSchemaResult) String() string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "pxf schema fields %d / %d in %d decoded documents, %d extra, %d a default inside a list the decoder does not place, %d not decoded\n",
-		r.Fields[1], r.Fields[0], r.Files, len(r.Extra), r.Unplaced, len(r.Failed))
+	fmt.Fprintf(&b, "pxf schema fields %d / %d in %d decoded documents, %d extra, %d not decoded\n",
+		r.Fields[1], r.Fields[0], r.Files, len(r.Extra), len(r.Failed))
 	for _, l := range []struct {
 		name  string
 		items []string

@@ -507,3 +507,135 @@ func noEdgeTo(t *testing.T, g *graph.Graph, from, to graph.ID) {
 		}
 	}
 }
+
+// bundled writes a tree whose file uses the shared annotations the way
+// RFC-001 does, an enum value name in a rule, and whose importer takes
+// the rest of the package with it if that file fails (#59).
+var bundled = map[string]string{
+	"buf.yaml": "version: v2\nmodules:\n  - path: api\n",
+	"api/x/v1/tag.proto": `syntax = "proto3";
+package x.v1;
+import "protowire/schema/v1/annotations.proto";
+option go_package = "example.com/x/v1;xv1";
+enum Tag { TAG_UNSPECIFIED = 0; TAG_A = 1; }
+function ordered(r: Range);
+type KnownTag = Tag @validate(this.defined() && this != TAG_UNSPECIFIED, code = "tag.known");
+@validate(ordered(this))
+message Range {
+  int32 min = 1;
+  int32 max = 2;
+}
+`,
+	"api/x/v1/song.proto": `syntax = "proto3";
+package x.v1;
+import "x/v1/tag.proto";
+option go_package = "example.com/x/v1;xv1";
+message Song { Range tempo = 1; KnownTag tag = 2; }
+`,
+}
+
+func writeTree(t *testing.T, files map[string]string) string {
+	t.Helper()
+	dir := t.TempDir()
+	for name, body := range files {
+		p := filepath.Join(dir, filepath.FromSlash(name))
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return dir
+}
+
+// TestBundledSchemas: a file importing a schema pxf build bundles
+// compiles, enum names in its rules included, and so does its importer;
+// the schema itself lands on an external node, not on declarations.
+func TestBundledSchemas(t *testing.T) {
+	dir := writeTree(t, bundled)
+	b := graph.NewBuilder(dir)
+	rep, err := Extract(b, dir, DefaultOptions())
+	if err != nil {
+		t.Fatal(err)
+	}
+	g := b.Build()
+	if rep.Failed != 0 || rep.Files != 2 || rep.External != 1 {
+		t.Errorf("report = %+v; want 2 files, none failed, 1 external", rep)
+	}
+	for _, n := range []string{"x.v1.Range", "x.v1.Song", "x.v1.Tag"} {
+		wantNode(t, g, id(n), kindOf(n))
+	}
+	if rep.Generates != 3 {
+		t.Errorf("generates = %d, want one for each of Range, Song and Tag", rep.Generates)
+	}
+	ann := id("file/protowire/schema/v1/annotations.proto")
+	if n, ok := g.Node(ann); !ok || n.Attrs["external"] != "true" {
+		t.Errorf("annotations node = %+v, %v; want external", n, ok)
+	}
+	wantEdge(t, g, id("file/api/x/v1/tag.proto"), graph.KindImports, ann, graph.Extracted)
+}
+
+func kindOf(name string) graph.Kind {
+	if name == "x.v1.Tag" {
+		return graph.KindEnum
+	}
+	return graph.KindMessage
+}
+
+// TestRepositorySchemaWins: a repository's own file at a bundled path is
+// the one compiled, so it is a declaration of the graph and not external.
+func TestRepositorySchemaWins(t *testing.T) {
+	files := map[string]string{
+		"pxf/secret.proto": "syntax = \"proto3\";\npackage pxf;\nmessage Secret { string mine = 1; }\n",
+		"use.proto":        "syntax = \"proto3\";\npackage use;\nimport \"pxf/secret.proto\";\nmessage U { pxf.Secret s = 1; }\n",
+	}
+	dir := writeTree(t, files)
+	b := graph.NewBuilder(dir)
+	rep, err := Extract(b, dir, DefaultOptions())
+	if err != nil {
+		t.Fatal(err)
+	}
+	g := b.Build()
+	if rep.Failed != 0 || rep.External != 0 {
+		t.Errorf("report = %+v; want none failed, none external", rep)
+	}
+	wantNode(t, g, id("pxf.Secret.mine"), graph.KindField)
+}
+
+// TestUnknownImportStillFails: the bundled schemas answer what they hold
+// and nothing else.
+func TestUnknownImportStillFails(t *testing.T) {
+	dir := writeTree(t, map[string]string{"a.proto": "syntax = \"proto3\";\nimport \"protowire/schema/v1/nope.proto\";\n"})
+	b := graph.NewBuilder(dir)
+	rep, err := Extract(b, dir, DefaultOptions())
+	if err != nil {
+		t.Fatal(err)
+	}
+	n := wantNode(t, b.Build(), id("file/a.proto"), graph.KindProtoFile)
+	if rep.Failed != 1 || !strings.Contains(n.Attrs["error"], "nope.proto") {
+		t.Errorf("failed = %d, node = %+v", rep.Failed, n)
+	}
+}
+
+// TestManagedPathTakesImportsName: a repository that compiles its own copy
+// of a schema the compiler knows, managed mode giving both files one Go
+// package, while the import carries the shared schema's written package
+// name. The name goes with the path buf gives it, or protogen refuses two
+// names for one package and the file's generates edges are lost.
+func TestManagedPathTakesImportsName(t *testing.T) {
+	dir := writeTree(t, map[string]string{
+		"buf.yaml":     "version: v2\nmodules:\n  - path: proto\n",
+		"buf.gen.yaml": "version: v2\nmanaged:\n  enabled: true\n  override:\n    - file_option: go_package_prefix\n      value: example.com/gen\n",
+		"proto/protowire/schema/v1/descriptor.proto": "syntax = \"proto3\";\npackage protowire.schema.v1;\nmessage SourceLocation { string file = 1; }\n",
+		"proto/protowire/schema/v1/report.proto":     "syntax = \"proto3\";\npackage protowire.schema.v1;\nimport \"protowire/schema/v1/descriptor.proto\";\nmessage Report { SourceLocation at = 1; }\n",
+	})
+	b := graph.NewBuilder(dir)
+	rep, err := Extract(b, dir, DefaultOptions())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rep.Failed != 0 || rep.NamingErrors != 0 || rep.Generates == 0 {
+		t.Errorf("report = %+v; want none failed, no naming error, generates edges", rep)
+	}
+}

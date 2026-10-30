@@ -120,7 +120,7 @@ var schemaDocs = map[string]string{
 
 // TestPXFSchemaAgrees: the decoder's fields and the graph's schema edges
 // agree, the untyped layer typed by the census, a default written
-// inside a list element counted apart; a dropped and a bogus graph-side
+// inside a list element among them; a dropped and a bogus graph-side
 // field are caught.
 func TestPXFSchemaAgrees(t *testing.T) {
 	if _, err := exec.LookPath("protoc"); err != nil {
@@ -142,14 +142,14 @@ func TestPXFSchemaAgrees(t *testing.T) {
 		t.Fatalf("census types %v", types)
 	}
 	maps.Copy(types, p.FileTypes)
-	sets, unplaced, failed := SchemaFields(dir, types, pr)
-	r := ComparePXFSchema(g, sets, unplaced, failed)
+	sets, failed := SchemaFields(dir, types, pr)
+	r := ComparePXFSchema(g, sets, failed)
 	if r.Files != 2 || r.Fields[0] == 0 || r.Fields[0] != r.Fields[1] || len(r.Extra) != 0 {
 		t.Fatalf("not exact:\n%s", r)
 	}
 	delete(sets["config/base.pxf"], "pkg.v1.Doc.items") // only Doc has items: no default hides it
 	sets["config/top.pxf"]["pkg.v1.Doc.items"] = true
-	if r := ComparePXFSchema(g, sets, unplaced, failed); len(r.Missing) != 1 || len(r.Extra) != 1 {
+	if r := ComparePXFSchema(g, sets, failed); len(r.Missing) != 1 || len(r.Extra) != 1 {
 		t.Errorf("missing %v, extra %v; want one of each", r.Missing, r.Extra)
 	}
 }

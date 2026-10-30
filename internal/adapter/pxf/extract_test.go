@@ -111,7 +111,7 @@ func TestFilesAndTypes(t *testing.T) {
 		t.Errorf("@type edge = %v", got)
 	}
 	b := wantNode(t, g, id("broken.pxf"), graph.KindPXFFile)
-	if !strings.Contains(b.Attrs["error"], "unterminated") || len(g.Out(b.ID)) != 0 {
+	if !strings.Contains(b.Attrs["error"], "newline in string literal") || len(g.Out(b.ID)) != 0 {
 		t.Errorf("broken.pxf = %+v with %d edges", b, len(g.Out(b.ID)))
 	}
 	if _, ok := g.Node(id("testdata/copy.pxf")); ok {
