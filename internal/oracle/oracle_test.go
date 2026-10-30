@@ -137,8 +137,8 @@ func measurePXF(t *testing.T, g *graph.Graph, root string, proto *Proto) bool {
 		inferred = CensusTypes(s, p.FileTypes)
 		maps.Copy(types, inferred)
 	}
-	sets, unplaced, failed := SchemaFields(root, types, proto)
-	t.Logf("layers typed by their chain: %d\n%s", len(inferred), ComparePXFSchema(g, sets, unplaced, failed))
+	sets, failed := SchemaFields(root, types, proto)
+	t.Logf("layers typed by their chain: %d\n%s", len(inferred), ComparePXFSchema(g, sets, failed))
 	measureCensus(t, g, root)
 	return true
 }

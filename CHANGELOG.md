@@ -8,6 +8,24 @@ tracker's. From v0.12.1 on, every number is this repository's.
 
 ## Unreleased
 
+- **Fixed: a `.proto` file importing `protowire/schema/v1/annotations.proto`
+  compiles, and so do the files importing it** (#59). The import resolved
+  for `pxf build`, from its bundled schemas, but not here, so the file
+  failed and took its importers with it; enum value names in `@validate`
+  rules needed a newer compiler too. On daysong at the commit the issue
+  names, 6 of its 10 files failed and the proto layer held 193 nodes; now
+  none fail and it holds 516, with `generates` edges from 29 to 89. The
+  schemas of github.com/trendvidia/protos are bundled, behind the
+  repository's own files. This moves protocompile to v0.36.1 and
+  chameleon to v0.26.0, which brings protowire-go to v1.12.1.
+- **Added: `graph_issues` lists what failed to parse or compile, and
+  `graph_stats` counts it** (#59). A file a compiler refused has a node
+  with its error and nothing else, which no summary mentioned, so a layer
+  could lose half its nodes while the tools looked healthy. `graph_issues`
+  gains `failed`, each with its ID and error, and the `kind` `failed`;
+  `graph_stats` and the graph's `stats` block gain `failed`. A Go package
+  that did not load is counted the same way.
+
 ## v0.14.0 — 2026-10-18
 
 - **Added: `-go-configs auto` reads Go files behind custom build tags and

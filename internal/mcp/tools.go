@@ -115,8 +115,8 @@ func (s *Server) registerTools() {
 	), s.handleQuestion)
 
 	add(mcpsdk.NewTool("graph_issues",
-		mcpsdk.WithDescription("Edges the graph dropped because an end names no node, folded by cause, and conflicts where two layers disagreed about one node."),
-		mcpsdk.WithString("kind", mcpsdk.Enum("dropped", "conflicts", "both"), mcpsdk.DefaultString("both")),
+		mcpsdk.WithDescription("Files that did not parse or compile, each with its error; edges the graph dropped because an end names no node, folded by cause; and conflicts where two layers disagreed about one node."),
+		mcpsdk.WithString("kind", mcpsdk.Enum("dropped", "conflicts", "failed", "both"), mcpsdk.DefaultString("both"), mcpsdk.Description("both is all of them.")),
 		mcpsdk.WithString("prefix", mcpsdk.Description("Only items whose ID starts with this, e.g. sql://.")),
 		withBudget(),
 		withRoot(),

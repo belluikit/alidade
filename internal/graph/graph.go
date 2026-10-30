@@ -119,6 +119,11 @@ type Stats struct {
 	DroppedByReason map[DropReason]int
 	// Conflicts counts adapter disagreements resolved by the merge.
 	Conflicts int
+	// Failed counts the nodes marked with an error: a file a parser or
+	// compiler refused, or a Go package that did not load. Such a node
+	// stands in for what it would have held, so one failure can take most
+	// of a layer with it (#59).
+	Failed int
 }
 
 // GeneratedShare returns the fraction of nodes that came from generated
@@ -147,6 +152,9 @@ func (g *Graph) computeStats() Stats {
 		s.NodesByScheme[n.scheme()]++
 		if n.Generated {
 			s.Generated++
+		}
+		if n.Attrs["error"] != "" {
+			s.Failed++
 		}
 	}
 	for _, e := range g.edges {

@@ -90,7 +90,8 @@ checkout, and none to go stale.
 - Every edge states how it was derived, and `exclude_inferred` drops the
   heuristic ones.
 - An answer cut to its token budget says what it left out.
-- `graph_issues` lists the edges the graph dropped, and why.
+- `graph_issues` lists the files that did not compile and the edges the
+  graph dropped, and why.
 - `graph_stats` lists the files it could not read.
 - A Python call jedi has not reached yet is marked as a guess until it has.
 

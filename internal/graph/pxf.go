@@ -115,6 +115,7 @@ func (g *Graph) statsBlock() pxf.Entry {
 		pxfInt("generated", s.Generated),
 		pxfInt("dropped", s.Dropped),
 		pxfInt("conflicts", s.Conflicts),
+		pxfInt("failed", s.Failed),
 		pxfCountMap("nodes_by_scheme", s.NodesByScheme, func(k Scheme) string { return string(k) }),
 		// Derivations are ordered strongest first rather than
 		// alphabetically: the constants carry that order, and reading

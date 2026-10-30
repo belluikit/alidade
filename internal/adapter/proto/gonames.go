@@ -119,6 +119,10 @@ func genRequest(fd protoreflect.FileDescriptor, importPathOf func(protoreflect.F
 		if gp := goPackageOption(f); strings.Contains(gp, ";") {
 			i := strings.Index(gp, ";")
 			pkgNames[gp[:i]] = gp[i+1:]
+			// Managed mode can move the file to a path other files share.
+			if p := importPathOf(f); p != "" {
+				pkgNames[p] = gp[i+1:]
+			}
 		}
 	}
 	for _, f := range files {

@@ -29,9 +29,11 @@
 // Import paths follow buf: a file under a buf.yaml module is addressed
 // relative to that module, and any other file relative to the repository
 // root. An import that no file in the repository answers — a well-known
-// type, a registry module — lands on an external file node marked
-// external=true, the way the Go layer lands boundary calls on a package
-// node, so the reference is kept without inventing a declaration.
+// type, a registry module, a shared schema pxf build bundles — lands on an
+// external file node marked external=true, the way the Go layer lands
+// boundary calls on a package node, so the reference is kept without
+// inventing a declaration. The bundled schemas (github.com/trendvidia/protos)
+// compile, so a file importing one does; nothing of theirs becomes a node.
 //
 // A file that does not compile still has a node, marked with its first
 // error, and nothing else: a schema the compiler rejects is not one to

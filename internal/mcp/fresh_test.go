@@ -92,3 +92,52 @@ func TestToolsFoldInBackgroundProgress(t *testing.T) {
 		t.Errorf("done: %d builds, %d refreshes, answer %q; want 1, 1 and no pending", builds.Load(), refreshes.Load(), third[:min(80, len(third))])
 	}
 }
+
+// TestIssuesNameFailedFiles is #59: a file that did not compile is one
+// count in graph_stats and one item in graph_issues, with its error, and
+// kind and prefix select it as they do the rest.
+func TestIssuesNameFailedFiles(t *testing.T) {
+	b := graph.NewBuilder("/repo")
+	for _, n := range []graph.Node{
+		{ID: "proto://file/a.proto", Kind: graph.KindProtoFile, Name: "a.proto", Attrs: map[string]string{"error": "a.proto:3:8: imported file does not exist"}},
+		{ID: "proto://file/b.proto", Kind: graph.KindProtoFile, Name: "b.proto"},
+		{ID: "pxf://c.pxf", Kind: graph.KindPXFFile, Name: "c.pxf", Attrs: map[string]string{"error": "1:1: bad"}},
+	} {
+		if err := b.AddNode(n); err != nil {
+			t.Fatal(err)
+		}
+	}
+	g := b.Build()
+	c := connect(t, New(func() (*graph.Graph, BuildInfo, error) { return g, BuildInfo{Root: "/repo"}, nil }))
+	call := func(tool string, args map[string]any) string {
+		req := mcpsdk.CallToolRequest{}
+		req.Params.Name, req.Params.Arguments = tool, args
+		res, err := c.CallTool(context.Background(), req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return res.Content[0].(mcpsdk.TextContent).Text
+	}
+	for _, c := range []struct {
+		tool       string
+		args       map[string]any
+		want, lack []string
+	}{
+		{"graph_stats", nil, []string{`"failed":2`}, nil},
+		{"graph_issues", nil, []string{`{"id":"proto://file/a.proto","error":"a.proto:3:8: imported file does not exist"}`, `"id":"pxf://c.pxf"`}, []string{"b.proto"}},
+		{"graph_issues", map[string]any{"kind": "failed", "prefix": "pxf://"}, []string{"c.pxf"}, []string{"a.proto"}},
+		{"graph_issues", map[string]any{"kind": "dropped"}, nil, []string{"c.pxf"}},
+	} {
+		got := call(c.tool, c.args)
+		for _, w := range c.want {
+			if !strings.Contains(got, w) {
+				t.Errorf("%s %v lacks %s: %s", c.tool, c.args, w, got)
+			}
+		}
+		for _, l := range c.lack {
+			if strings.Contains(got, l) {
+				t.Errorf("%s %v holds %s: %s", c.tool, c.args, l, got)
+			}
+		}
+	}
+}
