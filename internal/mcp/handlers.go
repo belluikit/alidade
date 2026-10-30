@@ -45,6 +45,7 @@ type statsOut struct {
 	Dropped        int            `json:"dropped"`
 	DroppedBy      map[string]int `json:"dropped_by_reason,omitempty"`
 	Conflicts      int            `json:"conflicts"`
+	Failed         int            `json:"failed,omitempty"`
 	Overlay        *overlayOut    `json:"overlay,omitempty"`
 }
 
@@ -127,7 +128,7 @@ func renderStats(g *graph.Graph, info BuildInfo) statsOut {
 	o := statsOut{
 		Root: info.Root, SchemaRoots: info.SchemaRoots, Layers: info.Layers, Rebuilt: info.Rebuilt, Kept: info.Kept, Build: info.Build, ExcludedGo: info.ExcludedGoFiles, GoModules: info.GoModules, GoFailed: info.GoModulesFailed, GoModuleEdges: moduleEdges(info.GoModuleEdges), GoTestModEdges: moduleEdges(info.GoTestModuleEdges), GoTestNodes: info.GoTestNodes, BuildMS: info.Elapsed.Milliseconds(),
 		Nodes: st.Nodes, Edges: st.Edges, Generated: st.Generated, GeneratedShare: st.GeneratedShare(),
-		Dropped: st.Dropped, Conflicts: st.Conflicts,
+		Dropped: st.Dropped, Conflicts: st.Conflicts, Failed: st.Failed,
 		NodesByScheme: make(map[string]int), EdgesByDeriv: make(map[string]int), DroppedBy: make(map[string]int),
 	}
 	if o.Layers == nil {
@@ -348,6 +349,13 @@ type conflictOut struct {
 	Discarded string `json:"discarded"`
 }
 
+// failedOut is a node marked with an error, as graph_issues renders it: a
+// file that did not parse or compile, or a Go package that did not load.
+type failedOut struct {
+	ID    string `json:"id"`
+	Error string `json:"error"`
+}
+
 // issuesOut is graph_issues' shape.
 type issuesOut struct {
 	// Groups folds every dropped edge under the prefix by the end that
@@ -357,6 +365,7 @@ type issuesOut struct {
 	Groups    []droppedGroup `json:"dropped_by_missing"`
 	Dropped   []droppedOut   `json:"dropped"`
 	Conflicts []conflictOut  `json:"conflicts"`
+	Failed    []failedOut    `json:"failed"`
 	Total     omitted2       `json:"total"`
 	Truncated bool           `json:"truncated,omitempty"`
 	Omitted   *omitted2      `json:"omitted,omitempty"`
@@ -367,6 +376,7 @@ type omitted2 struct {
 	Groups    int `json:"dropped_by_missing,omitempty"`
 	Dropped   int `json:"dropped"`
 	Conflicts int `json:"conflicts"`
+	Failed    int `json:"failed"`
 }
 
 // A droppedGroup is one cause of dropped edges: which end was missing,
@@ -386,28 +396,51 @@ func (s *Server) handleIssues(ctx contextT, req mcpsdk.CallToolRequest) (*mcpsdk
 	}
 	kind := req.GetString("kind", "both")
 	switch kind {
-	case "dropped", "conflicts", "both":
+	case "dropped", "conflicts", "failed", "both":
 	default:
-		return errorResult(fmt.Errorf("kind: %q is not dropped, conflicts or both", kind)), nil
+		return errorResult(fmt.Errorf("kind: %q is not dropped, conflicts, failed or both", kind)), nil
 	}
+	wants := func(k string) bool { return kind == k || kind == "both" }
 	prefix := req.GetString("prefix", "")
-	out := issuesOut{Groups: []droppedGroup{}, Dropped: []droppedOut{}, Conflicts: []conflictOut{}}
+	out := issuesOut{Groups: []droppedGroup{}, Dropped: []droppedOut{}, Conflicts: []conflictOut{}, Failed: []failedOut{}}
 	p := newPage(budgetParam(req))
 	p.reserve(out.Total) // the totals are rendered whatever fits
 	groups := 0
-	if kind != "conflicts" {
+	// First: one failed file costs more of the graph than a dropped edge.
+	if wants("failed") {
+		out.Failed, out.Total.Failed = failedItems(g, prefix, p)
+	}
+	if wants("dropped") {
 		out.Groups, groups = droppedGroups(g, prefix, p)
 		out.Dropped, out.Total.Dropped = droppedItems(g, prefix, p)
 	}
-	if kind != "dropped" {
+	if wants("conflicts") {
 		out.Conflicts, out.Total.Conflicts = conflictItems(g, prefix, p)
 	}
 	out.Tokens = p.used
 	if p.truncated {
 		out.Truncated = true
-		out.Omitted = &omitted2{Groups: groups - len(out.Groups), Dropped: out.Total.Dropped - len(out.Dropped), Conflicts: out.Total.Conflicts - len(out.Conflicts)}
+		out.Omitted = &omitted2{Groups: groups - len(out.Groups), Dropped: out.Total.Dropped - len(out.Dropped), Conflicts: out.Total.Conflicts - len(out.Conflicts), Failed: out.Total.Failed - len(out.Failed)}
 	}
 	return jsonResult(out), nil
+}
+
+// failedItems renders the nodes under prefix marked with an error that
+// fit the page, and counts them all (#59).
+func failedItems(g *graph.Graph, prefix string, p *page) ([]failedOut, int) {
+	items, total := []failedOut{}, 0
+	for n := range g.Nodes() {
+		reason := n.Attrs["error"]
+		if reason == "" || !strings.HasPrefix(string(n.ID), prefix) {
+			continue
+		}
+		total++
+		item := failedOut{string(n.ID), reason}
+		if p.fit(estimate(item)) {
+			items = append(items, item)
+		}
+	}
+	return items, total
 }
 
 // droppedGroups folds the dropped edges under prefix by cause, largest

@@ -205,7 +205,7 @@ skip = ["vendor", "third_party", "web/legacy"]
 | `neighbors` | what is within N hops of a node, in, out or both |
 | `shortest_path` | how two nodes connect |
 | `subgraph_for_question` | the neighbourhood of what a question names, across layers |
-| `graph_issues` | what the graph left out (dropped edges, folded by cause) or had to decide (conflicts) |
+| `graph_issues` | what the graph left out (files that did not parse or compile, each with its error, and dropped edges, folded by cause) or had to decide (conflicts) |
 | `search_text` | text the graph does not hold: a string literal, a log message, a comment. Each hit comes with the declaration holding it, as a node for the tools above. `path` and `exclude` to narrow it by path prefix, `files_only` (a cut first page also counts hits per directory below `path`), `exclude_tests`, and `after` to continue a cut answer. `root` searches another `git worktree` of the repository and `ref` a commit's files; a commit's hits name no declaration, and a worktree's do when its graph is built (see below) |
 | `rebuild` | build again now. Rarely needed, since every tool rebuilds the changed layers first |
 

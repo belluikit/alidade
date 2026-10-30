@@ -24,8 +24,9 @@
 //   - shortest_path: the shortest chain of edges between two nodes.
 //   - subgraph_for_question: the neighbourhood of the declarations a
 //     question names, in one connected result across layers.
-//   - graph_issues: what the graph left out or had to decide — dropped
-//     edges with their reason, conflicts with what was kept and discarded.
+//   - graph_issues: what the graph left out or had to decide — files that
+//     did not parse or compile with their error, dropped edges with their
+//     reason, conflicts with what was kept and discarded.
 //   - rebuild: drop the graph and build it again from the working tree.
 //
 // # Budget

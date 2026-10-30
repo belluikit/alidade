@@ -130,7 +130,7 @@ func TestFiltersNameWhatTheGraphHolds(t *testing.T) {
 		{"subgraph_for_question", map[string]any{"question": "LoadConfig", "edge_kinds": []any{1}}, "an element of type float64"},
 		{"find_nodes", map[string]any{"query": "Load", "kind": "function"}, `"function" is no node kind of this graph; it has `},
 		{"find_nodes", map[string]any{"query": "Load", "scheme": "golang"}, `"golang" is no scheme of this graph; it has go,`},
-		{"graph_issues", map[string]any{"kind": "conflict"}, `"conflict" is not dropped, conflicts or both`},
+		{"graph_issues", map[string]any{"kind": "conflict"}, `"conflict" is not dropped, conflicts, failed or both`},
 	}
 	for _, c := range cases {
 		text, isErr := h.call(c.tool, c.args)
