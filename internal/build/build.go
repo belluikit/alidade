@@ -9,8 +9,10 @@ package build
 
 import (
 	"cmp"
+	"errors"
 	"fmt"
 	"github.com/belluikit/alidade/internal/scope"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
@@ -279,6 +281,9 @@ func NewSession(root string, opts Options) (*Session, error) {
 // files changed.
 func (s *Session) Build() (*graph.Graph, *Report, error) {
 	start := time.Now()
+	if err := s.rootThere(); err != nil {
+		return nil, nil, err
+	}
 	skip, err := scope.Load(s.root)
 	if err != nil {
 		return nil, nil, fmt.Errorf("build: %w", err)
@@ -342,6 +347,21 @@ func (s *Session) Build() (*graph.Graph, *Report, error) {
 	s.rep = rep
 	s.gen++
 	return g, rep, nil
+}
+
+// rootThere refuses a build of a root that has gone. A session keeps the
+// absolute path it opened, and every path under it, so a directory renamed
+// while a server runs cannot be followed from here; left alone, the build
+// fails on the first file it stats, in words that do not say the root
+// moved or that a restart mends it (#57). A root that comes back builds.
+func (s *Session) rootThere() error {
+	if _, err := os.Stat(s.root); !errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
+	if s.base != nil {
+		return fmt.Errorf("build: worktree %s no longer exists (moved or deleted?)", s.root)
+	}
+	return fmt.Errorf("build: repository root %s no longer exists (moved or deleted?); restart the MCP server to serve it from its new path (/mcp, then Reconnect, in Claude Code)", s.root)
 }
 
 // fold builds the graph from every layer's contributions, then runs the

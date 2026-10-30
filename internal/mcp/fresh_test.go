@@ -5,6 +5,8 @@ package mcp
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -139,5 +141,26 @@ func TestIssuesNameFailedFiles(t *testing.T) {
 				t.Errorf("%s %v holds %s: %s", c.tool, c.args, l, got)
 			}
 		}
+	}
+}
+
+// TestSearchFollowsTheBuiltRoot is #57: a relative root renamed before the
+// first build has the path the server took at startup out of date, and the
+// build the right one. Reading the old one found nothing, and said so as
+// an answer: no hits, no error.
+func TestSearchFollowsTheBuiltRoot(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("needle\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	s := New(func() (*graph.Graph, BuildInfo, error) { return fixture(), BuildInfo{Root: dir}, nil }).Root(filepath.Join(dir, "gone"))
+	req := mcpsdk.CallToolRequest{}
+	req.Params.Name, req.Params.Arguments = "search_text", map[string]any{"pattern": "needle"}
+	res, err := connect(t, s).CallTool(context.Background(), req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := res.Content[0].(mcpsdk.TextContent).Text; !strings.Contains(got, `"at":"a.txt:1"`) {
+		t.Errorf("search_text = %s", got)
 	}
 }
