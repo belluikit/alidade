@@ -16,6 +16,35 @@ import (
 	"github.com/belluikit/alidade/internal/python"
 )
 
+// TestBuildSaysRootMoved pins #57: a root renamed under a running session
+// fails with an error that names it and the restart, not the stat of the
+// first file, and a root that comes back builds.
+func TestBuildSaysRootMoved(t *testing.T) {
+	parent := t.TempDir()
+	root := filepath.Join(parent, "before")
+	write(t, filepath.Join(root, "go.mod"), "module example.com/m\n\ngo 1.26\n")
+	write(t, filepath.Join(root, "a.go"), "package m\n\nfunc A() {}\n")
+	s := newSession(t, root)
+	mustSessionBuild(t, s)
+	moved := filepath.Join(parent, "after")
+	if err := os.Rename(root, moved); err != nil {
+		t.Fatal(err)
+	}
+	_, _, err := s.Build()
+	if err == nil {
+		t.Fatal("build of a moved root succeeded")
+	}
+	for _, want := range []string{s.root + " no longer exists", "restart the MCP server"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error %q lacks %q", err, want)
+		}
+	}
+	if err := os.Rename(moved, root); err != nil {
+		t.Fatal(err)
+	}
+	mustSessionBuild(t, s)
+}
+
 // TestRebuildSeesEditsUnderBuildDirs pins #93: "build" and "dist" are the
 // TS layer's to skip, not every layer's, so a Go edit under internal/build/
 // — alidade's own layout — reruns the Go layer.

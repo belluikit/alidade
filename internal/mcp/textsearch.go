@@ -168,11 +168,15 @@ func (s *Server) textSearch(ctx context.Context, req mcpsdk.CallToolRequest) (*t
 	switch {
 	case ts.ref != "":
 	case !ts.other:
-		g, _, err := s.graph(ctx)
+		g, info, err := s.graph(ctx)
 		if err != nil {
 			return nil, err
 		}
 		ts.byFile = nodesByFile(g)
+		if info.Root != "" {
+			// A relative root renamed before the first build (#57).
+			ts.root = info.Root
+		}
 	default:
 		g, note := s.heldGraph(ts.root)
 		if g != nil {

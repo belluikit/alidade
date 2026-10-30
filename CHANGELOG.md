@@ -25,6 +25,12 @@ tracker's. From v0.12.1 on, every number is this repository's.
   gains `failed`, each with its ID and error, and the `kind` `failed`;
   `graph_stats` and the graph's `stats` block gain `failed`. A Go package
   that did not load is counted the same way.
+- **Fixed: a repository renamed under a running server says so** (#57).
+  Every tool call failed with `lstat <old path>: no such file or
+  directory`. The error now names the root that has gone and the restart
+  that mends it, and a root moved back builds again. A relative root
+  renamed before the first build was already followed; `search_text` now
+  follows it too.
 
 ## v0.14.0 — 2026-10-18
 
