@@ -172,3 +172,29 @@ where the runner has it. No job runs the Linux arm64 one before it ships.
 Each release archive carries `THIRD_PARTY_NOTICES.txt` beside the binary.
 `go run scripts/notices.go` regenerates it when a dependency moves, and CI
 fails when it is out of date.
+
+A Dependabot pull request that moves a Go module therefore fails CI, and
+that is decided, not a broken pull request (#63). Nothing regenerates the
+file on its branch. A person does, as the last step before merging, because
+Dependabot stops rebasing a branch someone else has committed to:
+
+```
+gh pr checkout <number>
+GOTOOLCHAIN=go1.27.2 go run scripts/notices.go   # the Go version ci.yml pins
+git diff THIRD_PARTY_NOTICES.txt
+```
+
+Commit the result and push it to that branch. Read the diff first, because
+it is why this step is not automated. Most bumps change version lines and
+nothing else. Any other line is a license that changed or a module that
+arrived or left, and a person should see that before a release carries it:
+95f869b changed a copyright line, and 3f1cb71 added one module's license and
+removed others.
+
+`GOTOOLCHAIN` is there because the script copies Go's own `LICENSE` from the
+toolchain, and a Go from Homebrew or go-plus leaves that file out. The
+setting fetches the go.dev toolchain into the module cache, so it works
+whichever `go` is installed.
+
+Worth revisiting if Go bumps become frequent enough to want auto-merge, or
+if a release ships a stale file past the check.

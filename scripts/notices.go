@@ -80,7 +80,7 @@ func notices() ([]byte, []string, error) {
 	}
 	section(&b, "Go, the standard library and runtime")
 	if err := files(&b, goroot, []string{"LICENSE", "PATENTS"}); err != nil {
-		return nil, nil, fmt.Errorf("Go's license, from %s: %w", goroot, err)
+		return nil, nil, fmt.Errorf("Go's license, from %s: %w (this needs a toolchain from go.dev: see CONTRIBUTING.md)", goroot, err)
 	}
 	mods, err := modules()
 	if err != nil {
