@@ -8,6 +8,8 @@ tracker's. From v0.12.1 on, every number is this repository's.
 
 ## Unreleased
 
+## v0.15.0 — 2026-10-30
+
 - **Fixed: a `.proto` file importing `protowire/schema/v1/annotations.proto`
   compiles, and so do the files importing it** (#59). The import resolved
   for `pxf build`, from its bundled schemas, but not here, so the file
@@ -31,6 +33,9 @@ tracker's. From v0.12.1 on, every number is this repository's.
   that mends it, and a root moved back builds again. A relative root
   renamed before the first build was already followed; `search_text` now
   follows it too.
+- **Changed: V8 and the MCP library move** (#62). v8go goes from v0.37.0
+  to v0.40.0, which moves the V8 that reads Svelte components, and mcp-go
+  from v1.2.1 to v1.4.0.
 
 ## v0.14.0 — 2026-10-18
 
