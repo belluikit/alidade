@@ -69,8 +69,11 @@ jobs:
     name: linux vet + build + test
     runs-on: ubuntu-24.04
     env:
-      CC: zig cc -fno-sanitize=undefined
-      CXX: zig c++ -fno-sanitize=undefined
+      # A named target, as the release build has: with none zig compiles
+      # for this runner's CPU, and the Go cache hands the object to a runner
+      # that may lack its instructions.
+      CC: zig cc -target x86_64-linux-gnu -fno-sanitize=undefined
+      CXX: zig c++ -target x86_64-linux-gnu -fno-sanitize=undefined
     steps:
       - uses: actions/checkout@v7
         with:
