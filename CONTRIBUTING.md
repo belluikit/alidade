@@ -43,7 +43,8 @@ go run scripts/headers.go                 # every source file has its license he
 
 `go run scripts/notices.go` regenerates `THIRD_PARTY_NOTICES.txt` when a
 dependency moves; it reads Go's own license from the toolchain, which must
-be one from go.dev (Homebrew's leaves the file out).
+be one from go.dev (Homebrew's leaves the file out). Any other Go can fetch
+one: `GOTOOLCHAIN=go1.27.2 go run scripts/notices.go`.
 
 ## What makes a good change
 
