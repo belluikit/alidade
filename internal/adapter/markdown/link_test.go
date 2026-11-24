@@ -613,6 +613,41 @@ func TestFrontendDeclarationsAnswerLast(t *testing.T) {
 	}
 }
 
+// TestRustDeclarations: a Rust declaration answers a mention last, as a
+// Python one, and also as Rust writes its path (ADR 009): `Square::new`,
+// and a trait implementation's method by its type, which two traits'
+// methods of one name share, so `Square::fmt` names both and links
+// neither.
+func TestRustDeclarations(t *testing.T) {
+	b := graph.NewBuilder(t.TempDir())
+	for _, n := range []graph.Node{
+		{ID: "rust://src/lib.rs", Kind: graph.KindModule, Name: "lib.rs"},
+		{ID: "rust://src/lib.rs#Square.new", Kind: graph.KindMethod, Name: "new"},
+		{ID: "rust://src/lib.rs#Square[Area].area", Kind: graph.KindMethod, Name: "area"},
+		{ID: "rust://src/lib.rs#Square[Debug].fmt", Kind: graph.KindMethod, Name: "fmt"},
+		{ID: "rust://src/lib.rs#Square[Display].fmt", Kind: graph.KindMethod, Name: "fmt"},
+		{ID: "rust://src/lib.rs#area_of", Kind: graph.KindFunc, Name: "area_of"},
+	} {
+		if err := b.AddNode(n); err != nil {
+			t.Fatal(err)
+		}
+	}
+	ix := buildIndex(b.Build())
+	for text, want := range map[string]string{
+		"Square::new":  "rust://src/lib.rs#Square.new",
+		"Square::area": "rust://src/lib.rs#Square[Area].area",
+		"Square.new":   "rust://src/lib.rs#Square.new",
+		"area_of":      "rust://src/lib.rs#area_of",
+		"src/lib.rs":   "rust://src/lib.rs",
+		"Square::fmt":  "", // two traits' fmt
+	} {
+		got := ix.lookup(text)
+		if want == "" && len(got) == 1 || want != "" && (len(got) != 1 || string(got[0]) != want) {
+			t.Errorf("lookup(%q) = %v, want %q", text, got, want)
+		}
+	}
+}
+
 // TestLinkSpanForms: the forms the redrawn recall sample found unanswered
 // (#7) — a call or a signature, a method reached through a value or a
 // receiver, a package by the end of its import path, a command by its

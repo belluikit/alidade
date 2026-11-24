@@ -601,6 +601,7 @@ var fileNodes = map[string]func(*graph.Minter, string) (graph.ID, error){
 	".pxf":   func(m *graph.Minter, rel string) (graph.ID, error) { return m.PXFID(rel, "") },
 	".goasm": func(m *graph.Minter, rel string) (graph.ID, error) { return m.GoasmID(rel, "") },
 	".py":    func(m *graph.Minter, rel string) (graph.ID, error) { return m.PyID(rel) },
+	".rs":    func(m *graph.Minter, rel string) (graph.ID, error) { return m.RustID(rel) },
 }
 
 // pathNode returns the node a repo-relative path names, or "" for one
