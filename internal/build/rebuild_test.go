@@ -325,3 +325,45 @@ func TestRebuildPython(t *testing.T) {
 	}
 	sameAsFresh(t, root, g)
 }
+
+// TestRebuildRust pins the Rust layer's place in a rebuild (ADR 009,
+// #72): a .rs edit or a Cargo.toml edit reruns it and keeps the Go layer,
+// and a Markdown link to a Rust file reaches the file's node. With the
+// toolchain, the new function is in the graph with its call; without it,
+// the file is, saying why. CI sets ALIDADE_REQUIRE_RUST, so there a
+// missing toolchain fails rather than passes the layer unchecked.
+func TestRebuildRust(t *testing.T) {
+	root := t.TempDir()
+	write(t, filepath.Join(root, "go.mod"), "module example.com/m\n\ngo 1.26\n")
+	write(t, filepath.Join(root, "m.go"), "package m\n")
+	write(t, filepath.Join(root, "Cargo.toml"), "[package]\nname = \"tool\"\nversion = \"0.1.0\"\nedition = \"2021\"\n")
+	write(t, filepath.Join(root, "src/lib.rs"), "pub fn f() {}\n")
+	write(t, filepath.Join(root, "README.md"), "# Hi\n\nSee [the tool](src/lib.rs).\n")
+	s := newSession(t, root)
+	g, rep := mustSessionBuild(t, s)
+	if !slices.Contains(rep.Layers(), "rust") || rep.Rust.Files != 1 {
+		t.Fatalf("layers %v; want rust with one file", rep.Layers())
+	}
+	resolved := rep.Rust.Unavailable == ""
+	if !resolved && os.Getenv("ALIDADE_REQUIRE_RUST") != "" {
+		t.Fatalf("ALIDADE_REQUIRE_RUST is set and the toolchain is missing: %s", rep.Rust.Unavailable)
+	}
+	if !linked(g, "md://README.md#hi", "rust://src/lib.rs") {
+		t.Error("README does not reach src/lib.rs")
+	}
+
+	write(t, filepath.Join(root, "src/lib.rs"), "pub fn f() {}\n\npub fn g() {\n    f()\n}\n")
+	g, rep = mustSessionBuild(t, s)
+	if !slices.Contains(rep.Rebuilt, "rust") || !slices.Contains(rep.Kept, "go") {
+		t.Errorf("rebuilt %v kept %v; want rust rebuilt and go kept", rep.Rebuilt, rep.Kept)
+	}
+	if resolved && !linked(g, "rust://src/lib.rs#g", "rust://src/lib.rs#f") {
+		t.Error("g's call of f is not in the graph")
+	}
+	sameAsFresh(t, root, g)
+
+	write(t, filepath.Join(root, "Cargo.toml"), "[package]\nname = \"tool\"\nversion = \"0.2.0\"\nedition = \"2021\"\n")
+	if _, rep = mustSessionBuild(t, s); !slices.Contains(rep.Rebuilt, "rust") || slices.Contains(rep.Rebuilt, "go") {
+		t.Errorf("after a Cargo.toml edit rebuilt %v; want rust and not go", rep.Rebuilt)
+	}
+}

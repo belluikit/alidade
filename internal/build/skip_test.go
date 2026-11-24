@@ -422,11 +422,12 @@ func TestInstalledPackagesAreLeftOut(t *testing.T) {
 		write(t, filepath.Join(d, "q.sql"), "CREATE TABLE t (id int);\n")
 		write(t, filepath.Join(d, "c.pxf"), "a = 1\n")
 		write(t, filepath.Join(d, "m.py"), "def f():\n    pass\n")
+		write(t, filepath.Join(d, "lib.rs"), "pub fn f() {}\n")
 	}
 	write(t, filepath.Join(root, "env/pyvenv.cfg"), "home = /usr/bin\n")
 	want := map[string]bool{"env": false, "venv": false, ".venv": false, "conda": false, "mine": true}
 	wantRead(t, root, want)
-	wantLayers(t, root, "mine", []string{"go", "md", "proto", "pxf", "py", "sql", "ts"})
+	wantLayers(t, root, "mine", []string{"go", "md", "proto", "pxf", "py", "rust", "sql", "ts"})
 
 	s, err := NewSession(root, DefaultOptions())
 	if err != nil {

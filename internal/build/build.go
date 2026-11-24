@@ -25,6 +25,7 @@ import (
 	"github.com/belluikit/alidade/internal/adapter/proto"
 	"github.com/belluikit/alidade/internal/adapter/pxf"
 	"github.com/belluikit/alidade/internal/adapter/py"
+	"github.com/belluikit/alidade/internal/adapter/rust"
 	"github.com/belluikit/alidade/internal/adapter/sql"
 	"github.com/belluikit/alidade/internal/adapter/ts"
 	"github.com/belluikit/alidade/internal/graph"
@@ -40,6 +41,7 @@ type Options struct {
 	Goasm    goasm.Options
 	TS       ts.Options
 	Py       py.Options
+	Rust     rust.Options
 	Markdown markdown.Options
 	// SchemaRoots are further repositories whose .proto layer joins the
 	// graph (ADR 002 rule 12), for a repository whose generated code
@@ -54,7 +56,7 @@ type Options struct {
 func DefaultOptions() Options {
 	return Options{Go: golang.DefaultOptions(), Proto: proto.DefaultOptions(), SQL: sql.DefaultOptions(),
 		PXF: pxf.DefaultOptions(), Goasm: goasm.DefaultOptions(), TS: ts.DefaultOptions(), Py: py.DefaultOptions(),
-		Markdown: markdown.DefaultOptions()}
+		Rust: rust.DefaultOptions(), Markdown: markdown.DefaultOptions()}
 }
 
 // A Report says what the build did: which layers ran, what each found,
@@ -68,6 +70,7 @@ type Report struct {
 	Goasm    *goasm.Report
 	TS       *ts.Report
 	Py       *py.Report
+	Rust     *rust.Report
 	Markdown *markdown.Report
 	// Schema reports each schema root's .proto layer, in the order given.
 	Schema []SchemaReport
@@ -123,6 +126,9 @@ func (r *Report) Skipped() []graph.Skip {
 	if r.Py != nil {
 		add("py", r.Py.Skipped)
 	}
+	if r.Rust != nil {
+		add("rust", r.Rust.Skipped)
+	}
 	if r.Markdown != nil {
 		add("md", r.Markdown.Skipped)
 	}
@@ -172,6 +178,7 @@ func (r *Report) Layers() []string {
 		{"goasm", r.Goasm != nil && r.Goasm.Files > 0},
 		{"ts", r.TS != nil && r.TS.Files > 0},
 		{"py", r.Py != nil && r.Py.Files > 0},
+		{"rust", r.Rust != nil && r.Rust.Files > 0},
 		{"md", r.Markdown != nil && r.Markdown.Files > 0},
 	} {
 		if l.ran {
@@ -209,8 +216,8 @@ func Build(root string, opts Options) (*graph.Graph, *Report, error) {
 // A layer that finds nothing to do is not an error: the Go layer runs
 // when a go.mod is found under root — every one found is a module of the
 // graph (#67) — and a repository without one gets no Go layer; the
-// .proto, SQL, .pxf, goasm and frontend layers run when the tree holds a
-// file of theirs. A root that is not a directory is an
+// .proto, SQL, .pxf, goasm, frontend, Python and Rust layers run when the
+// tree holds a file of theirs. A root that is not a directory is an
 // error, since an empty graph for a mistyped path would read as an empty
 // repository.
 type Session struct {
@@ -496,7 +503,7 @@ func (s *Session) refreshPy(rep *Report) error {
 // withSkip gives every layer the build's list of directories left out.
 func withSkip(opts Options, skip *scope.Dirs) Options {
 	opts.Go.Skip, opts.Proto.Skip, opts.SQL.Skip, opts.PXF.Skip = skip, skip, skip, skip
-	opts.Goasm.Skip, opts.TS.Skip, opts.Py.Skip, opts.Markdown.Skip = skip, skip, skip, skip
+	opts.Goasm.Skip, opts.TS.Skip, opts.Py.Skip, opts.Rust.Skip, opts.Markdown.Skip = skip, skip, skip, skip, skip
 	return opts
 }
 
@@ -617,6 +624,12 @@ func (s *Session) layers(rep, prev *Report, changed func(string) bool, drop func
 		return err
 	}
 	if err := s.pyCurrent(rep, prev, live); err != nil {
+		return err
+	}
+	// The Rust layer waits for rust-analyzer's index, the first build and
+	// every one after a Rust file changed (ADR 009): an answer is never
+	// partial, and never stale (ADR 005).
+	if rep.Rust, err = rerun(b, "rust", prev.Rust, changed, inherit(s, "rust", s.baseReport().Rust, func(lb *graph.Builder) (*rust.Report, error) { return rust.Extract(lb, abs, opts.Rust) }), func(r *rust.Report) int { return r.Files + len(r.Skipped) }); err != nil {
 		return err
 	}
 	if rep.Schema, err = s.schemaRoots(prev, changed); err != nil {
