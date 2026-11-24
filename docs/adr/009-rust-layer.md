@@ -5,8 +5,8 @@ is read, which engine reads it, how alidade reaches that engine, and that Cargo'
 build runs. Then, on #72, the same day: the layer's IDs, its call rule, where trait
 implementations come from (revising #71's answer after a measurement), a machine
 without the toolchain, when `serve` answers, and the oracle ("The layer" below).
-Built so far (#72): file nodes, declarations, calls and references, and a machine
-without the toolchain. Not yet: implementations (LSP and SCIP), and the link from
+Built so far (#72): file nodes, declarations, calls, references and
+implementations, and a machine without the toolchain. Not yet: the link from
 generated types to their `.proto` messages.
 **Date:** 2026-11-24
 **Relates to:** [000](000-composition-boundary.md), [002](002-node-identity.md),
@@ -146,20 +146,52 @@ measurement on #72 changed it: neither source is complete. On protowire-pb's
 - **LSP's `textDocument/implementation` has those 15, but misses the 5 written
   inside a function body,** all in tests (`impl Message for Holder` in
   `tests/wire_type.rs`, inside `fn mismatch_leaves_field_alone`).
-- **SCIP names only the trait's simple name.** A workspace trait can share it with a
-  foreign one: protowire-rust has its own `Message`, as prost does. No SCIP
-  occurrence on an `impl … for` line names the trait's full symbol.
+- **An implementing method's symbol names only the trait's simple name.** A
+  workspace trait can share it with a foreign one: protowire-rust has its own
+  `Message`, as prost does.
+
+  *Corrected 2026-11-24 (#72):* this said no SCIP occurrence on an `impl … for`
+  line names the trait's full symbol. That came from a probe that read only the
+  last of the lines it was given. The header does carry both, even inside a
+  function body: `impl Message for Holder` in `tests/wire_type.rs` has
+  `codec/Message#` and `Holder#`. The layer does not read them, since telling
+  the trait's reference from the type's means reading the header's syntax,
+  beyond the one token rule 9 reads; whether it should is the owner's
+  (#72).
 
 So the layer asks LSP for the implementations of each workspace trait, one request
 per trait (5 on protowire-rust). That gives the exact trait, including
 macro-generated implementations. SCIP's names then add the implementations LSP
-missed. Such an implementation is joined only when exactly one workspace trait has
-that simple name; otherwise it gets no edge. Together the two cover all 55. The 55
-were reconciled two ways:
+missed, those inside a function body, and only those: elsewhere LSP has every
+implementation, and a name would also join a foreign trait of the same name. Such
+an implementation is joined only when exactly one workspace trait has that simple
+name and declares the method; otherwise it gets no edge. Together the two cover
+all 55. The 55 were reconciled two ways:
 - **By source text:** 42 `impl … Message for` lines, less 2 that aren't
   implementations (a different trait, and the macro's own definition), leave 40
   written by hand.
 - **By LSP:** 50, which is 35 of those 40 plus the 15 macro expansions.
+
+**Built** (#72), and measured with `alidade graph`:
+- **protowire-rust:** 63 `implements` edges. `Message` has 55, the 55 above.
+  `Validator` has 5: LSP finds 6, and the sixth is `impl<F> Validator for F`,
+  whose type is a parameter with no node. `TypeResolver` has 2 and `SaxHandler`
+  1, the text counts. `MapEntryField` has none: its 10 implementations are on
+  `str`, `[u8]`, eight primitives and a blanket `M`, none with a node.
+- **prost-reflect:** 6 edges. 27 `impl … Visitor … for` lines are in its source,
+  and 24 of them implement serde's `Visitor<'de>`, another trait of that name; the
+  workspace's `Visitor` has the other 3, which are its edges. A join by name
+  would have made the 24 too.
+- **Cost:** the server loads the workspace a second time, after the index: the
+  whole graph took 10.7 s against 7.2 s on protowire-rust and 17.5 s against
+  14.2 s on prost-reflect, at the same peak memory (1.28 GB and 1.31 GB), since
+  the two run one after the other.
+- **Readiness:** the client waits for rust-analyzer's `experimental/serverStatus`
+  to say `quiescent` before it asks: a trait with no implementations answers
+  empty either way, so asking again until an answer comes cannot tell a server
+  still loading from an answer. A fixture test fails without the wait.
+- **Columns:** the client asks for UTF-8 positions, the index's, and converts
+  when a server answers in UTF-16; a fixture test forces UTF-16.
 
 ### Generated types join their `.proto` messages
 
