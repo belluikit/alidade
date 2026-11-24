@@ -70,6 +70,14 @@ type Report struct {
 	// References counts the edges from a function to a function it names
 	// as a value, not calling it.
 	References int
+	// Implements counts the edges from a type to a workspace trait it
+	// implements; ImplementsUnplaced the implementations with no edge: of
+	// a type with no node (a type parameter, a slice, a type outside the
+	// workspace), or by a name two workspace traits share.
+	Implements, ImplementsUnplaced int
+	// ServerColumns is how rust-analyzer's server counted columns, "utf-8"
+	// or "utf-16"; "" when no server was asked.
+	ServerColumns string
 	// Skipped are the files no ID can name or could not be read, the
 	// items whose name no ID can hold, the workspaces that could not be
 	// indexed, and the entries the walk could not open (#92).
@@ -116,6 +124,9 @@ func Extract(b *graph.Builder, root string, opts Options) (*Report, error) {
 	if err := x.edges(); err != nil {
 		return nil, err
 	}
+	if err := x.implementations(); err != nil {
+		return nil, err
+	}
 	x.report.Elapsed = time.Since(start)
 	return x.report, nil
 }
@@ -137,8 +148,11 @@ type extractor struct {
 	// but in a package with several crate roots, whose tests, benches and
 	// build script share its symbols (ADR 002 rule 16).
 	bySym map[string][]*def
-	// funcs are each document's functions with a node, what a body is.
-	funcs map[*doc][]*def
+	// funcs are each document's functions with a node, what a body is;
+	// defsOf all its items with a node.
+	funcs, defsOf map[*doc][]*def
+	// indexed are the roots of the workspaces rust-analyzer indexed.
+	indexed []string
 }
 
 // discover walks the tree for the files the layer reads and the Cargo

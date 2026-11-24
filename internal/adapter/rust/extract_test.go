@@ -123,6 +123,8 @@ func TestExtractGraph(t *testing.T) {
 		"shapes/src/geometry.rs module",
 		"shapes/src/geometry.rs#Point type", "shapes/src/geometry.rs#Point.x field", "shapes/src/geometry.rs#Point.y field",
 		"shapes/src/geometry.rs#Point.type field", // r#type
+		"shapes/src/geometry.rs#Display type", "shapes/src/geometry.rs#Display.fmt method",
+		"shapes/src/geometry.rs#Write type", "shapes/src/geometry.rs#Write.line method",
 		"shapes/src/geometry.rs#unit func", "shapes/src/geometry.rs#unit_area func",
 		"shapes/src/lib.rs module",
 		"shapes/src/lib.rs#Area type", "shapes/src/lib.rs#Area.area method",
@@ -135,6 +137,10 @@ func TestExtractGraph(t *testing.T) {
 		"shapes/src/lib.rs#area_of func", "shapes/src/lib.rs#helper_generic func",
 		"shapes/src/lib.rs#local_impl func", "shapes/src/lib.rs#local_impl.Local type", "shapes/src/lib.rs#local_impl.Local[Area].area method",
 		"shapes/src/lib.rs#made module",
+		"shapes/src/lib.rs#Named type", "shapes/src/lib.rs#Named.name method",
+		"shapes/src/lib.rs#T[Named].name method", // a blanket impl's, held by its file
+		"shapes/src/lib.rs#Wide type", "shapes/src/lib.rs#Wide[Area].area method",
+		"shapes/src/lib.rs#pen func", "shapes/src/lib.rs#pen.Pen type", "shapes/src/lib.rs#pen.Pen[Write].write_str method",
 		"shapes/src/lib.rs#outer func", "shapes/src/lib.rs#outer.inner func",
 		"shapes/src/lib.rs#outer.inner.deepest func",                              // two holders, each once
 		"shapes/src/lib.rs#made_first func", "shapes/src/lib.rs#made_second func", // a macro's, siblings
@@ -156,6 +162,7 @@ func TestExtractGraph(t *testing.T) {
 		"shapes/src/lib.rs#outer.inner -> shapes/src/lib.rs#area_of",
 		"shapes/src/lib.rs#outer.inner -> shapes/src/lib.rs#outer.inner.deepest",
 		"shapes/src/lib.rs#parse_side -> shapes/src/lib.rs#helper_generic", // a turbofish, ::<
+		"shapes/src/lib.rs#pen -> shapes/src/lib.rs#pen.Pen[Write].write_str",
 		"shapes/src/lib.rs#tests.check -> shapes/src/lib.rs#area_of",
 		"shapes/src/lib.rs#tests.squares -> shapes/src/lib.rs#Square.new",
 		"shapes/src/lib.rs#tests.squares -> shapes/src/lib.rs#tests.check",
@@ -174,18 +181,25 @@ func TestExtractGraph(t *testing.T) {
 	})
 	check(t, "contains", edges(g, graph.KindContains), []string{
 		"shapes/build.rs -> shapes/build.rs#main",
+		"shapes/src/geometry.rs -> shapes/src/geometry.rs#Display",
 		"shapes/src/geometry.rs -> shapes/src/geometry.rs#Point",
+		"shapes/src/geometry.rs -> shapes/src/geometry.rs#Write",
 		"shapes/src/geometry.rs -> shapes/src/geometry.rs#unit",
 		"shapes/src/geometry.rs -> shapes/src/geometry.rs#unit_area",
+		"shapes/src/geometry.rs#Display -> shapes/src/geometry.rs#Display.fmt",
 		"shapes/src/geometry.rs#Point -> shapes/src/geometry.rs#Point.type",
 		"shapes/src/geometry.rs#Point -> shapes/src/geometry.rs#Point.x",
 		"shapes/src/geometry.rs#Point -> shapes/src/geometry.rs#Point.y",
+		"shapes/src/geometry.rs#Write -> shapes/src/geometry.rs#Write.line",
 		"shapes/src/lib.rs -> shapes/src/lib.rs#Area",
 		"shapes/src/lib.rs -> shapes/src/lib.rs#Circle",
 		"shapes/src/lib.rs -> shapes/src/lib.rs#Kind",
+		"shapes/src/lib.rs -> shapes/src/lib.rs#Named",
 		"shapes/src/lib.rs -> shapes/src/lib.rs#ORIGIN",
 		"shapes/src/lib.rs -> shapes/src/lib.rs#SIDES",
 		"shapes/src/lib.rs -> shapes/src/lib.rs#Square",
+		"shapes/src/lib.rs -> shapes/src/lib.rs#T[Named].name",
+		"shapes/src/lib.rs -> shapes/src/lib.rs#Wide",
 		"shapes/src/lib.rs -> shapes/src/lib.rs#area_of",
 		"shapes/src/lib.rs -> shapes/src/lib.rs#helper_generic",
 		"shapes/src/lib.rs -> shapes/src/lib.rs#local_impl",
@@ -194,21 +208,26 @@ func TestExtractGraph(t *testing.T) {
 		"shapes/src/lib.rs -> shapes/src/lib.rs#made_second",
 		"shapes/src/lib.rs -> shapes/src/lib.rs#outer",
 		"shapes/src/lib.rs -> shapes/src/lib.rs#parse_side",
+		"shapes/src/lib.rs -> shapes/src/lib.rs#pen",
 		"shapes/src/lib.rs -> shapes/src/lib.rs#tests",
 		"shapes/src/lib.rs -> shapes/src/lib.rs#total",
 		"shapes/src/lib.rs#Area -> shapes/src/lib.rs#Area.area",
 		"shapes/src/lib.rs#Circle -> shapes/src/lib.rs#Circle.radius",
 		"shapes/src/lib.rs#Kind -> shapes/src/lib.rs#Kind.Angular",
 		"shapes/src/lib.rs#Kind -> shapes/src/lib.rs#Kind.Round",
+		"shapes/src/lib.rs#Named -> shapes/src/lib.rs#Named.name",
 		"shapes/src/lib.rs#Square -> shapes/src/lib.rs#Square.new",
 		"shapes/src/lib.rs#Square -> shapes/src/lib.rs#Square.side",
 		"shapes/src/lib.rs#Square -> shapes/src/lib.rs#Square[Area].area", // an impl's method under its type
 		"shapes/src/lib.rs#Square -> shapes/src/lib.rs#Square[Debug].fmt",
 		"shapes/src/lib.rs#Square -> shapes/src/lib.rs#Square[Display].fmt",
+		"shapes/src/lib.rs#Wide -> shapes/src/lib.rs#Wide[Area].area",
 		"shapes/src/lib.rs#local_impl -> shapes/src/lib.rs#local_impl.Local",
 		"shapes/src/lib.rs#local_impl.Local -> shapes/src/lib.rs#local_impl.Local[Area].area",
 		"shapes/src/lib.rs#outer -> shapes/src/lib.rs#outer.inner",
 		"shapes/src/lib.rs#outer.inner -> shapes/src/lib.rs#outer.inner.deepest",
+		"shapes/src/lib.rs#pen -> shapes/src/lib.rs#pen.Pen",
+		"shapes/src/lib.rs#pen.Pen -> shapes/src/lib.rs#pen.Pen[Write].write_str",
 		"shapes/src/lib.rs#tests -> shapes/src/lib.rs#tests.check",
 		"shapes/src/lib.rs#tests -> shapes/src/lib.rs#tests.squares",
 		"shapes/tests/common/mod.rs -> shapes/tests/common/mod.rs#sample",
@@ -218,6 +237,7 @@ func TestExtractGraph(t *testing.T) {
 		"shapes/tests/second.rs -> shapes/tests/second.rs#second",
 		"tool/src/main.rs -> tool/src/main.rs#main",
 	})
+	checkImplements(t, g, rep)
 	checkReport(t, rep)
 	for n := range g.Nodes() {
 		unavailable := n.Attrs["calls_unavailable"]
@@ -232,19 +252,59 @@ func TestExtractGraph(t *testing.T) {
 // skipped, and the workspace and engine that read it.
 func checkReport(t *testing.T, rep *Report) {
 	t.Helper()
-	if rep.Files != 8 || rep.Testdata != 1 || rep.Unanalyzed != 1 || rep.Declarations != 44 {
-		t.Errorf("Files %d, Testdata %d, Unanalyzed %d, Declarations %d; want 8, 1, 1, 44", rep.Files, rep.Testdata, rep.Unanalyzed, rep.Declarations)
+	if rep.Files != 8 || rep.Testdata != 1 || rep.Unanalyzed != 1 || rep.Declarations != 56 {
+		t.Errorf("Files %d, Testdata %d, Unanalyzed %d, Declarations %d; want 8, 1, 1, 56", rep.Files, rep.Testdata, rep.Unanalyzed, rep.Declarations)
 	}
 	// The call to made::Made::new() reaches code a build script wrote,
 	// which the index leaves out (ADR 009): counted, not an edge.
-	if rep.CallsGenerated != 1 || rep.Calls != 22 || rep.References != 1 {
-		t.Errorf("CallsGenerated %d, Calls %d, References %d; want 1, 22, 1", rep.CallsGenerated, rep.Calls, rep.References)
+	if rep.CallsGenerated != 1 || rep.Calls != 23 || rep.References != 1 {
+		t.Errorf("CallsGenerated %d, Calls %d, References %d; want 1, 23, 1", rep.CallsGenerated, rep.Calls, rep.References)
+	}
+	if rep.ServerColumns != "utf-8" {
+		t.Errorf("the server counted in %q, want utf-8, which the client asks for first", rep.ServerColumns)
 	}
 	if len(rep.Skipped) != 0 {
 		t.Errorf("skipped %v, want none", rep.Skipped)
 	}
 	if !slices.Equal(rep.Workspaces, []string{"."}) || !strings.HasPrefix(rep.Engine, "rust-analyzer ") {
 		t.Errorf("Workspaces %v, Engine %q", rep.Workspaces, rep.Engine)
+	}
+}
+
+// checkImplements pins the implementations (ADR 009): rust-analyzer's
+// server gives Square's and Wide's, and Circle's, which round_shape!
+// writes; the index's names give local_impl's Local, inside a body, where
+// the server finds none. Square's fmt::Display is not geometry::Display,
+// though both name a trait Display with fmt, and Pen's fmt::Write inside a
+// body is not geometry::Write, which has no write_str. The blanket impl's
+// type is a parameter, with no node.
+func checkImplements(t *testing.T, g *graph.Graph, rep *Report) {
+	t.Helper()
+	check(t, "implements", edges(g, graph.KindImplements), []string{
+		"shapes/src/lib.rs#Circle -> shapes/src/lib.rs#Area",
+		"shapes/src/lib.rs#Square -> shapes/src/lib.rs#Area",
+		"shapes/src/lib.rs#Wide -> shapes/src/lib.rs#Area",
+		"shapes/src/lib.rs#local_impl.Local -> shapes/src/lib.rs#Area",
+	})
+	if rep.Implements != 4 || rep.ImplementsUnplaced != 1 {
+		t.Errorf("Implements %d, ImplementsUnplaced %d; want 4, 1", rep.Implements, rep.ImplementsUnplaced)
+	}
+}
+
+// TestImplementsInUTF16: a server that counts columns in UTF-16, as LSP
+// does by default, has its answers converted to the index's UTF-8 bytes,
+// so Wide, named after a comment with two-byte characters on its line, is
+// still found.
+func TestImplementsInUTF16(t *testing.T) {
+	old := lspEncodings
+	lspEncodings = []string{"utf-16"}
+	t.Cleanup(func() { lspEncodings = old })
+	g, rep := extract(t, fixture(t, nil))
+	if rep.ServerColumns != "utf-16" {
+		t.Fatalf("the server counted in %q, want utf-16", rep.ServerColumns)
+	}
+	if !slices.Contains(edges(g, graph.KindImplements), "shapes/src/lib.rs#Wide -> shapes/src/lib.rs#Area") {
+		t.Errorf("implements %v, want Wide -> Area among them", edges(g, graph.KindImplements))
 	}
 }
 

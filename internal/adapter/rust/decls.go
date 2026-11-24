@@ -104,7 +104,7 @@ func span(r []int32) (start, end pos, ok bool) {
 // item holding it or by its file. Two of one ID in one file are one node,
 // at the first (ADR 002 rule 16).
 func (x *extractor) declarations() error {
-	x.bySym, x.funcs = map[string][]*def{}, map[*doc][]*def{}
+	x.bySym, x.funcs, x.defsOf = map[string][]*def{}, map[*doc][]*def{}, map[*doc][]*def{}
 	for _, rel := range slices.Sorted(maps.Keys(x.docs)) {
 		defs := x.defs(x.docs[rel])
 		for _, d := range defs {
@@ -328,6 +328,7 @@ func (x *extractor) declare(d *def) error {
 	}
 	d.id = id
 	x.bySym[d.sym] = append(x.bySym[d.sym], d)
+	x.defsOf[d.doc] = append(x.defsOf[d.doc], d)
 	if isFunc(d.kind) {
 		x.funcs[d.doc] = append(x.funcs[d.doc], d)
 	}

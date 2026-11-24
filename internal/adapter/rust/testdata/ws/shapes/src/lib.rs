@@ -117,6 +117,38 @@ pub fn local_impl() -> f64 {
     Local.area()
 }
 
+/// fmt::Write implemented inside a body: joined by name, it would be
+/// geometry::Write, which has no write_str.
+pub fn pen() -> String {
+    struct Pen(String);
+    impl fmt::Write for Pen {
+        fn write_str(&mut self, s: &str) -> fmt::Result {
+            self.0.push_str(s);
+            Ok(())
+        }
+    }
+    let mut p = Pen(String::new());
+    let _ = fmt::Write::write_str(&mut p, "x");
+    p.0
+}
+
+/// A comment ahead of the header on its line puts a column the server and
+/// the index count differently, in UTF-16 and UTF-8, before the type.
+pub struct Wide;
+
+/* größe */ impl Area for Wide { fn area(&self) -> f64 { 0.0 } }
+
+/// A blanket implementation: its type is a parameter, with no node.
+pub trait Named {
+    fn name(&self) -> String;
+}
+
+impl<T: Area> Named for T {
+    fn name(&self) -> String {
+        String::new()
+    }
+}
+
 pub fn made() -> made::Made {
     made::Made::new()
 }
