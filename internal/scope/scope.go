@@ -31,11 +31,19 @@
 // named .venv, venv or site-packages. They are the project's
 // dependencies, as node_modules is, and every layer leaves them out, not
 // only the Python layer that installs them.
+//
+// Build caches are left out the same way (#75): a directory holding a
+// CACHEDIR.TAG, the Cache Directory Tagging specification's mark, which
+// Cargo writes into target/, uv into a .venv, and pytest, ruff and Swift's
+// package manager into theirs. Cargo's target/ holds the .rs files its
+// build scripts write, which the Markdown layer and the server's change
+// check read, so the build after a Rust repository's first one reran.
 package scope
 
 import (
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -60,6 +68,24 @@ var installed = map[string]bool{".venv": true, "venv": true, "site-packages": tr
 func Venv(dir string) bool {
 	_, err := os.Stat(filepath.Join(dir, "pyvenv.cfg"))
 	return err == nil
+}
+
+// cacheTag is how a CACHEDIR.TAG must begin, by the specification
+// (https://bford.info/cachedir/): a file of that name without it marks
+// nothing.
+const cacheTag = "Signature: 8a477f597d28d172789f06886806bc55"
+
+// Cache reports whether dir is a build cache: it holds a CACHEDIR.TAG that
+// starts with the specification's signature.
+func Cache(dir string) bool {
+	f, err := os.Open(filepath.Join(dir, "CACHEDIR.TAG"))
+	if err != nil {
+		return false
+	}
+	defer f.Close()
+	b := make([]byte, len(cacheTag))
+	n, _ := io.ReadFull(f, b)
+	return string(b[:n]) == cacheTag
 }
 
 // Dirs is the list of directories left out.
@@ -172,15 +198,15 @@ func (d *Dirs) Skips(rel string) bool {
 }
 
 // SkipsDir is Skips for an absolute directory under root, and also
-// reports a virtual environment, whatever its name, and another checkout
-// of root's repository. A walk asks it of every directory it would
+// reports a virtual environment, whatever its name, a build cache, and
+// another checkout of root's repository. A walk asks it of every directory it would
 // enter, so it never enters one under a directory it reports.
 func (d *Dirs) SkipsDir(root, dir string) bool {
 	rel, err := filepath.Rel(root, dir)
 	if err != nil || rel == "." {
 		return false
 	}
-	return d.Skips(rel) || Venv(dir) || OtherCheckout(root, dir)
+	return d.Skips(rel) || Venv(dir) || Cache(dir) || OtherCheckout(root, dir)
 }
 
 // OtherCheckout reports whether dir, under root, is the top of another
@@ -206,7 +232,7 @@ func (d *Dirs) SkipsUnder(root, p string) bool {
 		if rel == "" || rel == "." || rel == ".." || strings.HasPrefix(rel, "../") {
 			return false
 		}
-		if Venv(dir) || OtherCheckout(root, dir) {
+		if Venv(dir) || Cache(dir) || OtherCheckout(root, dir) {
 			return true
 		}
 	}
