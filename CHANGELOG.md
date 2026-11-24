@@ -8,6 +8,24 @@ tracker's. From v0.12.1 on, every number is this repository's.
 
 ## Unreleased
 
+- **Added: Rust** (#72, ADR 009). Each `.rs` file is a node, and so is each
+  item in it: functions, methods, types, fields, enum variants, constants,
+  statics and inline modules, under ADR 002 rule 16's IDs
+  (`rust://src/lib.rs#Square[Area].area`). Calls and references between the
+  workspace's functions are edges, RESOLVED: a reference followed by `(` or
+  `::<` is a call, a function named as a value a reference. The machine's
+  own rust-analyzer reads each Cargo workspace, which runs its build scripts
+  first. Without `cargo`, `rust-analyzer` or the standard library's source,
+  each Rust file says its declarations and calls are not read, and what to
+  install. Markdown links to Rust files and mentions such as `Square::new`
+  reach their nodes. Compared with rustc's own calls on protowire-pb and
+  prost-reflect's library, 864 edges agreed and every difference had a cause
+  other than a wrong edge: a call through a generic trait bound goes to the
+  trait's method, a function a derive writes has no node, and each side
+  compiles some code the other does not. Not yet:
+  `implements` edges, and the link from prost-generated types to their
+  `.proto` messages.
+
 ## v0.15.0 — 2026-10-30
 
 - **Fixed: a `.proto` file importing `protowire/schema/v1/annotations.proto`

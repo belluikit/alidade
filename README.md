@@ -23,6 +23,7 @@ that already exist, and owns the graph they feed.
 | Go, type-resolved | [caliper](https://github.com/trendvidia/caliper), over the Go type checker |
 | TypeScript, JavaScript, Svelte | TypeScript 7's compiler ([typescript-go](https://github.com/microsoft/typescript-go), in process) for declarations and calls; esbuild's resolver for imports |
 | Python | jedi, in a CPython linked into the binary ([pylib](https://github.com/trendvidia/pylib)) |
+| Rust | the machine's own rust-analyzer, through its SCIP index ([ADR 009](docs/adr/009-rust-layer.md)) |
 | `.proto` | [protocompile](https://github.com/trendvidia/protocompile) |
 | SQL (PostgreSQL, sqlc) | `sqlc.yaml` and the migrations |
 | `.pxf` | [protowire-go](https://github.com/trendvidia/protowire-go) |
@@ -57,8 +58,8 @@ ever names the Go type.
 ### The graph comes from compilers, not from a model
 
 Go is read by the Go type checker, TypeScript by TypeScript's own compiler,
-`.proto` by a protobuf compiler, Python by jedi. No model reads your code
-to build the graph.
+`.proto` by a protobuf compiler, Python by jedi, Rust by rust-analyzer. No
+model reads your code to build the graph.
 
 - Building it costs no tokens.
 - Two builds of the same tree are byte-identical. A test fails otherwise.
@@ -109,8 +110,11 @@ everything takes about 16 minutes:
 ### One binary, and nothing leaves the machine
 
 No Node, no Python and no database to install: the compilers and
-interpreters it needs are linked in. It talks to the agent that started it
-over stdio, and opens no port.
+interpreters it needs are linked in. Rust is the exception: it is read by the
+toolchain already on the machine (`rustup component add rust-analyzer
+rust-src`), and without it Rust files are in the graph without their
+declarations, each saying why. It talks to the agent that started it over
+stdio, and opens no port.
 
 ## Installing
 
@@ -249,13 +253,13 @@ questions, and each carries the measurement it rests on.
 | [000](docs/adr/000-composition-boundary.md) | alidade composes analyses, it does not perform them |
 | [001](docs/adr/001-core-architecture.md) | one binary, layer adapters over a shared graph |
 | [002](docs/adr/002-node-identity.md) | node identity is declaration-anchored, never positional |
-| [003](docs/adr/003-corpus-scope.md) | six formats and Python, and what is deliberately excluded |
+| [003](docs/adr/003-corpus-scope.md) | six formats, Python and Rust, and what is deliberately excluded |
 | [004](docs/adr/004-generated-code.md) | generated code is in the graph, identified |
 | [005](docs/adr/005-on-demand-construction.md) | built on demand; the graph is never persisted |
 | [006](docs/adr/006-edge-provenance.md) | every edge states how it was derived |
 | [007](docs/adr/007-frontend-layer.md) | TypeScript and Svelte, joined to `.proto` through protoc-gen-es |
 | [008](docs/adr/008-python-engine.md) | Python: declarations, imports and calls through jedi in an embedded CPython |
-| [009](docs/adr/009-rust-layer.md) | Rust: the user's rust-analyzer, through its SCIP index and LSP lookups (not built yet, #72) |
+| [009](docs/adr/009-rust-layer.md) | Rust: the user's rust-analyzer, through its SCIP index and LSP lookups (implementations and the `.proto` link not built yet, #72) |
 
 ## License
 

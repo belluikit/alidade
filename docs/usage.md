@@ -184,6 +184,28 @@ repository alidade can read.
 - **A module that does not build** keeps a package node carrying the
   error. `graph_stats` lists `go_modules` and `go_modules_failed`.
 
+## The Rust toolchain
+
+Rust is read by the toolchain already on the machine ([ADR 009](adr/009-rust-layer.md)):
+`cargo`, `rust-analyzer` and the standard library's source. With rustup:
+
+    rustup component add rust-analyzer rust-src
+
+- **What runs.** For each Cargo workspace, alidade runs `rust-analyzer scip`.
+  That runs the workspace's build scripts and compiles its proc macros first,
+  as `cargo build` does: building the graph runs that code.
+- **When it reruns.** After any change to a `.rs` file, a `Cargo.toml`, a
+  `Cargo.lock` or a toolchain file, the whole workspace is indexed again:
+  6.5 s on protowire-rust's 49,000 lines. A tool call waits for it, so an
+  answer is never stale.
+- **Without the toolchain,** each Rust file is still a node, with a
+  `calls_unavailable` attribute saying what is missing and how to add it.
+  Without the standard library's source, alidade reads nothing rather than a
+  graph missing a quarter of its types.
+- **Which toolchain.** The one on `PATH`, as `cargo` resolves it in the
+  workspace (a `rust-toolchain.toml` counts). If Homebrew's Rust comes before
+  rustup's on `PATH`, the standard library's source is usually missing.
+
 ## Leaving directories out
 
 `vendor` and `third_party` directories are left out by default. A
@@ -262,6 +284,14 @@ it does, never an empty answer.
 So "what reads `caliperBinaryEnv`" is `neighbors` in. Uses in a
 package-level initializer, and of a dependency's constants and variables,
 are not edges.
+
+**`calls` and `references` in Rust** join functions of the workspace. A
+reference followed by `(` or `::<` is a call; a function named without being
+called (`.map(area_of)`) is a reference. A call through a trait's method, as
+in a generic function bounded by the trait, goes to the trait's method, not
+to each implementation. A method of a trait implementation is
+`Type[Trait].method`: `Square[Display].fmt` and `Square[Debug].fmt` are two
+nodes.
 
 **`documents`** joins a doc to a declaration. The edge comes from a code
 span naming exactly one declaration. A schema field and the `.pxf` entries
