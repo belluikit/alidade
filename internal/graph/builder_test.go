@@ -398,7 +398,7 @@ func TestAddNodeValidates(t *testing.T) {
 		want string
 	}{
 		{"no scheme", Node{ID: "users", Kind: KindTable}, "no known scheme"},
-		{"unknown scheme", Node{ID: "rust://users", Kind: KindTable}, "no known scheme"},
+		{"unknown scheme", Node{ID: "kotlin://users", Kind: KindTable}, "no known scheme"},
 		{"no kind", Node{ID: ok}, "no kind"},
 		{"position outside the root", Node{ID: ok, Kind: KindTable, Pos: Position{File: "/elsewhere/x.sql"}}, "outside the repository root"},
 	}

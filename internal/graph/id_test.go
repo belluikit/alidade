@@ -134,6 +134,26 @@ func TestMintedIDsAreStable(t *testing.T) {
 			want: "py://pkg/shapes.py#Square.area",
 		},
 		{
+			name: "rust file (rule 16, #72)",
+			mint: func() (ID, error) { return m.RustID("crates/pb/src/wire.rs") },
+			want: "rust://crates/pb/src/wire.rs",
+		},
+		{
+			name: "rust method of an inherent impl, under its type (rule 16, #72)",
+			mint: func() (ID, error) { return m.RustID("crates/pb/src/wire.rs", "Reader", "skip") },
+			want: "rust://crates/pb/src/wire.rs#Reader.skip",
+		},
+		{
+			name: "rust method of a trait impl carries the trait (rule 16, #72)",
+			mint: func() (ID, error) { return m.RustID("crates/pb/src/codec.rs", "Packed[Message]", "encode_to") },
+			want: "rust://crates/pb/src/codec.rs#Packed[Message].encode_to",
+		},
+		{
+			name: "rust function nested in a function, under it (rule 16, #72)",
+			mint: func() (ID, error) { return m.RustID("src/lib.rs", "outer", "inner") },
+			want: "rust://src/lib.rs#outer.inner",
+		},
+		{
 			name: "a ts top-level declaration and a generated export of one name are one ID (#215)",
 			mint: func() (ID, error) { return m.TSDeclID("web/gen/app/v1/user_pb.ts", "UserSchema") },
 			want: "ts://web/gen/app/v1/user_pb.ts#UserSchema",
@@ -274,8 +294,10 @@ func TestIDScheme(t *testing.T) {
 		{"md://a.md#b", SchemeMarkdown, true},
 		{"goasm://jit/templates/arm64.goasm#AddLocalsInt", SchemeGoasm, true},
 		{"ts://web/src/app.ts", SchemeTS, true},
+		{"py://app.py#main", SchemePy, true},
+		{"rust://src/lib.rs#Square.new", SchemeRust, true},
 		{"go://", SchemeGo, false},
-		{"rust://a", Scheme("rust"), false},
+		{"kotlin://a", Scheme("kotlin"), false},
 		{"no-scheme", "", false},
 		{"", "", false},
 		{"://body", "", false},
