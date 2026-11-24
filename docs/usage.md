@@ -289,11 +289,16 @@ are not edges.
 reference followed by `(` or `::<` is a call; a function named without being
 called (`.map(area_of)`) is a reference. A call through a trait's method, as
 in a generic function bounded by the trait, goes to the trait's method, not
-to each implementation. A method of a trait implementation is
-`Type[Trait].method`: `Square[Display].fmt` and `Square[Debug].fmt` are two
-nodes. **`implements`** joins a type to each trait of the workspace it
-implements, a macro's implementations included; one on a type with no node
-(a primitive, a slice, a type parameter) has no edge.
+to each implementation. A function's ID ends in `()`, so a field and a method
+of one name are two nodes: `Reader.limits` and `Reader.limits()`. A method of a
+trait implementation is `Type[Trait].method()`: `Square[Display].fmt()` and
+`Square[Debug].fmt()` are two nodes. An implementation on a type with no name
+has a word form: `slice(u8)[Area].area()`. A method a derive or a macro writes,
+such as prost's `EnumDescriptorProto.name()`, is a node under its type, marked
+generated, when something calls it. **`implements`** joins a type to each trait
+of the workspace it implements, a macro's implementations included; one on a
+type with no node (a primitive, a slice, a type parameter) has no edge. A call
+an operator makes (`==`, `+`, `?`) is not an edge.
 
 **`documents`** joins a doc to a declaration. The edge comes from a code
 span naming exactly one declaration. A schema field and the `.pxf` entries

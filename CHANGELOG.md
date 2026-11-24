@@ -11,7 +11,12 @@ tracker's. From v0.12.1 on, every number is this repository's.
 - **Added: Rust** (#72, ADR 009). Each `.rs` file is a node, and so is each
   item in it: functions, methods, types, fields, enum variants, constants,
   statics and inline modules, under ADR 002 rule 16's IDs
-  (`rust://src/lib.rs#Square[Area].area`). Calls and references between the
+  (`rust://src/lib.rs#Square[Area].area()`: a function's segment ends in
+  `()`, so a field and a method of one name are two nodes). An
+  implementation on a type with no name has a word form,
+  `slice(u8)[Area].area()`, and a method a derive or a macro writes is a
+  node under its type when something calls it: 56 on protowire-rust, 47 on
+  prost-reflect. Calls and references between the
   workspace's functions are edges, RESOLVED: a reference followed by `(` or
   `::<` is a call, a function named as a value a reference. The machine's
   own rust-analyzer reads each Cargo workspace, which runs its build scripts
