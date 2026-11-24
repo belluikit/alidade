@@ -1,7 +1,7 @@
 # ADR 003: Corpus Scope — Five Formats, and What Is Deliberately Excluded
 
 **Status:** Accepted; amended 2026-09-11 (a sixth format, goasm), 2026-10-08
-(skipped directories) and 2026-10-09 (Python) — see the end
+(skipped directories), 2026-10-09 (Python) and 2026-11-24 (Rust) — see the end
 **Date:** 2026-08-29
 **Relates to:** [000](000-composition-boundary.md)
 
@@ -223,3 +223,14 @@ The relationships it crosses are fewer than the other layers':
 What it brings is a call graph where grep had only text: on agent-config,
 calls between declarations that an agent otherwise reconstructs by reading.
 ADR 008 says how the layer reads Python and what it measured.
+
+## Amended 2026-11-24: Rust is read (#71, the owner's decision; ADR 009)
+
+**Rust is a layer.** trendvidia has Rust repositories, protowire-rust and a fork of
+prost-reflect, and the owner asked for Rust on #71.
+
+The relationship it crosses is this ADR's test: `.proto` to Rust through generated
+code. prost-build generates Rust from `.proto` files in a crate's `build.rs`, and
+the layer joins each generated type to its `proto://` message. Go, TypeScript and
+Rust code using one message then meet at one `proto://` node. ADR 009 says how the
+layer reads Rust and what it measured.

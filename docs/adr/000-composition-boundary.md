@@ -181,3 +181,30 @@ this records them:
 - **An analysis runs as JavaScript.** It is still the upstream's own library
   (svelte2tsx), not a parser of alidade's, so rule 3 holds. A second embedded
   JavaScript library is an amendment of its own, not an extension of this one.
+
+## Amended 2026-11-24: a layer reached over a process boundary, the user's rust-analyzer (#71, the owner's decision; ADR 009)
+
+The Rust layer reads rust-analyzer's answers from a separate process: the copy the
+user's toolchain installed. It reads a SCIP index that rust-analyzer writes, then
+asks rust-analyzer's LSP server about the few symbols the index leaves without a
+location. Rule 2 says such a layer needs an ADR of its own, and ADR 009 is that ADR.
+Rule 3 holds: the analysis is rust-analyzer's, not a parser of alidade's.
+
+Three things are new, and this records them:
+
+- **A runtime dependency on the user's machine.** The layer needs `cargo`,
+  `rust-analyzer` and the standard library's source (`rust-src`), all from the
+  user's toolchain. Every other layer ships its analyzer inside the binary. ADR 009
+  says why embedding would not remove the dependency: Cargo's build scripts and
+  proc macros need the toolchain anyway.
+- **The contracts are published, not ours.** SCIP is a versioned protobuf schema
+  and LSP a published protocol. A change on either side is a change to someone
+  else's documented format, which bounds what rule 2 feared: a serialized contract
+  between two processes that alidade itself would have to migrate. What does change
+  is that the answers depend on the user's rust-analyzer version, so the layer
+  records it.
+- **Building the graph runs the repository's code.** Cargo's build runs the build
+  scripts of the repository and of its dependencies, as `cargo build` does.
+
+A second layer reached over a process boundary is an amendment of its own, not an
+extension of this one.

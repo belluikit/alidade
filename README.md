@@ -255,6 +255,7 @@ questions, and each carries the measurement it rests on.
 | [006](docs/adr/006-edge-provenance.md) | every edge states how it was derived |
 | [007](docs/adr/007-frontend-layer.md) | TypeScript and Svelte, joined to `.proto` through protoc-gen-es |
 | [008](docs/adr/008-python-engine.md) | Python: declarations, imports and calls through jedi in an embedded CPython |
+| [009](docs/adr/009-rust-layer.md) | Rust: the user's rust-analyzer, through its SCIP index and LSP lookups (not built yet, #72) |
 
 ## License
 
