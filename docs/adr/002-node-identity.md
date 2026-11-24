@@ -286,6 +286,36 @@ Rules that follow, and are not open:
     `if`) are one ID, at the first. A name reached only through a lambda or
     a comprehension has no ID. Pinned in `TestMintedIDsAreStable`.
 
+16. **A Rust file is identified by its path; a declaration in it by its
+    path inside the file.** `rust://crates/protowire-pb/src/wire.rs`, and
+    `rust://crates/protowire-pb/src/wire.rs#Reader.skip`. Each inline module,
+    function or type holding the declaration is a segment, as in Python (rule
+    15). Added 2026-11-24 with ADR 009, the owner's decision (#72).
+
+    - **A method of a trait implementation carries the trait:**
+      `codec.rs#Packed[Message].encode_to`. A type can implement two traits
+      with methods of one name. prost-reflect's `DescriptorError` has `fmt`
+      for both `Debug` and `Display`. A type's generic arguments are not part
+      of the segment: `MarshalOptions<'a>` is `MarshalOptions`.
+    - **Code Cargo generates is identified where it is included.** A build
+      script's output lives under a path holding a build hash
+      (`target/debug/build/prost-reflect-tests-<hash>/out/test.rs`), so its
+      types are anchored at the file holding the `include!`, through the
+      module that holds it: `rust://prost-reflect-tests/src/lib.rs#proto.Scalars`.
+
+    Why the file, and not the crate's module path, which is how Rust itself
+    names an item:
+    - **A module path names a declaration once per compiled crate.**
+      protowire-pxf's `tests/common/mod.rs` is compiled into 6 of its test
+      crates, and would be 6 nodes per declaration.
+    - **The module path would need a segment for each target.** rust-analyzer's
+      SCIP symbols are per Cargo package, not per crate, so integration tests,
+      benches, `build.rs` and `main.rs` share one root. 76 of protowire-rust's
+      3,558 defined symbols collide (`desc()` is defined in 10 test files).
+
+    Two declarations of one path in one file are one ID, at the first, as in
+    Python.
+
 ## Why 5 and 6 went that way
 
 Both were open when this ADR was first written, because both cost a migration

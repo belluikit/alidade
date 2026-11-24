@@ -1,10 +1,11 @@
 # ADR 009: Rust — the User's rust-analyzer, Through Its SCIP Index and LSP Lookups
 
-**Status:** Accepted 2026-11-24 (#71). The owner decided these: that Rust is read,
-which engine reads it, how alidade reaches that engine, that Cargo's build runs, and
-that trait implementations come from rust-analyzer's symbol names. The layer's IDs,
-its rule for what counts as a call, and the questions listed under "Open" are
-#72's, and nothing is built yet.
+**Status:** Accepted 2026-11-24 (#71, #72). The owner decided these first: that Rust
+is read, which engine reads it, how alidade reaches that engine, and that Cargo's
+build runs. Then, on #72, the same day: the layer's IDs, its call rule, where trait
+implementations come from (revising #71's answer after a measurement), a machine
+without the toolchain, when `serve` answers, and the oracle ("The layer" below).
+Nothing is built yet (#72).
 **Date:** 2026-11-24
 **Relates to:** [000](000-composition-boundary.md), [002](002-node-identity.md),
 [003](003-corpus-scope.md), [004](004-generated-code.md),
@@ -126,7 +127,7 @@ says which crate. prost-reflect's conformance crate fails without its `protobuf`
 submodule ("protobuf sources are not checked out"). Its `main.rs` keeps 85 unknown
 expressions with the build or without it.
 
-### Trait implementations come from rust-analyzer's symbol names
+### Trait implementations come from LSP and SCIP together
 
 The SCIP index carries no relationships at all: 0 on protowire-rust, whose source has
 61 implementations of the workspace's own traits (counted by text). What it does have
@@ -135,8 +136,28 @@ the trait: `impl#[Fake][Validator]validate().`. SCIP's published symbol grammar
 splits that name into its parts. Which part is the type and which the trait is
 rust-analyzer's own convention, which is why a test pins it (below).
 
-The trait is rust-analyzer's resolution; the name only carries it. Which derivation
-the edge gets is #72's (ADR 006).
+The owner's first answer (#71) was to take implementations from those names alone. A
+measurement on #72 changed it: neither source is complete. On protowire-pb's
+`Message` trait, which has 55 implementations:
+- **SCIP has no symbols for the 15 a `macro_rules!` macro generates.**
+  `write_only!(Leaf, …)` in `tests/values_table.rs` is one of them.
+- **LSP's `textDocument/implementation` has those 15, but misses the 5 written
+  inside a function body,** all in tests (`impl Message for Holder` in
+  `tests/wire_type.rs`, inside `fn mismatch_leaves_field_alone`).
+- **SCIP names only the trait's simple name.** A workspace trait can share it with a
+  foreign one: protowire-rust has its own `Message`, as prost does. No SCIP
+  occurrence on an `impl … for` line names the trait's full symbol.
+
+So the layer asks LSP for the implementations of each workspace trait, one request
+per trait (5 on protowire-rust). That gives the exact trait, including
+macro-generated implementations. SCIP's names then add the implementations LSP
+missed. Such an implementation is joined only when exactly one workspace trait has
+that simple name; otherwise it gets no edge. Together the two cover all 55. The 55
+were reconciled two ways:
+- **By source text:** 42 `impl … Message for` lines, less 2 that aren't
+  implementations (a different trait, and the macro's own definition), leave 40
+  written by hand.
+- **By LSP:** 50, which is 35 of those 40 plus the 15 macro expansions.
 
 ### Generated types join their `.proto` messages
 
@@ -160,38 +181,90 @@ struct (24 of 24 in prost-reflect: `#[prost_reflect(message_name = "test.Scalars
 `impl ::prost::Name` when `enable_type_names()` is set. None of prost-reflect's
 generated files has the latter.
 
+## The layer (decided 2026-11-24, the owner's calls on #72)
+
+- **IDs** (ADR 002 rule 16): the file, then the item's path inside it, as for Python.
+  `rust://crates/protowire-pb/src/wire.rs#Reader.skip`.
+  - **Why not SCIP's symbols, or the crate's module path.** SCIP's symbols are per
+    Cargo package, not per compiled crate. Integration tests, benches, `build.rs` and
+    `main.rs` all share one root, so 76 of protowire-rust's 3,558 defined symbols
+    collide (`desc()` is defined in 10 test files), and 5 of prost-reflect's 1,959.
+    A crate-and-module ID would need a segment for each test, bench, bin and build
+    script. It would also make one declaration several nodes: 6 of protowire-pxf's
+    test crates compile the same `tests/common/mod.rs`.
+  - **A trait's method carries the trait:** `Packed[Message].encode_to`. prost-reflect's
+    `DescriptorError` has `fmt` for both `Debug` and `Display`, the one type and
+    method name implemented for two traits in either repository.
+  - **A generated type anchors at the file holding its `include!`:**
+    `rust://prost-reflect-tests/src/lib.rs#proto.Scalars`. The generated file's own
+    path holds a build hash, which ADR 002 forbids in an ID.
+- **Calls** (ADR 006 rule 9): a reference to a workspace function, inside a function
+  body, followed by `(` or `::<`, is a `calls` edge from the innermost function
+  holding it. A reference to a function used as a value is a `references` edge, as in
+  Python. Measured on protowire-rust's 7,306 references to its own functions: 6,855
+  are followed by `(` or `::<`, 428 are imports, and 23 are functions used as values
+  (`.map(row)`, `Some(&deny_all)`, `LazyLock::new(ValidationCache::new)`). The rule
+  reads one token of source text after a reference, a read as narrow as the
+  TypeScript layer's import clauses (ADR 007).
+- **Implementations:** from LSP and SCIP together, as above. RESOLVED (ADR 006
+  rule 9).
+- **A machine without the toolchain:** if `cargo`, `rust-analyzer` or the standard
+  library's source is missing, each Rust file is a node marked `calls_unavailable`,
+  and the report names what is missing and the `rustup` command that adds it. The
+  standard library's source counts: without it rust-analyzer silently loses 26% of
+  expression types.
+- **`serve` waits for the index.** The first answer, and the first after a Rust edit,
+  wait for SCIP to finish: 6.5 s on protowire-rust and 13.9 s on prost-reflect, for
+  the whole workspace each time. An answer is then never stale and never partial
+  (ADR 005).
+- **The oracle is rustc.** Each crate is compiled to LLVM IR at opt-level 0, whose
+  direct calls are rustc's own resolution, and compared with the layer's call
+  edges. rustc is an engine independent of rust-analyzer. Probed on protowire-pb
+  (2.7 s): on the 43 functions both sides had, 65 edges agree, rustc had 0 the rule
+  lacked, and the rule had 2 rustc lacked.
+  - One of the 2 is a call through a generic trait bound (`write_message` to
+    `Message::encode_to`), which rustc compiles only once instantiated.
+  - The other, `Reader::new` to `Limits::default`, is not explained yet.
+
+  Its limits:
+  - it sees only the functions rustc compiles as they are (43 of 81 callers here;
+    generic ones only when instantiated);
+  - a call through `dyn` is an indirect call it cannot name;
+  - rustc 1.99's default symbol format needs a decoder. The probe used the legacy
+    format, a nightly-only flag, through `RUSTC_BOOTSTRAP=1`.
+
+Not in this version: edges for `use` declarations, and whether a call to a trait's
+method also reaches that trait's implementations, as a TypeScript call through an
+interface does (ADR 007). A call through a trait method goes to the method as
+rust-analyzer resolves it.
+
 ## Assumptions, each with the test #72 must add
 
 - **rust-analyzer leaves generated files out of its SCIP index, and LSP's definition
   lands in them.** If a release starts indexing them, the LSP lookups become
   unnecessary. If LSP stops landing there, the `.proto` link is lost. A fixture with a
   `build.rs` that generates one type pins both.
-- **An implementing method's symbol names its trait.** A fixture's `impl Trait for
-  Type` must produce its `implements` edge, and fails the day the symbol grammar
-  changes.
+- **Implementations come from both sources.** A fixture with one implementation
+  written by a `macro_rules!` macro and one inside a function body must give both
+  `implements` edges. It fails the day either source stops supplying its half, or
+  the symbol grammar changes.
+- **A call is a reference followed by `(` or `::<`.** A fixture calling a function,
+  passing it as a value, and calling it with a turbofish must give two `calls` edges
+  and one `references` edge.
+- **A missing toolchain is reported, never silent.** A test with `rust-analyzer`, and
+  separately `rust-src`, absent from the path must give file nodes marked
+  `calls_unavailable`, and a report naming what is missing.
 - **The answers depend on the user's rust-analyzer version.** The report records the
   version from the index's metadata (`tool_info`). A cache of rust-analyzer's answers,
   if one is ever kept, is keyed on it, as Python's cache is keyed on its engine (ADR
   008).
 
-## Open (#72)
-
-Node IDs (a new ADR 002 rule), with two cases to cover:
-- generated types, whose files sit under a path holding a build hash;
-- methods in impl blocks.
-
-Also open:
-- which references are calls, since SCIP has no call role;
-- the derivation of `implements` edges taken from symbol names;
-- what a machine without `rust-analyzer` or `cargo` gets;
-- when `serve` answers;
-- the oracle the edges are checked against.
-
 ## What would change it
 
 - **A large workspace whose full SCIP run is too slow to repeat on every edit.** LSP's
   incremental updates would then weigh more than the cost of rebuilding SCIP's
-  answers through it.
+  answers through it. A wait of minutes would also turn `serve` towards answering
+  in the background, with Rust `pending`.
 - **The symbols without a location turning out mostly not generated.** If most of
   prost-reflect's 93, or another repository's, are something else, the LSP lookups
   target the wrong thing. They were not classified.

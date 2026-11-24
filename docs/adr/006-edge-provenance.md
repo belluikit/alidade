@@ -135,6 +135,24 @@ Rules:
    showing jedi wrong on a meaningful share of method calls. agent-config is
    mostly plain functions, so its measurement does not cover that case.
 
+9. **A Rust `calls` edge is `RESOLVED`, and so is an `implements` edge**
+   (2026-11-24, #72, the owner's decision; ADR 009). rust-analyzer resolves the
+   callee and the implemented trait, and the layer reads its answers.
+   - **A call:** a reference to a workspace function inside a function body,
+     followed by `(` or `::<`, is a call. Another reference to a function, a
+     function used as a value, is a `references` edge, `RESOLVED` as well.
+     That one token is the only source text the layer reads to decide an
+     edge's kind.
+   - **An implementation:** from LSP's implementations of each workspace
+     trait, plus SCIP's symbol names for those LSP misses. A name joins only
+     when exactly one workspace trait has its simple name, so a name that
+     matches two gives no edge rather than a guess.
+   - **The oracle is rustc:** its direct calls in LLVM IR at opt-level 0.
+
+   What would reopen this: rustc's calls disagreeing with the layer's on a
+   meaningful share of a repository's functions. The probe covered 43
+   functions of one crate.
+
 ## What this buys, concretely
 
 * An agent can be told "traverse `RESOLVED` only" for a refactoring question, and
