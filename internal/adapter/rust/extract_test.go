@@ -212,6 +212,20 @@ func TestExtractGraph(t *testing.T) {
 		"shapes/tests/second.rs -> shapes/tests/second.rs#second",
 		"tool/src/main.rs -> tool/src/main.rs#main",
 	})
+	checkReport(t, rep)
+	for n := range g.Nodes() {
+		unavailable := n.Attrs["calls_unavailable"]
+		if (unavailable != "") != (n.Pos.File == "scripts/loose.rs") {
+			t.Errorf("%s calls_unavailable %q: only a file outside every workspace says so", n.ID, unavailable)
+		}
+	}
+}
+
+// checkReport pins TestExtractGraph's report: the fixture's files and
+// declarations, the one call into code a build script wrote, no item
+// skipped, and the workspace and engine that read it.
+func checkReport(t *testing.T, rep *Report) {
+	t.Helper()
 	if rep.Files != 8 || rep.Testdata != 1 || rep.Unanalyzed != 1 || rep.Declarations != 41 {
 		t.Errorf("Files %d, Testdata %d, Unanalyzed %d, Declarations %d; want 8, 1, 1, 41", rep.Files, rep.Testdata, rep.Unanalyzed, rep.Declarations)
 	}
@@ -225,12 +239,6 @@ func TestExtractGraph(t *testing.T) {
 	}
 	if !slices.Equal(rep.Workspaces, []string{"."}) || !strings.HasPrefix(rep.Engine, "rust-analyzer ") {
 		t.Errorf("Workspaces %v, Engine %q", rep.Workspaces, rep.Engine)
-	}
-	for n := range g.Nodes() {
-		unavailable := n.Attrs["calls_unavailable"]
-		if (unavailable != "") != (n.Pos.File == "scripts/loose.rs") {
-			t.Errorf("%s calls_unavailable %q: only a file outside every workspace says so", n.ID, unavailable)
-		}
 	}
 }
 
