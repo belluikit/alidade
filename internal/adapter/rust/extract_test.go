@@ -125,6 +125,7 @@ func TestExtractGraph(t *testing.T) {
 		"shapes/src/geometry.rs#Point.type field", // r#type
 		"shapes/src/geometry.rs#Display type", "shapes/src/geometry.rs#Display.fmt method",
 		"shapes/src/geometry.rs#Write type", "shapes/src/geometry.rs#Write.line method",
+		"shapes/src/geometry.rs#Pair type", "shapes/src/geometry.rs#Pair.first method", "shapes/src/geometry.rs#Pair.second method",
 		"shapes/src/geometry.rs#unit func", "shapes/src/geometry.rs#unit_area func",
 		"shapes/src/lib.rs module",
 		"shapes/src/lib.rs#Area type", "shapes/src/lib.rs#Area.area method",
@@ -136,6 +137,11 @@ func TestExtractGraph(t *testing.T) {
 		"shapes/src/lib.rs#Square[Debug].fmt method", "shapes/src/lib.rs#Square[Display].fmt method",
 		"shapes/src/lib.rs#area_of func", "shapes/src/lib.rs#helper_generic func",
 		"shapes/src/lib.rs#local_impl func", "shapes/src/lib.rs#local_impl.Local type", "shapes/src/lib.rs#local_impl.Local[Area].area method",
+		"shapes/src/lib.rs#local_impl.Wrap type", "shapes/src/lib.rs#local_impl.Wrap[Write].line method",
+		"shapes/src/lib.rs#shown func", "shapes/src/lib.rs#shown.Shown type", "shapes/src/lib.rs#shown.Shown[Display].fmt method",
+		"shapes/src/lib.rs#paired func", "shapes/src/lib.rs#paired.Two type",
+		"shapes/src/lib.rs#paired.Two[Pair].first method", "shapes/src/lib.rs#paired.Two[Pair].second method",
+		"shapes/src/lib.rs#paired.Two[Pair].first.Inner type", "shapes/src/lib.rs#paired.Two[Pair].first.Inner[Area].area method",
 		"shapes/src/lib.rs#made module",
 		"shapes/src/lib.rs#Named type", "shapes/src/lib.rs#Named.name method",
 		"shapes/src/lib.rs#T[Named].name method", // a blanket impl's, held by its file
@@ -157,10 +163,14 @@ func TestExtractGraph(t *testing.T) {
 		"shapes/src/geometry.rs#unit_area -> shapes/src/lib.rs#Square[Area].area",
 		"shapes/src/lib.rs#area_of -> shapes/src/lib.rs#Square[Area].area",
 		"shapes/src/lib.rs#local_impl -> shapes/src/lib.rs#local_impl.Local[Area].area",
+		"shapes/src/lib.rs#local_impl -> shapes/src/lib.rs#local_impl.Wrap[Write].line",
 		"shapes/src/lib.rs#outer -> shapes/src/lib.rs#outer.inner",
 		"shapes/src/lib.rs#outer.inner -> shapes/src/lib.rs#Square.new",
 		"shapes/src/lib.rs#outer.inner -> shapes/src/lib.rs#area_of",
 		"shapes/src/lib.rs#outer.inner -> shapes/src/lib.rs#outer.inner.deepest",
+		"shapes/src/lib.rs#paired -> shapes/src/lib.rs#paired.Two[Pair].first",
+		"shapes/src/lib.rs#paired -> shapes/src/lib.rs#paired.Two[Pair].second",
+		"shapes/src/lib.rs#paired.Two[Pair].first -> shapes/src/lib.rs#paired.Two[Pair].first.Inner[Area].area",
 		"shapes/src/lib.rs#parse_side -> shapes/src/lib.rs#helper_generic", // a turbofish, ::<
 		"shapes/src/lib.rs#pen -> shapes/src/lib.rs#pen.Pen[Write].write_str",
 		"shapes/src/lib.rs#tests.check -> shapes/src/lib.rs#area_of",
@@ -182,11 +192,14 @@ func TestExtractGraph(t *testing.T) {
 	check(t, "contains", edges(g, graph.KindContains), []string{
 		"shapes/build.rs -> shapes/build.rs#main",
 		"shapes/src/geometry.rs -> shapes/src/geometry.rs#Display",
+		"shapes/src/geometry.rs -> shapes/src/geometry.rs#Pair",
 		"shapes/src/geometry.rs -> shapes/src/geometry.rs#Point",
 		"shapes/src/geometry.rs -> shapes/src/geometry.rs#Write",
 		"shapes/src/geometry.rs -> shapes/src/geometry.rs#unit",
 		"shapes/src/geometry.rs -> shapes/src/geometry.rs#unit_area",
 		"shapes/src/geometry.rs#Display -> shapes/src/geometry.rs#Display.fmt",
+		"shapes/src/geometry.rs#Pair -> shapes/src/geometry.rs#Pair.first",
+		"shapes/src/geometry.rs#Pair -> shapes/src/geometry.rs#Pair.second",
 		"shapes/src/geometry.rs#Point -> shapes/src/geometry.rs#Point.type",
 		"shapes/src/geometry.rs#Point -> shapes/src/geometry.rs#Point.x",
 		"shapes/src/geometry.rs#Point -> shapes/src/geometry.rs#Point.y",
@@ -207,8 +220,10 @@ func TestExtractGraph(t *testing.T) {
 		"shapes/src/lib.rs -> shapes/src/lib.rs#made_first",
 		"shapes/src/lib.rs -> shapes/src/lib.rs#made_second",
 		"shapes/src/lib.rs -> shapes/src/lib.rs#outer",
+		"shapes/src/lib.rs -> shapes/src/lib.rs#paired",
 		"shapes/src/lib.rs -> shapes/src/lib.rs#parse_side",
 		"shapes/src/lib.rs -> shapes/src/lib.rs#pen",
+		"shapes/src/lib.rs -> shapes/src/lib.rs#shown",
 		"shapes/src/lib.rs -> shapes/src/lib.rs#tests",
 		"shapes/src/lib.rs -> shapes/src/lib.rs#total",
 		"shapes/src/lib.rs#Area -> shapes/src/lib.rs#Area.area",
@@ -223,11 +238,20 @@ func TestExtractGraph(t *testing.T) {
 		"shapes/src/lib.rs#Square -> shapes/src/lib.rs#Square[Display].fmt",
 		"shapes/src/lib.rs#Wide -> shapes/src/lib.rs#Wide[Area].area",
 		"shapes/src/lib.rs#local_impl -> shapes/src/lib.rs#local_impl.Local",
+		"shapes/src/lib.rs#local_impl -> shapes/src/lib.rs#local_impl.Wrap",
 		"shapes/src/lib.rs#local_impl.Local -> shapes/src/lib.rs#local_impl.Local[Area].area",
+		"shapes/src/lib.rs#local_impl.Wrap -> shapes/src/lib.rs#local_impl.Wrap[Write].line",
 		"shapes/src/lib.rs#outer -> shapes/src/lib.rs#outer.inner",
 		"shapes/src/lib.rs#outer.inner -> shapes/src/lib.rs#outer.inner.deepest",
+		"shapes/src/lib.rs#paired -> shapes/src/lib.rs#paired.Two",
+		"shapes/src/lib.rs#paired.Two -> shapes/src/lib.rs#paired.Two[Pair].first",
+		"shapes/src/lib.rs#paired.Two -> shapes/src/lib.rs#paired.Two[Pair].second",
+		"shapes/src/lib.rs#paired.Two[Pair].first -> shapes/src/lib.rs#paired.Two[Pair].first.Inner",
+		"shapes/src/lib.rs#paired.Two[Pair].first.Inner -> shapes/src/lib.rs#paired.Two[Pair].first.Inner[Area].area",
 		"shapes/src/lib.rs#pen -> shapes/src/lib.rs#pen.Pen",
 		"shapes/src/lib.rs#pen.Pen -> shapes/src/lib.rs#pen.Pen[Write].write_str",
+		"shapes/src/lib.rs#shown -> shapes/src/lib.rs#shown.Shown",
+		"shapes/src/lib.rs#shown.Shown -> shapes/src/lib.rs#shown.Shown[Display].fmt",
 		"shapes/src/lib.rs#tests -> shapes/src/lib.rs#tests.check",
 		"shapes/src/lib.rs#tests -> shapes/src/lib.rs#tests.squares",
 		"shapes/tests/common/mod.rs -> shapes/tests/common/mod.rs#sample",
@@ -252,13 +276,13 @@ func TestExtractGraph(t *testing.T) {
 // skipped, and the workspace and engine that read it.
 func checkReport(t *testing.T, rep *Report) {
 	t.Helper()
-	if rep.Files != 8 || rep.Testdata != 1 || rep.Unanalyzed != 1 || rep.Declarations != 56 {
-		t.Errorf("Files %d, Testdata %d, Unanalyzed %d, Declarations %d; want 8, 1, 1, 56", rep.Files, rep.Testdata, rep.Unanalyzed, rep.Declarations)
+	if rep.Files != 8 || rep.Testdata != 1 || rep.Unanalyzed != 1 || rep.Declarations != 70 {
+		t.Errorf("Files %d, Testdata %d, Unanalyzed %d, Declarations %d; want 8, 1, 1, 70", rep.Files, rep.Testdata, rep.Unanalyzed, rep.Declarations)
 	}
 	// The call to made::Made::new() reaches code a build script wrote,
 	// which the index leaves out (ADR 009): counted, not an edge.
-	if rep.CallsGenerated != 1 || rep.Calls != 23 || rep.References != 1 {
-		t.Errorf("CallsGenerated %d, Calls %d, References %d; want 1, 23, 1", rep.CallsGenerated, rep.Calls, rep.References)
+	if rep.CallsGenerated != 1 || rep.Calls != 27 || rep.References != 1 {
+		t.Errorf("CallsGenerated %d, Calls %d, References %d; want 1, 27, 1", rep.CallsGenerated, rep.Calls, rep.References)
 	}
 	if rep.ServerColumns != "utf-8" {
 		t.Errorf("the server counted in %q, want utf-8, which the client asks for first", rep.ServerColumns)
@@ -273,11 +297,11 @@ func checkReport(t *testing.T, rep *Report) {
 
 // checkImplements pins the implementations (ADR 009): rust-analyzer's
 // server gives Square's and Wide's, and Circle's, which round_shape!
-// writes; the index's names give local_impl's Local, inside a body, where
-// the server finds none. Square's fmt::Display is not geometry::Display,
-// though both name a trait Display with fmt, and Pen's fmt::Write inside a
-// body is not geometry::Write, which has no write_str. The blanket impl's
-// type is a parameter, with no node.
+// writes; inside a body, where the server finds none, the impl's header
+// gives local_impl's Local and Wrap, whose header runs over three lines.
+// Square's fmt::Display is not geometry::Display, though both name a trait
+// Display with fmt; inside a body neither is Shown's, nor Pen's fmt::Write
+// geometry::Write. The blanket impl's type is a parameter, with no node.
 func checkImplements(t *testing.T, g *graph.Graph, rep *Report) {
 	t.Helper()
 	check(t, "implements", edges(g, graph.KindImplements), []string{
@@ -285,9 +309,12 @@ func checkImplements(t *testing.T, g *graph.Graph, rep *Report) {
 		"shapes/src/lib.rs#Square -> shapes/src/lib.rs#Area",
 		"shapes/src/lib.rs#Wide -> shapes/src/lib.rs#Area",
 		"shapes/src/lib.rs#local_impl.Local -> shapes/src/lib.rs#Area",
+		"shapes/src/lib.rs#local_impl.Wrap -> shapes/src/geometry.rs#Write", // the trait on its header's third line
+		"shapes/src/lib.rs#paired.Two -> shapes/src/geometry.rs#Pair",       // past Inner's header, nearer
+		"shapes/src/lib.rs#paired.Two[Pair].first.Inner -> shapes/src/lib.rs#Area",
 	})
-	if rep.Implements != 4 || rep.ImplementsUnplaced != 1 {
-		t.Errorf("Implements %d, ImplementsUnplaced %d; want 4, 1", rep.Implements, rep.ImplementsUnplaced)
+	if rep.Implements != 7 || rep.ImplementsUnplaced != 1 {
+		t.Errorf("Implements %d, ImplementsUnplaced %d; want 7, 1", rep.Implements, rep.ImplementsUnplaced)
 	}
 }
 

@@ -4,6 +4,7 @@
 package rust
 
 import (
+	"bytes"
 	"maps"
 	"os"
 	"slices"
@@ -137,23 +138,16 @@ func (x *extractor) text(path string) []byte {
 }
 
 // inBodies adds the implementations written inside a function body, which
-// the server does not find, from the index's names for their methods: the
-// type's node is the one the method's path holds (local_impl.Local for
-// local_impl.Local[Area].area), the trait the one workspace trait of that
-// name that declares the method. An implementation whose trait's name two
-// workspace traits share gets no edge, nor one of a trait elsewhere that
-// only shares a workspace trait's name (fmt::Write and a workspace Write
-// without write_str).
+// the server does not find (ADR 009, ADR 006 rule 9). The type's node is
+// the one the method's path holds (local_impl.Local for
+// local_impl.Local[Area].area); the trait is the one the impl's header
+// names, read from the index's reference to it there: the exact trait, so
+// fmt::Display inside a body is not a workspace trait named Display that
+// declares fmt too. One edge per implementation, from its methods.
 func (x *extractor) inBodies(add func(from, to graph.ID) error) error {
-	byName := map[string][]*def{}
-	for _, ts := range x.traits() {
-		for _, t := range ts {
-			byName[t.path[len(t.path)-1]] = append(byName[t.path[len(t.path)-1]], t)
-		}
-	}
 	for _, rel := range slices.Sorted(maps.Keys(x.docs)) {
 		for _, d := range x.defsOf[x.docs[rel]] {
-			ty, trait, ok := x.bodyImpl(d, byName)
+			ty, trait, ok := x.bodyImpl(d)
 			if !ok {
 				continue
 			}
@@ -166,11 +160,11 @@ func (x *extractor) inBodies(add func(from, to graph.ID) error) error {
 }
 
 // bodyImpl reads one method of an implementation inside a function body:
-// the node of its type and of the one workspace trait of the name its
-// symbol gives that declares the method. ok is false for any other item,
-// and for an implementation either node is missing for, which counts as
-// unplaced when two workspace traits share the name.
-func (x *extractor) bodyImpl(d *def, byName map[string][]*def) (ty, trait graph.ID, ok bool) {
+// the node of its type and of the workspace trait its impl's header names.
+// ok is false for any other item, and for an implementation of a trait
+// outside the workspace (fmt::Display) or whose header the index does not
+// show (one a macro writes in a body).
+func (x *extractor) bodyImpl(d *def) (ty, trait graph.ID, ok bool) {
 	if !isFunc(d.kind) || d.holder == nil || len(d.path) < 2 {
 		return "", "", false
 	}
@@ -178,19 +172,72 @@ func (x *extractor) bodyImpl(d *def, byName map[string][]*def) (ty, trait graph.
 	if typePath == nil {
 		return "", "", false // an inherent impl's method, or a nested function
 	}
-	_, name, _ := strings.Cut(strings.TrimSuffix(d.path[len(d.path)-2], "]"), "[")
-	if len(byName[name]) > 1 {
-		x.report.ImplementsUnplaced++
-		return "", "", false
-	}
 	ty, err := x.m.RustID(d.doc.rel, typePath...)
-	if err != nil || !x.emitted[ty] || len(byName[name]) == 0 {
+	if err != nil || !x.emitted[ty] {
 		return "", "", false
 	}
-	t := byName[name][0]
-	method, err := x.m.RustID(t.doc.rel, append(slices.Clone(t.path), d.path[len(d.path)-1])...)
-	if err != nil || !x.emitted[method] {
-		return "", "", false // a trait elsewhere of that name: fmt::Write, not a workspace Write
+	_, name, _ := strings.Cut(strings.TrimSuffix(d.path[len(d.path)-2], "]"), "[")
+	sym := headerTrait(d, name)
+	// A trait of the workspace has a def; one outside it (fmt::Display)
+	// has none and gets no edge.
+	t, _ := x.resolve(sym, d.doc)
+	if sym == "" || t == nil {
+		return "", "", false
 	}
 	return ty, t.id, true
+}
+
+// headerTrait finds the trait's symbol on the header of the impl holding
+// the method d, whose trait the method's symbol names: the nearest header
+// above d, `impl … Trait … for Type … {`, with an index reference to a
+// type of that name, the first such, which is the trait's: it comes
+// before `for`. Reading the header is the one place the layer reads syntax
+// beyond the token after a reference (ADR 006 rule 9, #72). A header
+// nested in an earlier method of the same impl names another trait and is
+// passed over; one naming the same trait gives the same edge.
+func headerTrait(d *def, trait string) string {
+	lines := bytes.Split(d.doc.text, []byte("\n"))
+	for l := d.start.line; l >= 0 && int(l) < len(lines); l-- {
+		t := bytes.TrimSpace(lines[l])
+		if !bytes.HasPrefix(t, []byte("impl")) && !bytes.HasPrefix(t, []byte("unsafe impl")) {
+			continue
+		}
+		if sym := headerRef(d.doc, lines, l, trait); sym != "" {
+			return sym
+		}
+	}
+	return ""
+}
+
+// headerRef reads the header starting on line first, up to the line
+// holding its "{", and returns the first index reference on it to a type
+// named trait.
+func headerRef(dc *doc, lines [][]byte, first int32, trait string) string {
+	last := first
+	for int(last) < len(lines)-1 && !bytes.Contains(lines[last], []byte("{")) {
+		last++
+	}
+	var found string
+	var at pos
+	for _, o := range dc.d.GetOccurrences() {
+		sym, start, _, ok := referenceAt(o)
+		if !ok || start.line < first || start.line > last || descriptorName(sym) != trait {
+			continue
+		}
+		if found == "" || start.before(at) {
+			found, at = sym, start
+		}
+	}
+	return found
+}
+
+// descriptorName is the name a symbol's last descriptor gives, without
+// generic arguments: Visitor for `Visitor<'de>`.
+func descriptorName(sym string) string {
+	s, err := scip.ParseSymbol(sym)
+	if err != nil || len(s.GetDescriptors()) == 0 {
+		return ""
+	}
+	ds := s.GetDescriptors()
+	return typeName(ds[len(ds)-1].GetName())
 }

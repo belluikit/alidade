@@ -114,7 +114,51 @@ pub fn local_impl() -> f64 {
             1.0
         }
     }
+    // The trait on the header's third line, as rustfmt breaks a long
+    // generic list, and named by no header above it.
+    struct Wrap<T>(T);
+    impl<
+        T: Copy,
+    > geometry::Write for Wrap<T>
+    {
+        fn line(&mut self, _s: &str) {}
+    }
+    let mut w = Wrap(1u8);
+    geometry::Write::line(&mut w, "x");
     Local.area()
+}
+
+/// An implementation inside a body whose first method holds another: the
+/// header nearest above `second` is Inner's, which names Area, not Pair.
+pub fn paired() -> u8 {
+    struct Two;
+    impl geometry::Pair for Two {
+        fn first(&self) -> u8 {
+            struct Inner;
+            impl Area for Inner {
+                fn area(&self) -> f64 {
+                    0.0
+                }
+            }
+            Inner.area() as u8
+        }
+        fn second(&self) -> u8 {
+            2
+        }
+    }
+    geometry::Pair::first(&Two) + geometry::Pair::second(&Two)
+}
+
+/// fmt::Display implemented inside a body. By name it would be
+/// geometry::Display, which declares fmt too; its header says otherwise.
+pub fn shown() -> String {
+    struct Shown;
+    impl fmt::Display for Shown {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            write!(f, "shown")
+        }
+    }
+    Shown.to_string()
 }
 
 /// fmt::Write implemented inside a body: joined by name, it would be

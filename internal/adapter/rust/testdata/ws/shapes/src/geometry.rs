@@ -19,6 +19,13 @@ pub trait Display {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result;
 }
 
+/// A trait of two methods, for an implementation whose first method holds
+/// another implementation.
+pub trait Pair {
+    fn first(&self) -> u8;
+    fn second(&self) -> u8;
+}
+
 pub fn unit() -> Square {
     Square::new(1.0)
 }
