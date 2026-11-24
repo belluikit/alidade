@@ -1,7 +1,7 @@
 # ADR 003: Corpus Scope — Five Formats, and What Is Deliberately Excluded
 
 **Status:** Accepted; amended 2026-09-11 (a sixth format, goasm), 2026-10-08
-(skipped directories), 2026-10-09 (Python) and 2026-11-24 (Rust) — see the end
+(skipped directories), 2026-10-09 (Python), 2026-11-24 (Rust) and 2026-11-24 (build caches) — see the end
 **Date:** 2026-08-29
 **Relates to:** [000](000-composition-boundary.md)
 
@@ -234,3 +234,25 @@ code. prost-build generates Rust from `.proto` files in a crate's `build.rs`, an
 the layer joins each generated type to its `proto://` message. Go, TypeScript and
 Rust code using one message then meet at one `proto://` node. ADR 009 says how the
 layer reads Rust and what it measured.
+
+## Amended 2026-11-24: build caches are left out (#75, the owner's decision)
+
+**A directory holding a `CACHEDIR.TAG` is left out by every layer and by the
+server's change check, and `.alidade.pxf` cannot bring it back**, as an
+installed package is not (#266). The tag is the Cache Directory Tagging
+specification's mark, and it must start with the specification's signature.
+`internal/scope` holds the rule beside the `pyvenv.cfg` one.
+
+What prompted it: Cargo's `target/` holds the `.rs` files build scripts write. The
+Markdown layer's signature reads every `.rs` file's existence, so the build after
+a Rust repository's first one reran it, and the change check saw `target/` change.
+
+Measured on the repositories under ~/projects/src before deciding:
+- **Every tagged directory is a cache.** Cargo wrote the tag into each of 8
+  `target/` directories. The others were `.venv` (uv), `.ruff_cache`,
+  `.pytest_cache` and Swift's `.build`.
+- **A name would not do.** `zitadel/internal/repository/target` is a Go package of
+  4 files, with no tag, and leaving out `target` by name would have dropped it.
+
+`TestBuildCaches` and `TestCargoTargetIsLeftOut` fail the day the rule stops
+holding; without it, the second reruns the Markdown layer.
