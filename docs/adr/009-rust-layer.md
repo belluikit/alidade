@@ -154,19 +154,26 @@ measurement on #72 changed it: neither source is complete. On protowire-pb's
   line names the trait's full symbol. That came from a probe that read only the
   last of the lines it was given. The header does carry both, even inside a
   function body: `impl Message for Holder` in `tests/wire_type.rs` has
-  `codec/Message#` and `Holder#`. The layer does not read them, since telling
-  the trait's reference from the type's means reading the header's syntax,
-  beyond the one token rule 9 reads; whether it should is the owner's
-  (#72).
+  `codec/Message#` and `Holder#`.
+
+  *Amended 2026-11-24 (#72, the owner's decision):* the layer reads that header
+  for an implementation inside a function body, where it had joined by name:
+  the exact trait, at the cost of reading the header's lines, which ADR 006
+  rule 9 now allows. The nearest header above a method that names its trait is
+  its impl's; one nested in an earlier method of the same impl names another
+  trait and is passed over. The fixture pins a header whose trait is on its
+  third line, a header nested in a method, and fmt::Display beside a workspace
+  Display.
 
 So the layer asks LSP for the implementations of each workspace trait, one request
 per trait (5 on protowire-rust). That gives the exact trait, including
 macro-generated implementations. SCIP's names then add the implementations LSP
 missed, those inside a function body, and only those: elsewhere LSP has every
-implementation, and a name would also join a foreign trait of the same name. Such
-an implementation is joined only when exactly one workspace trait has that simple
-name and declares the method; otherwise it gets no edge. Together the two cover
-all 55. The 55 were reconciled two ways:
+implementation. Such an implementation's trait is the one its header names, read
+from the index's reference there (amended below): `impl fmt::Display for Shown`
+inside a body is fmt::Display, not a workspace trait named Display that declares
+`fmt` too, which a join by name would take. Together the two cover all 55. The 55
+were reconciled two ways:
 - **By source text:** 42 `impl … Message for` lines, less 2 that aren't
   implementations (a different trait, and the macro's own definition), leave 40
   written by hand.
@@ -240,8 +247,8 @@ generated files has the latter.
   (`.map(row)`, `Some(&deny_all)`, `LazyLock::new(ValidationCache::new)`). The rule
   reads one token of source text after a reference, a read as narrow as the
   TypeScript layer's import clauses (ADR 007).
-- **Implementations:** from LSP and SCIP together, as above. RESOLVED (ADR 006
-  rule 9).
+- **Implementations:** from LSP, and from the impl's header inside a function
+  body, as above. RESOLVED (ADR 006 rule 9).
 - **A machine without the toolchain:** if `cargo`, `rust-analyzer` or the standard
   library's source is missing, each Rust file is a node marked `calls_unavailable`,
   and the report names what is missing and the `rustup` command that adds it. The
