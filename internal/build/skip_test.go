@@ -509,10 +509,11 @@ func TestNestedWorktreeIsLeftOut(t *testing.T) {
 // build reruns no layer and the change check sees nothing. Before, the
 // Markdown layer's signature read the .rs files' existence and reran once
 // after a Rust repository's first build. target/ is written here as Cargo
-// writes it, so the test needs no toolchain.
+// writes it, and the tree has no Cargo.toml, so no toolchain runs: with
+// one, Cargo may change the tree on its own (a Cargo.lock it writes),
+// which is not what this pins.
 func TestCargoTargetIsLeftOut(t *testing.T) {
 	root := t.TempDir()
-	write(t, filepath.Join(root, "Cargo.toml"), "[package]\nname = \"tool\"\nversion = \"0.1.0\"\nedition = \"2021\"\n")
 	write(t, filepath.Join(root, "src/lib.rs"), "pub fn f() {}\n")
 	write(t, filepath.Join(root, "README.md"), "# Hi\n")
 	s := newSession(t, root)
