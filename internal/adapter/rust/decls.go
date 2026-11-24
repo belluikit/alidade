@@ -206,10 +206,11 @@ func innermost(defs []*def, p pos, self *def) *def {
 var errMacro = errors.New("a macro has no node")
 
 // segments turns a symbol into its path inside the file whose own module
-// is module. rust-analyzer names a method of an impl block by the impl's
-// type and trait, `impl#[Square][Area]area().`, which becomes
-// "Square[Area]", "area"; an inherent impl's, `impl#[Square]new().`,
-// "Square", "new" (ADR 002 rule 16).
+// is module. A function or a method ends in "()", so a method and a field
+// of one name are two IDs (ADR 002 rule 16, #72). rust-analyzer names a
+// method of an impl block by the impl's type and trait,
+// `impl#[Square][Area]area().`, which becomes "Square[Area]", "area()"; an
+// inherent impl's, `impl#[Square]new().`, "Square", "new()".
 func segments(sym string, module []*scip.Descriptor) ([]string, error) {
 	s, err := scip.ParseSymbol(sym)
 	if err != nil {
@@ -232,6 +233,8 @@ func segments(sym string, module []*scip.Descriptor) ([]string, error) {
 			}
 			out = append(out, seg)
 			i += n
+		case d.GetSuffix() == scip.Descriptor_Method:
+			out = append(out, unraw(d.GetName())+"()")
 		default:
 			out = append(out, unraw(d.GetName()))
 		}
@@ -289,34 +292,105 @@ func hasPrefix(ds, prefix []*scip.Descriptor) bool {
 // typeName is the name of an impl's type or trait as a segment: its last
 // path segment, without its generic arguments, a reference or a lifetime
 // (`MarshalOptions<'a>` is MarshalOptions, `&mut fmt::Formatter` is
-// Formatter); "" when what is left is not a name, as for a tuple or a
-// slice.
+// Formatter). A type with no name has a word form, its parts named the
+// same way (ADR 002 rule 16, #72): `[u8]` is slice(u8), `[u8; 4]`
+// array(u8;4), `(i32, i32)` tuple(i32,i32). "" for what is neither, a
+// function pointer, say.
 func typeName(s string) string {
-	s = unraw(strings.Trim(s, "`"))
+	s = stripRefs(unraw(strings.Trim(strings.TrimSpace(s), "`")))
+	switch {
+	case strings.HasPrefix(s, "[") && strings.HasSuffix(s, "]"):
+		return sliceName(s[1 : len(s)-1])
+	case strings.HasPrefix(s, "(") && strings.HasSuffix(s, ")"):
+		return tupleName(s[1 : len(s)-1])
+	}
+	return namedType(s)
+}
+
+// stripRefs takes off what a type is reached through: references, raw
+// pointers, `dyn`, `impl`, lifetimes.
+func stripRefs(s string) string {
+	for {
+		t := strings.TrimSpace(s)
+		for _, p := range []string{"&", "mut ", "dyn ", "impl ", "*const ", "*mut "} {
+			t = strings.TrimPrefix(t, p)
+		}
+		if strings.HasPrefix(t, "'") {
+			if _, rest, ok := strings.Cut(t, " "); ok {
+				t = rest
+			}
+		}
+		t = strings.TrimSpace(t)
+		if t == strings.TrimSpace(s) {
+			return t
+		}
+		s = t
+	}
+}
+
+// sliceName is `[T]` as slice(T) and `[T; N]` as array(T;N), given what
+// the brackets hold.
+func sliceName(inner string) string {
+	parts := splitTop(inner, ';')
+	elem := typeName(parts[0])
+	switch {
+	case elem == "" || len(parts) > 2:
+		return ""
+	case len(parts) == 2:
+		return "array(" + elem + ";" + strings.TrimSpace(parts[1]) + ")"
+	}
+	return "slice(" + elem + ")"
+}
+
+// tupleName is `(A, B)` as tuple(A,B), given what the parentheses hold.
+func tupleName(inner string) string {
+	var elems []string
+	for _, p := range splitTop(inner, ',') {
+		if strings.TrimSpace(p) == "" {
+			continue
+		}
+		e := typeName(p)
+		if e == "" {
+			return ""
+		}
+		elems = append(elems, e)
+	}
+	return "tuple(" + strings.Join(elems, ",") + ")"
+}
+
+// namedType is a named type's last path segment without its generic
+// arguments; "" when that is not a name.
+func namedType(s string) string {
 	if i := strings.IndexByte(s, '<'); i >= 0 {
 		s = s[:i]
-	}
-	for _, p := range []string{"&", "mut ", "dyn ", "impl "} {
-		s = strings.TrimPrefix(strings.TrimSpace(s), p)
-	}
-	if strings.HasPrefix(s, "'") {
-		if _, rest, ok := strings.Cut(s, " "); ok {
-			s = rest
-		}
 	}
 	if i := strings.LastIndex(s, "::"); i >= 0 {
 		s = s[i+2:]
 	}
-	s = strings.TrimSpace(s)
-	if s == "" {
+	if s == "" || strings.IndexFunc(s, func(r rune) bool { return r != '_' && !unicode.IsLetter(r) && !unicode.IsDigit(r) }) >= 0 {
 		return ""
 	}
-	for _, r := range s {
-		if r != '_' && !unicode.IsLetter(r) && !unicode.IsDigit(r) {
-			return ""
+	return s
+}
+
+// splitTop splits s at sep where no bracket of any kind is open.
+func splitTop(s string, sep byte) []string {
+	var out []string
+	depth, from := 0, 0
+	for i := 0; i < len(s); i++ {
+		switch s[i] {
+		case '(', '[', '<':
+			depth++
+		case ')', ']', '>':
+			depth--
+		case sep:
+			if depth == 0 {
+				out = append(out, s[from:i])
+				from = i + 1
+			}
 		}
 	}
-	return s
+	return append(out, s[from:])
 }
 
 // declare adds an item's node and the edge from what contains it.
@@ -341,7 +415,7 @@ func (x *extractor) declare(d *def) error {
 	if d.encl {
 		attrs["end_line"] = strconv.Itoa(int(d.end.line) + 1)
 	}
-	if err := x.b.AddNode(graph.Node{ID: id, Kind: kinds[d.kind], Name: d.path[len(d.path)-1],
+	if err := x.b.AddNode(graph.Node{ID: id, Kind: kinds[d.kind], Name: strings.TrimSuffix(d.path[len(d.path)-1], "()"),
 		Pos: graph.Position{File: d.doc.rel, Line: int(d.start.line) + 1, Col: int(d.start.col) + 1}, Attrs: attrs}); err != nil {
 		return err
 	}

@@ -100,11 +100,12 @@ func (x *extractor) askServer(ws string, add func(from, to graph.ID) error) erro
 }
 
 // typeAt is the type with a node a server's answer names: an
-// implementation's answer is the implementing type's name in the impl's
-// header, a reference to the type in the index, or, for a type a macro
-// writes in the same call, its definition. nil for a type with no node:
-// a type parameter (impl<F> Validator for F), one outside the workspace,
-// a slice.
+// implementation's answer is where the implementing type starts in the
+// impl's header, and the type is the first index reference there or after
+// it on that line (the server starts `&Gauge` at its `&`). For a type a
+// macro writes in the same call, the reference is its definition. nil for a
+// type with no node: a type parameter (impl<F> Validator for F), one outside
+// the workspace (Vec, whose argument is not the type), a slice.
 func (x *extractor) typeAt(lo location) *def {
 	path, p := lo.at()
 	rel, err := x.m.Rel(path)
@@ -115,16 +116,31 @@ func (x *extractor) typeAt(lo location) *def {
 	if dc == nil {
 		return nil
 	}
-	for _, o := range dc.d.GetOccurrences() {
-		start, _, ok := occRange(o)
-		if !ok || start != p || strings.HasPrefix(o.GetSymbol(), "local ") {
-			continue
-		}
-		if d, _ := x.resolve(o.GetSymbol(), dc); d != nil && kinds[d.kind] == graph.KindType && d.kind != scip.SymbolInformation_Trait {
-			return d
-		}
+	first := firstFrom(dc, p)
+	if first == nil {
+		return nil
+	}
+	if d, _ := x.resolve(first.GetSymbol(), dc); d != nil && kinds[d.kind] == graph.KindType && d.kind != scip.SymbolInformation_Trait {
+		return d
 	}
 	return nil
+}
+
+// firstFrom is the first occurrence on p's line at or after p that names
+// an item, not a local.
+func firstFrom(dc *doc, p pos) *scip.Occurrence {
+	var first *scip.Occurrence
+	var at pos
+	for _, o := range dc.d.GetOccurrences() {
+		start, _, ok := occRange(o)
+		if !ok || start.line != p.line || start.before(p) || strings.HasPrefix(o.GetSymbol(), "local ") {
+			continue
+		}
+		if first == nil || start.before(at) {
+			first, at = o, start
+		}
+	}
+	return first
 }
 
 // text is a file's text, by absolute path, for converting a server's
