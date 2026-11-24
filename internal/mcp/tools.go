@@ -60,7 +60,7 @@ func (s *Server) registerTools() {
 		mcpsdk.WithDescription("Find nodes by name or ID. Exact name matches rank first, then prefixes, then substrings. Use it to get an ID for the traversal tools. It matches names, not file contents."),
 		mcpsdk.WithString("query", mcpsdk.Required(), mcpsdk.Description("A name (Total, Workspace.ReferencesFor), a path fragment, or a whole ID.")),
 		mcpsdk.WithString("kind", mcpsdk.Description("Only this kind: func, method, type, message, rpc, table, query, section, ...")),
-		mcpsdk.WithString("scheme", mcpsdk.Enum("go", "proto", "pxf", "sql", "md", "goasm", "ts", "py"), mcpsdk.Description("Only nodes of this layer.")),
+		mcpsdk.WithString("scheme", mcpsdk.Enum("go", "proto", "pxf", "sql", "md", "goasm", "ts", "py", "rust"), mcpsdk.Description("Only nodes of this layer.")),
 		mcpsdk.WithNumber("limit", mcpsdk.DefaultNumber(defaultLimit), mcpsdk.Min(1), mcpsdk.Max(maxLimit)),
 		withExcludeTests(),
 		withExcludeGenerated(),
