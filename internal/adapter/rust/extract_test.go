@@ -136,6 +136,8 @@ func TestExtractGraph(t *testing.T) {
 		"shapes/src/lib.rs#local_impl func", "shapes/src/lib.rs#local_impl.Local type", "shapes/src/lib.rs#local_impl.Local[Area].area method",
 		"shapes/src/lib.rs#made module",
 		"shapes/src/lib.rs#outer func", "shapes/src/lib.rs#outer.inner func",
+		"shapes/src/lib.rs#outer.inner.deepest func",                              // two holders, each once
+		"shapes/src/lib.rs#made_first func", "shapes/src/lib.rs#made_second func", // a macro's, siblings
 		"shapes/src/lib.rs#parse_side func", "shapes/src/lib.rs#total func",
 		"shapes/src/lib.rs#tests module", "shapes/src/lib.rs#tests.check func", "shapes/src/lib.rs#tests.squares func",
 		"shapes/tests/common/mod.rs module", "shapes/tests/common/mod.rs#sample func",
@@ -152,6 +154,7 @@ func TestExtractGraph(t *testing.T) {
 		"shapes/src/lib.rs#outer -> shapes/src/lib.rs#outer.inner",
 		"shapes/src/lib.rs#outer.inner -> shapes/src/lib.rs#Square.new",
 		"shapes/src/lib.rs#outer.inner -> shapes/src/lib.rs#area_of",
+		"shapes/src/lib.rs#outer.inner -> shapes/src/lib.rs#outer.inner.deepest",
 		"shapes/src/lib.rs#parse_side -> shapes/src/lib.rs#helper_generic", // a turbofish, ::<
 		"shapes/src/lib.rs#tests.check -> shapes/src/lib.rs#area_of",
 		"shapes/src/lib.rs#tests.squares -> shapes/src/lib.rs#Square.new",
@@ -187,6 +190,8 @@ func TestExtractGraph(t *testing.T) {
 		"shapes/src/lib.rs -> shapes/src/lib.rs#helper_generic",
 		"shapes/src/lib.rs -> shapes/src/lib.rs#local_impl",
 		"shapes/src/lib.rs -> shapes/src/lib.rs#made",
+		"shapes/src/lib.rs -> shapes/src/lib.rs#made_first",
+		"shapes/src/lib.rs -> shapes/src/lib.rs#made_second",
 		"shapes/src/lib.rs -> shapes/src/lib.rs#outer",
 		"shapes/src/lib.rs -> shapes/src/lib.rs#parse_side",
 		"shapes/src/lib.rs -> shapes/src/lib.rs#tests",
@@ -203,6 +208,7 @@ func TestExtractGraph(t *testing.T) {
 		"shapes/src/lib.rs#local_impl -> shapes/src/lib.rs#local_impl.Local",
 		"shapes/src/lib.rs#local_impl.Local -> shapes/src/lib.rs#local_impl.Local[Area].area",
 		"shapes/src/lib.rs#outer -> shapes/src/lib.rs#outer.inner",
+		"shapes/src/lib.rs#outer.inner -> shapes/src/lib.rs#outer.inner.deepest",
 		"shapes/src/lib.rs#tests -> shapes/src/lib.rs#tests.check",
 		"shapes/src/lib.rs#tests -> shapes/src/lib.rs#tests.squares",
 		"shapes/tests/common/mod.rs -> shapes/tests/common/mod.rs#sample",
@@ -226,13 +232,13 @@ func TestExtractGraph(t *testing.T) {
 // skipped, and the workspace and engine that read it.
 func checkReport(t *testing.T, rep *Report) {
 	t.Helper()
-	if rep.Files != 8 || rep.Testdata != 1 || rep.Unanalyzed != 1 || rep.Declarations != 41 {
-		t.Errorf("Files %d, Testdata %d, Unanalyzed %d, Declarations %d; want 8, 1, 1, 41", rep.Files, rep.Testdata, rep.Unanalyzed, rep.Declarations)
+	if rep.Files != 8 || rep.Testdata != 1 || rep.Unanalyzed != 1 || rep.Declarations != 44 {
+		t.Errorf("Files %d, Testdata %d, Unanalyzed %d, Declarations %d; want 8, 1, 1, 44", rep.Files, rep.Testdata, rep.Unanalyzed, rep.Declarations)
 	}
 	// The call to made::Made::new() reaches code a build script wrote,
 	// which the index leaves out (ADR 009): counted, not an edge.
-	if rep.CallsGenerated != 1 || rep.Calls != 21 || rep.References != 1 {
-		t.Errorf("CallsGenerated %d, Calls %d, References %d; want 1, 21, 1", rep.CallsGenerated, rep.Calls, rep.References)
+	if rep.CallsGenerated != 1 || rep.Calls != 22 || rep.References != 1 {
+		t.Errorf("CallsGenerated %d, Calls %d, References %d; want 1, 22, 1", rep.CallsGenerated, rep.Calls, rep.References)
 	}
 	if len(rep.Skipped) != 0 {
 		t.Errorf("skipped %v, want none", rep.Skipped)

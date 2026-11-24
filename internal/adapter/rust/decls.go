@@ -56,7 +56,8 @@ type def struct {
 	start  pos // of its name
 	end    pos // of the last character of the item, its enclosing range
 	encl   bool
-	path   []string // inside the file, ADR 002 rule 16
+	own    []string // the path its symbol states, inside the file's module
+	path   []string // inside the file, its holders' before its own: ADR 002 rule 16
 	id     graph.ID
 	holder *def // the innermost function holding it, if one does
 }
@@ -129,7 +130,7 @@ func (x *extractor) defs(dc *doc) []*def {
 			continue
 		}
 		d.holder = innermost(defs, d.start, d)
-		d.path = segs
+		d.own = segs
 		out = append(out, d)
 	}
 	for _, d := range out {
@@ -170,20 +171,29 @@ func items(dc *doc) (module []*scip.Descriptor, defs []*def) {
 	return module, defs
 }
 
-// fullPath is a def's path in its file: its holder's, then its own.
+// fullPath is a def's path in its file: its holder's, then its own. It
+// reads only own, so a holder whose path is already set is not counted
+// twice.
 func fullPath(d *def) []string {
 	if d.holder == nil {
-		return d.path
+		return slices.Clone(d.own)
 	}
-	return append(slices.Clone(fullPath(d.holder)), d.path...)
+	return append(fullPath(d.holder), d.own...)
 }
 
 // innermost returns the function among defs whose body holds p, the
-// innermost one, other than self; nil when none does.
+// innermost one, other than self; nil when none does. A function holds
+// another item only when its range ends after the item's: rust-analyzer
+// gives every function a macro writes the range of the whole macro call
+// (the four of a proptest! block on prost-reflect share one), and those
+// are siblings, not nested.
 func innermost(defs []*def, p pos, self *def) *def {
 	var best *def
 	for _, f := range defs {
 		if f == self || !isFunc(f.kind) || !f.encl || p.before(f.start) || !p.before(f.end) {
+			continue
+		}
+		if self != nil && self.encl && !self.end.before(f.end) {
 			continue
 		}
 		if best == nil || best.start.before(f.start) {

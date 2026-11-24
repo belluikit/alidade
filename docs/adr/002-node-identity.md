@@ -316,6 +316,13 @@ Rules that follow, and are not open:
     Two declarations of one path in one file are one ID, at the first, as in
     Python.
 
+    A function holds a declaration only when the function's range ends after
+    the declaration's (#72). rust-analyzer gives each function a macro call
+    writes the range of the whole call, so the functions of one
+    `proptest! { … }` block are siblings, not each inside the one before.
+    On prost-reflect, 17 IDs were chained that way, and one on
+    protowire-rust had its outermost function twice.
+
 ## Why 5 and 6 went that way
 
 Both were open when this ADR was first written, because both cost a migration

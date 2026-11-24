@@ -84,10 +84,28 @@ fn helper_generic<T: Into<u8>>(v: T) -> u8 {
 
 pub fn outer() -> f64 {
     fn inner() -> f64 {
-        area_of(&Square::new(2.0))
+        fn deepest() -> f64 {
+            1.0
+        }
+        area_of(&Square::new(2.0)) + deepest()
     }
     inner()
 }
+
+/// A macro that writes two functions: rust-analyzer gives both the range of
+/// the whole call, and they are siblings, not one inside the other.
+macro_rules! two_fns {
+    ($a:ident, $b:ident) => {
+        pub fn $a() -> u8 {
+            1
+        }
+        pub fn $b() -> u8 {
+            2
+        }
+    };
+}
+
+two_fns!(made_first, made_second);
 
 pub fn local_impl() -> f64 {
     struct Local;
