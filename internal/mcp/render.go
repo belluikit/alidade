@@ -87,14 +87,14 @@ func endsWithName(id, name string) bool {
 }
 
 // idFile is the repo-relative file an ID is keyed by, for the layers that
-// key by path — md, ts, pxf, goasm, and a .proto file — or "".
+// key by path — md, ts, py, rust, pxf, goasm, and a .proto file — or "".
 func idFile(id string) string {
 	scheme, body, ok := strings.Cut(id, "://")
 	if !ok {
 		return ""
 	}
 	switch scheme {
-	case "md", "ts", "py", "pxf", "goasm":
+	case "md", "ts", "py", "rust", "pxf", "goasm":
 		file, _, _ := strings.Cut(body, "#")
 		return graph.FilePath(file)
 	case "proto":

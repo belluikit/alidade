@@ -33,6 +33,8 @@ require (
 	github.com/petermattis/goid v0.0.0-20260113132338-7c7de50cc741 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2 // indirect
+	github.com/scip-code/scip/bindings/go/scip v0.10.0 // indirect
+	github.com/sourcegraph/beaut v0.0.0-20240611013027-627e4c25335a // indirect
 	github.com/spf13/cast v1.7.1 // indirect
 	github.com/tidwall/btree v1.8.2 // indirect
 	github.com/tommie/v8go/deps/android_amd64 v0.0.0-20261112083347-f9d7c8453194 // indirect

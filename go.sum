@@ -40,6 +40,10 @@ github.com/rogpeppe/go-internal v1.14.1 h1:UQB4HGPB6osV0SQTLymcB4TgvyWu6ZyliaW0t
 github.com/rogpeppe/go-internal v1.14.1/go.mod h1:MaRKkUm5W0goXpeCfT7UZI6fk/L7L7so1lCWt35ZSgc=
 github.com/santhosh-tekuri/jsonschema/v6 v6.0.2 h1:KRzFb2m7YtdldCEkzs6KqmJw4nqEVZGK7IN2kJkjTuQ=
 github.com/santhosh-tekuri/jsonschema/v6 v6.0.2/go.mod h1:JXeL+ps8p7/KNMjDQk3TCwPpBy0wYklyWTfbkIzdIFU=
+github.com/scip-code/scip/bindings/go/scip v0.10.0 h1:X7jaN76WK8WqU4/eTn1KyeaUEStvn4jdgW/NuzLzsPE=
+github.com/scip-code/scip/bindings/go/scip v0.10.0/go.mod h1:4LGKCH2Vx61a1sWwq8bp5HGb7F/0qJMrAOEh0XdKKlc=
+github.com/sourcegraph/beaut v0.0.0-20240611013027-627e4c25335a h1:j/CQ27s679M9wRGBRJYyXGrfkYuQA6VMnD7R08mHD9c=
+github.com/sourcegraph/beaut v0.0.0-20240611013027-627e4c25335a/go.mod h1:JG1sdvGTKWwe/oH3/3UKQ26vfcHIN//7fwEJhoqaBcM=
 github.com/spf13/cast v1.7.1 h1:cuNEagBQEHWN1FnbGEjCXL2szYEXqfJPbP2HNUaca9Y=
 github.com/spf13/cast v1.7.1/go.mod h1:ancEpBxwJDODSW/UG4rDrAqiKolqNNh2DX3mk86cAdo=
 github.com/sqlc-dev/oliphant v0.2.0 h1:jJ/s2fh4Plj3U1HsdqiY/clw/IHb4FCNaHfqirwxcsI=

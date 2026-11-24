@@ -48,13 +48,13 @@ import (
 type ID string
 
 // Scheme names the layer a node's identity came from. It is the one part of
-// the syntax common to all eight layers; everything after "://" belongs to
+// the syntax common to all nine layers; everything after "://" belongs to
 // the layer.
 type Scheme string
 
-// The eight schemes: ADR 003's five, goasm by its 2026-09-11 amendment,
-// ts by ADR 007 and py by ADR 008. A ninth means a new layer, which means
-// an ADR before this constant block grows.
+// The nine schemes: ADR 003's five, goasm by its 2026-09-11 amendment,
+// ts by ADR 007, py by ADR 008 and rust by ADR 009. A tenth means a new
+// layer, which means an ADR before this constant block grows.
 const (
 	SchemeGo       Scheme = "go"
 	SchemeProto    Scheme = "proto"
@@ -64,6 +64,7 @@ const (
 	SchemeGoasm    Scheme = "goasm"
 	SchemeTS       Scheme = "ts"
 	SchemePy       Scheme = "py"
+	SchemeRust     Scheme = "rust"
 )
 
 const schemeSep = "://"
@@ -72,7 +73,7 @@ const schemeSep = "://"
 func (id ID) String() string { return string(id) }
 
 // Scheme returns the layer that minted the ID, and whether it is one of the
-// eight known schemes. An unknown scheme is a sign an adapter built an ID by
+// nine known schemes. An unknown scheme is a sign an adapter built an ID by
 // hand instead of asking the core for one.
 func (id ID) Scheme() (Scheme, bool) {
 	i := strings.Index(string(id), schemeSep)
@@ -81,7 +82,7 @@ func (id ID) Scheme() (Scheme, bool) {
 	}
 	s := Scheme(id[:i])
 	switch s {
-	case SchemeGo, SchemeProto, SchemePXF, SchemeSQL, SchemeMarkdown, SchemeGoasm, SchemeTS, SchemePy:
+	case SchemeGo, SchemeProto, SchemePXF, SchemeSQL, SchemeMarkdown, SchemeGoasm, SchemeTS, SchemePy, SchemeRust:
 		return s, len(id) > i+len(schemeSep)
 	}
 	return s, false
@@ -427,6 +428,36 @@ func (m *Minter) PyID(file string, path ...string) (ID, error) {
 		}
 	}
 	return newID(SchemePy, string(rel)+"#"+strings.Join(path, "."))
+}
+
+// RustID mints the ID of a Rust file, or of a declaration in it (ADR 002
+// rule 16, #72): its file and the declaration's path inside the file, each
+// inline module, function or type holding it a segment —
+// RustID("crates/pb/src/wire.rs", "Reader", "skip"),
+// RustID("src/lib.rs", "outer", "inner"). A method of a trait
+// implementation carries the trait in its type's segment:
+// RustID("src/codec.rs", "Packed[Message]", "encode_to"). No path mints
+// the file. The file, not the crate's module path, anchors the ID: one
+// file can be compiled into several crates (a test helper every
+// integration test includes), and every test, bench and build script of a
+// package is a crate root of its own.
+func (m *Minter) RustID(file string, path ...string) (ID, error) {
+	rel, err := m.RelPath(file)
+	if err != nil {
+		return "", fmt.Errorf("rust: %w", err)
+	}
+	if len(path) == 0 {
+		return newID(SchemeRust, string(rel))
+	}
+	for _, name := range path {
+		if name == "" || strings.Contains(name, ".") {
+			return "", fmt.Errorf("rust: declaration name %q is empty or contains %q", name, ".")
+		}
+		if err := checkChars(name); err != nil {
+			return "", fmt.Errorf("rust: declaration name: %w", err)
+		}
+	}
+	return newID(SchemeRust, string(rel)+"#"+strings.Join(path, "."))
 }
 
 // TSPackageID mints the ID of a package imported by bare specifier and

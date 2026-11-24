@@ -244,13 +244,19 @@ var pythonNote = func() string {
 	return "Python files are in it without their declarations or calls: this build has no CPython"
 }()
 
+// rustNote says how the graph holds Rust (ADR 009, #72): the machine's own
+// rust-analyzer resolves it, so a machine without one has the files only,
+// each saying why.
+const rustNote = "Rust is resolved by the machine's own rust-analyzer, a Rust file's node saying so when its toolchain is missing: " +
+	"a function reference followed by ( or ::< is a call, one named as a value a references edge, and a trait implementation's method is Type[Trait].method"
+
 // instructions load with the server even when an agent defers the tool
 // schemas, so they carry what the graph cannot answer (#173): a text
 // question asked of it gets an incomplete answer that looks whole.
-var instructions = `alidade is a graph of a repository: Go, TypeScript and Python declarations with
+var instructions = `alidade is a graph of a repository: Go, TypeScript, Python and Rust declarations with
 type-resolved call graphs (a JSX element is a call; ` + svelteNote + `; a call
 through an interface reaches its implementations, via=interface in TypeScript; a TypeScript or Python class's implements edges also reach
-the class it inherits from, its direct base only; ` + pythonNote + `), plus schema
+the class it inherits from, its direct base only; ` + pythonNote + `; ` + rustNote + `), plus schema
 (proto, SQL, PXF) and document layers.
 A Go references edge joins a declaration to a type it names, or a function
 to a package-level constant or variable it reads or writes. Start with find_nodes for an ID, then neighbors or shortest_path; or

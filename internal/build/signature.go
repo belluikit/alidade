@@ -19,6 +19,7 @@ import (
 	"github.com/belluikit/alidade/internal/adapter/proto"
 	"github.com/belluikit/alidade/internal/adapter/pxf"
 	"github.com/belluikit/alidade/internal/adapter/py"
+	"github.com/belluikit/alidade/internal/adapter/rust"
 	"github.com/belluikit/alidade/internal/adapter/sql"
 	"github.com/belluikit/alidade/internal/adapter/ts"
 )
@@ -49,7 +50,7 @@ var walkSkip = map[string]bool{".git": true, "node_modules": true}
 // expensive layer for nothing — the direction this file errs in.
 var layerSkip = map[string]map[string]bool{
 	"proto": proto.SkipDirs, "sql": sql.SkipDirs, "pxf": pxf.SkipDirs,
-	"goasm": goasm.SkipDirs, "ts": ts.SkipDirs, "py": py.SkipDirs, "md": markdown.SkipDirs,
+	"goasm": goasm.SkipDirs, "ts": ts.SkipDirs, "py": py.SkipDirs, "rust": rust.SkipDirs, "md": markdown.SkipDirs,
 }
 
 // A read is one layer's dependence on a file: on its content, read only
@@ -87,6 +88,12 @@ var (
 		"sqlc.yaml": {{"sql", own}}, "sqlc.yml": {{"sql", own}}, "sqlc.json": {{"sql", own}},
 		"svelte.config.js": {{"ts", own}}, ".gitignore": {{"ts", own}},
 		"package.json": {{"ts", own}}, "jsconfig.json": {{"ts", own}},
+		// What cargo and rust-analyzer read to place a file in a crate and
+		// type it (ADR 009): the manifests, the lock file, the toolchain a
+		// directory pins, and cargo's configuration.
+		"Cargo.toml": {{"rust", own}}, "Cargo.lock": {{"rust", own}},
+		"rust-toolchain": {{"rust", own}}, "rust-toolchain.toml": {{"rust", own}},
+		"config.toml": {{"rust", own}},
 	}
 	byExt = map[string][]read{
 		".go":    {{"go", own}, {"goasm", own}, {"md", presence}},
@@ -95,6 +102,9 @@ var (
 		// A Python file is the Python layer's, and the Markdown layer's
 		// links to it resolve by its existence.
 		".py": {{"py", own}, {"md", presence}},
+		// A Rust file is the Rust layer's, and so is its existence to the
+		// Markdown layer, as a Python file's.
+		".rs": {{"rust", own}, {"md", presence}},
 	}
 	// dirReads: a directory's existence decides how a Markdown link to it
 	// resolves.

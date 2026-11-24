@@ -5,7 +5,9 @@ is read, which engine reads it, how alidade reaches that engine, and that Cargo'
 build runs. Then, on #72, the same day: the layer's IDs, its call rule, where trait
 implementations come from (revising #71's answer after a measurement), a machine
 without the toolchain, when `serve` answers, and the oracle ("The layer" below).
-Nothing is built yet (#72).
+Built so far (#72): file nodes, declarations, calls and references, and a machine
+without the toolchain. Not yet: implementations (LSP and SCIP), and the link from
+generated types to their `.proto` messages.
 **Date:** 2026-11-24
 **Relates to:** [000](000-composition-boundary.md), [002](002-node-identity.md),
 [003](003-corpus-scope.md), [004](004-generated-code.md),
@@ -219,24 +221,68 @@ generated files has the latter.
   (ADR 005).
 - **The oracle is rustc.** Each crate is compiled to LLVM IR at opt-level 0, whose
   direct calls are rustc's own resolution, and compared with the layer's call
-  edges. rustc is an engine independent of rust-analyzer. Probed on protowire-pb
-  (2.7 s): on the 43 functions both sides had, 65 edges agree, rustc had 0 the rule
-  lacked, and the rule had 2 rustc lacked.
-  - One of the 2 is a call through a generic trait bound (`write_message` to
-    `Message::encode_to`), which rustc compiles only once instantiated.
-  - The other, `Reader::new` to `Limits::default`, is not explained yet.
+  edges. rustc is an engine independent of rust-analyzer.
 
   Its limits:
-  - it sees only the functions rustc compiles as they are (43 of 81 callers here;
-    generic ones only when instantiated);
+  - it sees only the functions rustc compiles as they are: a generic function only
+    where it is instantiated, and a closure in a returned `impl Iterator` only where
+    the iterator is used;
   - a call through `dyn` is an indirect call it cannot name;
-  - rustc 1.99's default symbol format needs a decoder. The probe used the legacy
-    format, a nightly-only flag, through `RUSTC_BOOTSTRAP=1`.
+  - rustc 1.99's default symbol format needs a decoder. The comparison below used
+    the legacy format, a nightly-only flag, through `RUSTC_BOOTSTRAP=1`.
 
-Not in this version: edges for `use` declarations, and whether a call to a trait's
-method also reaches that trait's implementations, as a TypeScript call through an
-interface does (ADR 007). A call through a trait method goes to the method as
-rust-analyzer resolves it.
+  *Corrected 2026-11-24, by the layer's own edges.* The probe this bullet first
+  reported (65 edges agree on 43 functions, one edge "not explained yet") came
+  from a comparison that could not read three of rustc's name forms: a quoted
+  symbol, a closure (`_{{closure}}`), and a method of an `impl` that sits in
+  another module than its type (`api::<impl FieldDescriptor>::is_list`). The
+  unexplained edge, `Reader::new` to `Limits::default`, is a real call rustc has
+  too. With those forms read, against the layer's edges:
+
+  | crate | functions both have | agree | rustc only | layer only |
+  |---|---|---|---|---|
+  | protowire-pb | 55 | 108 | 3 | 1 |
+  | prost-reflect | 355 | 756 | 187 | 65 |
+
+  Every difference has a cause other than a wrong edge:
+  - **A call through a generic trait bound:** protowire-pb's 3 and 1, and
+    prost-reflect's 78 and 48. The layer's edge goes to the trait's method,
+    `write_message` to `Message::encode_to`, where rustc names each
+    instantiation, `<BigInt as Message>::encode_to`. Reaching the
+    implementations is not in this version (below).
+  - **A call to a function a derive or a proc macro wrote:** 107 of
+    prost-reflect's rustc-only, such as `EnumDescriptorProto::name`, which
+    `#[derive(prost::Message)]` writes. Such a function has no node.
+  - **A closure rustc never compiles:** 16 of prost-reflect's layer-only, in
+    the iterators `FileDescriptor::messages` and its like return.
+  - **The configuration:** one each side, `option_to_message`, whose two
+    definitions are behind `cfg(feature = "text-format")` and its negation.
+    rust-analyzer reads the workspace's unified features, where another member
+    turns it on; the rustc build was of the one package.
+  - **The comparison's own reading:** 1, a closure attributed to the function
+    defining it.
+
+Not in this version:
+- edges for `use` declarations;
+- whether a call to a trait's method also reaches that trait's implementations, as
+  a TypeScript call through an interface does (ADR 007). A call through a trait
+  method goes to the method as rust-analyzer resolves it;
+- a node for a function a derive or a proc macro writes;
+- a node for an item of an `impl` whose type has no name an ID can hold, a slice
+  or a tuple (`impl MapEntryField for [u8]`). It is skipped, and the report says
+  so: 2 items on protowire-rust, none on prost-reflect;
+- more than one configuration. rust-analyzer reads one: the workspace's features
+  as Cargo unifies them, and the host's target.
+
+**Measured on the built layer** (`alidade graph`, the whole graph, all layers):
+
+| repository | Rust nodes | files not read | calls | references | time | peak memory |
+|---|---|---|---|---|---|---|
+| protowire-rust | 3,801 | 0 | 4,611 | 16 | 7.2 s | 1.30 GB |
+| prost-reflect | 1,949 | 7 | 2,067 | 86 | 14.2 s | 1.35 GB |
+
+prost-reflect's 7 files are compile-fail cases that `prost-reflect-derive`'s tests
+feed rustc. No crate includes them, and each says so.
 
 ## Assumptions, each with the test #72 must add
 

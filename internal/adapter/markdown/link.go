@@ -137,13 +137,19 @@ type index struct {
 	// main package by its directory's name, as its command is called
 	// (#7). Both answer only when nothing else does.
 	byPathSuffix, byCommand map[string][]graph.ID
+	// byRustPath holds the Rust layer's declarations as Rust writes a
+	// path, Holder::member (ADR 009): `Square::new`, and a trait
+	// implementation's method by its type, `Square::area`, whichever
+	// trait it implements.
+	byRustPath map[string][]graph.ID
 }
 
 func newIndex() *index {
 	return &index{byName: map[string][]graph.ID{}, byDotted: map[string][]graph.ID{}, byPath: map[string][]graph.ID{},
 		byBase: map[string][]graph.ID{}, byProcedure: map[string][]graph.ID{},
 		byPkgMethod: map[string][]graph.ID{}, byPackagePath: map[string][]graph.ID{}, byField: map[string][]graph.ID{},
-		byFrontend: map[string][]graph.ID{}, byPathSuffix: map[string][]graph.ID{}, byCommand: map[string][]graph.ID{}}
+		byFrontend: map[string][]graph.ID{}, byPathSuffix: map[string][]graph.ID{}, byCommand: map[string][]graph.ID{},
+		byRustPath: map[string][]graph.ID{}}
 }
 
 func (ix *index) put(m map[string][]graph.ID, key string, id graph.ID) {
@@ -177,7 +183,7 @@ func (ix *index) add(n graph.Node, scheme graph.Scheme) {
 		ix.addSQL(n, body)
 	case graph.SchemePXF:
 		ix.addPXF(n, body)
-	case graph.SchemeTS, graph.SchemeGoasm, graph.SchemePy:
+	case graph.SchemeTS, graph.SchemeGoasm, graph.SchemePy, graph.SchemeRust:
 		ix.addFileDecl(n, body)
 	}
 }
@@ -298,6 +304,11 @@ func (ix *index) addFileDecl(n graph.Node, body string) {
 	switch {
 	case !hasDecl:
 		ix.file(rel, n.ID)
+	case strings.HasPrefix(string(n.ID), "rust://"):
+		// A Rust declaration answers last too, as Python's (ADR 009), and
+		// also as Rust writes its path.
+		ix.put(ix.byFrontend, decl, n.ID)
+		ix.put(ix.byRustPath, rustPath(decl), n.ID)
 	case (strings.HasPrefix(string(n.ID), "ts://") || strings.HasPrefix(string(n.ID), "py://")) && !n.Generated:
 		// A hand-written TypeScript or Python declaration answers a
 		// mention only when no other layer's does (#215, #237): a name a
@@ -306,6 +317,17 @@ func (ix *index) addFileDecl(n graph.Node, body string) {
 	default:
 		ix.put(ix.byName, n.Name, n.ID)
 	}
+}
+
+// rustPath is a Rust declaration's path in a file as Rust writes it: its
+// segments joined by "::", an implementation's trait left out
+// ("Square[Area].area" is Square::area).
+func rustPath(decl string) string {
+	segs := strings.Split(decl, ".")
+	for i, s := range segs {
+		segs[i], _, _ = strings.Cut(s, "[")
+	}
+	return strings.Join(segs, "::")
 }
 
 // file indexes a file node by its path as a link or a mention writes it:
@@ -319,7 +341,8 @@ func (ix *index) file(rel string, id graph.ID) {
 var (
 	bareRE   = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 	dottedRE = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)+$`)
-	extRE    = regexp.MustCompile(`\.(md|proto|pxf|goasm|py|` + frontendExts() + `)$`)
+	rustRE   = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*(::[A-Za-z_][A-Za-z0-9_]*)+$`)
+	extRE    = regexp.MustCompile(`\.(md|proto|pxf|goasm|py|rs|` + frontendExts() + `)$`)
 )
 
 // lookup returns every node a mention names, deduplicated. The caller
@@ -334,6 +357,8 @@ func (ix *index) lookup(text string) []graph.ID {
 		ids = ix.pathLookup(text)
 	case dottedRE.MatchString(text):
 		ids = ix.dotted(text)
+	case rustRE.MatchString(text):
+		ids = ix.byRustPath[text]
 	case bareRE.MatchString(text) && strings.ToUpper(text) != text, hyphenRE.MatchString(text):
 		ids = ix.bare(text)
 	}
