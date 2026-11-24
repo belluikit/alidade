@@ -46,6 +46,18 @@ jobs:
       # component is unchecked and Python unresolved, each saying so, and
       # that path is tested too. CGO_LDFLAGS is the build's own, not the
       # runner's: Homebrew's point at its libraries.
+      # The Rust layer reads Rust through the machine's own rust-analyzer
+      # (ADR 009): the toolchain with its rust-analyzer and the standard
+      # library's source. ALIDADE_REQUIRE_RUST makes the Rust tests fail
+      # rather than skip when any of it is missing, so CI never passes the
+      # layer unchecked.
+      - name: Rust toolchain
+        run: |
+          rustup toolchain install stable --profile minimal --component rust-analyzer,rust-src
+          rustup default stable
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+          echo "ALIDADE_REQUIRE_RUST=1" >> "$GITHUB_ENV"
+
       - name: go vet
         run: |
           go vet ./...
@@ -85,6 +97,18 @@ jobs:
 
       - name: Install zig
         run: scripts/install-zig.sh "$RUNNER_TEMP/zig"
+
+      # The Rust layer reads Rust through the machine's own rust-analyzer
+      # (ADR 009): the toolchain with its rust-analyzer and the standard
+      # library's source. ALIDADE_REQUIRE_RUST makes the Rust tests fail
+      # rather than skip when any of it is missing, so CI never passes the
+      # layer unchecked.
+      - name: Rust toolchain
+        run: |
+          rustup toolchain install stable --profile minimal --component rust-analyzer,rust-src
+          rustup default stable
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+          echo "ALIDADE_REQUIRE_RUST=1" >> "$GITHUB_ENV"
 
       - name: go vet
         run: |
