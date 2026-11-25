@@ -79,6 +79,12 @@ type Report struct {
 	// GeneratesConflicting the ones left out because the code states
 	// other names for itself.
 	GeneratedFiles, Generated, Generates, GeneratesConflicting int
+	// Included counts the hand-written files of the repository that the
+	// workspace includes with include! and no module declares, whose items
+	// are nodes at the file (#84) and are counted in Declarations;
+	// IncludedAgain the include!s of such a file after its first, which
+	// add no nodes and are reported.
+	Included, IncludedAgain int
 	// Implements counts the edges from a type to a workspace trait it
 	// implements; ImplementsUnplaced the implementations with no edge: of
 	// a type with no node (a type parameter, a slice, a type outside the
@@ -105,7 +111,7 @@ func Extract(b *graph.Builder, root string, opts Options) (*Report, error) {
 		abs = real // rust-analyzer reports resolved paths; the walk must agree
 	}
 	x := &extractor{b: b, m: b.Minter(), root: abs, report: &Report{}, emitted: map[graph.ID]bool{},
-		docs: map[string]*doc{}, external: map[string]bool{}}
+		docs: map[string]*doc{}, external: map[string]bool{}, included: map[string]map[graph.ID]*def{}}
 	files, manifests, err := x.discover(opts)
 	if err != nil {
 		return nil, fmt.Errorf("rust: discover under %s: %w", abs, err)
@@ -134,16 +140,13 @@ func (x *extractor) read(files, manifests []string) error {
 			x.index(manifests)
 		}
 	}
-	if err := x.files(files); err != nil {
-		return err
-	}
 	defer x.closeServers()
 	for _, step := range []func() error{x.declarations, x.generated, x.macroWritten, x.edges, x.implementations} {
 		if err := step(); err != nil {
 			return err
 		}
 	}
-	return nil
+	return x.files(files) // last: which files an include! reads is known only then
 }
 
 type extractor struct {
@@ -159,6 +162,9 @@ type extractor struct {
 	// items Cargo's build generated (ADR 009).
 	external map[string]bool
 	emitted  map[graph.ID]bool
+	// included are the items of each hand-written file an include! reads,
+	// by its repo-relative path (#84).
+	included map[string]map[graph.ID]*def
 	// bySym maps a symbol to the declarations defining it: one per symbol
 	// but in a package with several crate roots, whose tests, benches and
 	// build script share its symbols (ADR 002 rule 16).
@@ -249,7 +255,10 @@ func (x *extractor) files(files []string) error {
 		}
 		x.report.Files++
 		attrs := map[string]string{}
-		if x.docs[rel] == nil {
+		switch {
+		case x.included[rel] != nil:
+			attrs["calls_unavailable"] = "its calls and implementations are not read: an include! reads it, and rust-analyzer's index has no document for such a file; its items are read from the server's outline (#88)"
+		case x.docs[rel] == nil:
 			x.report.Unanalyzed++
 			why := "no crate rust-analyzer indexed includes the file: it is outside every Cargo workspace, or no target or module declaration names it"
 			if x.report.Unavailable != "" {

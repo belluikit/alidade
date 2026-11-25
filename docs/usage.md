@@ -311,8 +311,11 @@ inside `pub mod proto` in `src/lib.rs` makes `src/lib.rs#proto.Scalars`. Calls
 into it are edges. A `.proto` message or enum has a **`generates`** edge
 (DECLARED, `via=prost`) to the struct or enum prost-build wrote for it. A struct
 that states another name for itself (prost-reflect's `message_name`, prost's
-`impl Name`) has none, and `graph_issues` lists it. An `include!` of a
-hand-written file in the repository is not followed (#84).
+`impl Name`) has none, and `graph_stats` lists it among what the build
+skipped. A hand-written file of the repository that an `include!` reads has
+its items identified at that file (`src/hand.rs#by_hand()`), not marked
+generated, and calls into them are edges. The calls and implementations
+written in it are not read, and its file node says so (#88).
 
 **`documents`** joins a doc to a declaration. The edge comes from a code
 span naming exactly one declaration. A schema field and the `.pxf` entries

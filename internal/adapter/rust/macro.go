@@ -21,14 +21,17 @@ import (
 // all there is, and it names the module, the type, the trait if any and
 // the method. So only a method something calls has a node. rust-analyzer's
 // server is no help: it places such a method at what the macro read, the
-// field. Each is registered as the symbol's definition, for the calls.
+// field. Each is registered as the symbol's definition, for the calls. A
+// type of an included file is one too: the index lists the method as
+// external, as everything in such a file is, and its type's node is the
+// generated or included item (Shape[Clone].clone(), #84).
 func (x *extractor) macroWritten() error {
 	pkgs := x.packages()
 	for _, rel := range slices.Sorted(maps.Keys(x.docs)) {
 		dc := x.docs[rel]
 		for _, o := range dc.d.GetOccurrences() {
 			sym, _, _, ok := referenceAt(o)
-			if !ok || x.bySym[sym] != nil || x.external[sym] {
+			if !ok || x.bySym[sym] != nil {
 				continue
 			}
 			d := x.writtenFor(sym, pkgs, dc)
