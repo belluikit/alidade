@@ -367,3 +367,34 @@ func TestRebuildRust(t *testing.T) {
 		t.Errorf("after a Cargo.toml edit rebuilt %v; want rust and not go", rep.Rebuilt)
 	}
 }
+
+// TestRustWritesNothing builds a Cargo package that has no Cargo.lock.
+// rust-analyzer 1.100's cargo metadata writes one into the tree unless
+// it is pointed elsewhere, and the next build then reran the Rust layer
+// with nothing edited (#81). The package declares a trait so that
+// rust-analyzer's server runs too, as well as its indexer.
+func TestRustWritesNothing(t *testing.T) {
+	root := t.TempDir()
+	write(t, filepath.Join(root, "Cargo.toml"), "[package]\nname = \"tool\"\nversion = \"0.1.0\"\nedition = \"2021\"\n")
+	write(t, filepath.Join(root, "src/lib.rs"), "pub fn f() {}\n\npub fn g() {\n    f()\n}\n\npub trait Shape {}\n\npub struct Square;\n\nimpl Shape for Square {}\n")
+	s := newSession(t, root)
+	g, rep := mustSessionBuild(t, s)
+	if rep.Rust.Unavailable != "" {
+		if os.Getenv("ALIDADE_REQUIRE_RUST") != "" {
+			t.Fatalf("ALIDADE_REQUIRE_RUST is set and the toolchain is missing: %s", rep.Rust.Unavailable)
+		}
+		t.Skipf("no Rust toolchain: %s", rep.Rust.Unavailable)
+	}
+	if !linked(g, "rust://src/lib.rs#g", "rust://src/lib.rs#f") {
+		t.Fatal("g's call of f is not in the graph, so rust-analyzer did not index the package")
+	}
+	if rep.Rust.ServerColumns == "" || !linked(g, "rust://src/lib.rs#Square", "rust://src/lib.rs#Shape") {
+		t.Fatalf("server columns %q and no Square implements Shape, so rust-analyzer's server did not answer", rep.Rust.ServerColumns)
+	}
+	if _, err := os.Stat(filepath.Join(root, "Cargo.lock")); err == nil {
+		t.Error("the build wrote Cargo.lock into the tree")
+	}
+	if _, rep := mustSessionBuild(t, s); len(rep.Rebuilt) != 0 {
+		t.Errorf("with nothing edited, the second build rebuilt %v; want nothing", rep.Rebuilt)
+	}
+}
