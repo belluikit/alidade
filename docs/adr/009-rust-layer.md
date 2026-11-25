@@ -224,8 +224,9 @@ generated files has the latter.
 
 ## The layer (decided 2026-11-24, the owner's calls on #72)
 
-- **IDs** (ADR 002 rule 16): the file, then the item's path inside it, as for Python.
-  `rust://crates/protowire-pb/src/wire.rs#Reader.skip`.
+- **IDs** (ADR 002 rule 16): the file, then the item's path inside it, as for Python,
+  a function's segment ending in `()`.
+  `rust://crates/protowire-pb/src/wire.rs#Reader.skip()`.
   - **Why not SCIP's symbols, or the crate's module path.** SCIP's symbols are per
     Cargo package, not per compiled crate. Integration tests, benches, `build.rs` and
     `main.rs` all share one root, so 76 of protowire-rust's 3,558 defined symbols
@@ -233,7 +234,7 @@ generated files has the latter.
     A crate-and-module ID would need a segment for each test, bench, bin and build
     script. It would also make one declaration several nodes: 6 of protowire-pxf's
     test crates compile the same `tests/common/mod.rs`.
-  - **A trait's method carries the trait:** `Packed[Message].encode_to`. prost-reflect's
+  - **A trait's method carries the trait:** `Packed[Message].encode_to()`. prost-reflect's
     `DescriptorError` has `fmt` for both `Debug` and `Display`, the one type and
     method name implemented for two traits in either repository.
   - **A generated type anchors at the file holding its `include!`:**
@@ -280,8 +281,12 @@ generated files has the latter.
 
   | crate | functions both have | agree | rustc only | layer only |
   |---|---|---|---|---|
-  | protowire-pb | 55 | 108 | 3 | 1 |
-  | prost-reflect | 355 | 756 | 187 | 65 |
+  | protowire-pb | 56 | 109 | 3 | 1 |
+  | prost-reflect | 364 | 858 | 94 | 67 |
+
+  (Measured with the IDs of rule 16 as amended, after a function's `()` and the
+  nodes of macro-written methods: before them prost-reflect had 756 agreeing on
+  355 functions, and 107 rustc-only edges to functions with no node, now 0.)
 
   Every difference has a cause other than a wrong edge:
   - **A call through a generic trait bound:** protowire-pb's 3 and 1, and
@@ -289,11 +294,11 @@ generated files has the latter.
     `write_message` to `Message::encode_to`, where rustc names each
     instantiation, `<BigInt as Message>::encode_to`. Reaching the
     implementations is not in this version (below).
-  - **A call to a function a derive or a proc macro wrote:** 107 of
-    prost-reflect's rustc-only, such as `EnumDescriptorProto::name`, which
-    `#[derive(prost::Message)]` writes. Such a function has no node.
-  - **A closure rustc never compiles:** 16 of prost-reflect's layer-only, in
-    the iterators `FileDescriptor::messages` and its like return.
+  - **A call an operator makes:** 14 of prost-reflect's rustc-only, `==` calling
+    a derived `PartialEq::eq`. Not in this version (below).
+  - **A closure rustc never compiles:** 18 of prost-reflect's layer-only, in
+    the iterators `FileDescriptor::messages`, `MessageDescriptor::extension_ranges`
+    and their like return.
   - **The configuration:** one each side, `option_to_message`, whose two
     definitions are behind `cfg(feature = "text-format")` and its negation.
     rust-analyzer reads the workspace's unified features, where another member
@@ -306,10 +311,11 @@ Not in this version:
 - whether a call to a trait's method also reaches that trait's implementations, as
   a TypeScript call through an interface does (ADR 007). A call through a trait
   method goes to the method as rust-analyzer resolves it;
-- a node for a function a derive or a proc macro writes;
-- a node for an item of an `impl` whose type has no name an ID can hold, a slice
-  or a tuple (`impl MapEntryField for [u8]`). It is skipped, and the report says
-  so: 2 items on protowire-rust, none on prost-reflect;
+- a node for a method a derive or a macro writes that nothing calls. One that
+  something calls has a node under its type (ADR 002 rule 16, amended);
+- a call an operator makes: `==` calls `PartialEq::eq`, `+` `Add::add`, a scope's
+  end `Drop::drop`, `?` `From::from`, with no reference in the source to read. On
+  prost-reflect, 14 of rustc's call edges are `==`;
 - more than one configuration. rust-analyzer reads one: the workspace's features
   as Cargo unifies them, and the host's target.
 

@@ -357,7 +357,7 @@ func TestRebuildRust(t *testing.T) {
 	if !slices.Contains(rep.Rebuilt, "rust") || !slices.Contains(rep.Kept, "go") {
 		t.Errorf("rebuilt %v kept %v; want rust rebuilt and go kept", rep.Rebuilt, rep.Kept)
 	}
-	if resolved && !linked(g, "rust://src/lib.rs#g", "rust://src/lib.rs#f") {
+	if resolved && !linked(g, "rust://src/lib.rs#g()", "rust://src/lib.rs#f()") {
 		t.Error("g's call of f is not in the graph")
 	}
 	sameAsFresh(t, root, g)

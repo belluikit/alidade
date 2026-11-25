@@ -622,11 +622,11 @@ func TestRustDeclarations(t *testing.T) {
 	b := graph.NewBuilder(t.TempDir())
 	for _, n := range []graph.Node{
 		{ID: "rust://src/lib.rs", Kind: graph.KindModule, Name: "lib.rs"},
-		{ID: "rust://src/lib.rs#Square.new", Kind: graph.KindMethod, Name: "new"},
-		{ID: "rust://src/lib.rs#Square[Area].area", Kind: graph.KindMethod, Name: "area"},
-		{ID: "rust://src/lib.rs#Square[Debug].fmt", Kind: graph.KindMethod, Name: "fmt"},
-		{ID: "rust://src/lib.rs#Square[Display].fmt", Kind: graph.KindMethod, Name: "fmt"},
-		{ID: "rust://src/lib.rs#area_of", Kind: graph.KindFunc, Name: "area_of"},
+		{ID: "rust://src/lib.rs#Square.new()", Kind: graph.KindMethod, Name: "new"},
+		{ID: "rust://src/lib.rs#Square[Area].area()", Kind: graph.KindMethod, Name: "area"},
+		{ID: "rust://src/lib.rs#Square[Debug].fmt()", Kind: graph.KindMethod, Name: "fmt"},
+		{ID: "rust://src/lib.rs#Square[Display].fmt()", Kind: graph.KindMethod, Name: "fmt"},
+		{ID: "rust://src/lib.rs#area_of()", Kind: graph.KindFunc, Name: "area_of"},
 	} {
 		if err := b.AddNode(n); err != nil {
 			t.Fatal(err)
@@ -634,10 +634,10 @@ func TestRustDeclarations(t *testing.T) {
 	}
 	ix := buildIndex(b.Build())
 	for text, want := range map[string]string{
-		"Square::new":  "rust://src/lib.rs#Square.new",
-		"Square::area": "rust://src/lib.rs#Square[Area].area",
-		"Square.new":   "rust://src/lib.rs#Square.new",
-		"area_of":      "rust://src/lib.rs#area_of",
+		"Square::new":  "rust://src/lib.rs#Square.new()",
+		"Square::area": "rust://src/lib.rs#Square[Area].area()",
+		"Square.new":   "rust://src/lib.rs#Square.new()",
+		"area_of":      "rust://src/lib.rs#area_of()",
 		"src/lib.rs":   "rust://src/lib.rs",
 		"Square::fmt":  "", // two traits' fmt
 	} {

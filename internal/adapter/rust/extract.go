@@ -58,8 +58,10 @@ type Report struct {
 	// outside every workspace, a compile-fail case a test feeds rustc).
 	Unanalyzed  int
 	Unavailable string
-	// Declarations counts the declaration nodes.
-	Declarations int
+	// Declarations counts the declaration nodes; MacroWritten the nodes of
+	// the methods a derive or a macro writes, which the workspace calls
+	// (Square[Clone].clone()), among them.
+	Declarations, MacroWritten int
 	// Of CallSites, the calls inside a function body to a function, Calls
 	// are edges (distinct per caller and callee); the rest call a function
 	// outside the workspace (CallsOutside: the standard library, a
@@ -105,30 +107,35 @@ func Extract(b *graph.Builder, root string, opts Options) (*Report, error) {
 		x.report.Elapsed = time.Since(start)
 		return x.report, nil
 	}
+	if err := x.read(files, manifests); err != nil {
+		return nil, err
+	}
+	x.report.Elapsed = time.Since(start)
+	return x.report, nil
+}
+
+// read has the workspaces indexed, when the toolchain is there, and adds
+// the files, their items, the methods macros write, the calls and
+// references, and the implementations.
+func (x *extractor) read(files, manifests []string) error {
 	x.reading = map[string]bool{}
 	for _, f := range files {
 		x.reading[f] = true
 	}
 	if len(manifests) > 0 {
-		x.report.Unavailable = toolchainMissing(abs)
-		if x.report.Unavailable == "" {
+		if x.report.Unavailable = toolchainMissing(x.root); x.report.Unavailable == "" {
 			x.index(manifests)
 		}
 	}
 	if err := x.files(files); err != nil {
-		return nil, err
+		return err
 	}
-	if err := x.declarations(); err != nil {
-		return nil, err
+	for _, step := range []func() error{x.declarations, x.macroWritten, x.edges, x.implementations} {
+		if err := step(); err != nil {
+			return err
+		}
 	}
-	if err := x.edges(); err != nil {
-		return nil, err
-	}
-	if err := x.implementations(); err != nil {
-		return nil, err
-	}
-	x.report.Elapsed = time.Since(start)
-	return x.report, nil
+	return nil
 }
 
 type extractor struct {

@@ -16,9 +16,68 @@ pub trait Area {
     fn area(&self) -> f64;
 }
 
-#[derive(Default)]
+#[derive(Default, Clone, getters::Side)]
 pub struct Square {
     pub side: f64,
+}
+
+/// A field and a method of one name, written by hand: `Gauge.level` and
+/// `Gauge.level()` are two nodes (ADR 002 rule 16).
+pub struct Gauge {
+    pub level: u8,
+}
+
+impl Gauge {
+    pub fn level(&self) -> u8 {
+        self.level
+    }
+}
+
+/// An implementation on a reference: its type is Gauge.
+impl Area for &Gauge {
+    fn area(&self) -> f64 {
+        self.level as f64
+    }
+}
+
+/// Implementations on types with no name, a slice and a tuple, named by
+/// word forms.
+impl Area for [u8] {
+    fn area(&self) -> f64 {
+        self.len() as f64
+    }
+}
+
+impl Area for (i32, i32) {
+    fn area(&self) -> f64 {
+        (self.0 * self.1) as f64
+    }
+}
+
+impl Area for [u8; 4] {
+    fn area(&self) -> f64 {
+        4.0
+    }
+}
+
+impl Area for ((u8, u8), u8) {
+    fn area(&self) -> f64 {
+        3.0
+    }
+}
+
+impl Area for [(u8, u16)] {
+    fn area(&self) -> f64 {
+        self.len() as f64
+    }
+}
+
+/// Calls into code macros wrote: the getter Side derives, Clone's clone,
+/// and round_shape!'s Circle area.
+pub fn written() -> f64 {
+    let s = Square::new(1.0);
+    let c = Circle { radius: 1.0 };
+    s.side() + s.clone().side + c.area() + Gauge { level: 1 }.level() as f64
 }
 
 pub enum Kind {
