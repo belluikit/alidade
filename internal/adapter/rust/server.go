@@ -3,6 +3,11 @@
 
 package rust
 
+import (
+	"maps"
+	"slices"
+)
+
 // server is rust-analyzer's server on one workspace, started the first
 // time a step asks for it and shared by the steps after (generated code,
 // then implementations): loading a workspace is most of a server's cost.
@@ -28,11 +33,13 @@ func (x *extractor) server(ws string) *lsp {
 	return l
 }
 
-// closeServers stops every server a step started.
+// closeServers stops every server a step started, and reports the build
+// scripts each says failed: its log is whole once it has exited.
 func (x *extractor) closeServers() {
-	for _, l := range x.servers {
-		if l != nil {
+	for _, ws := range slices.Sorted(maps.Keys(x.servers)) {
+		if l := x.servers[ws]; l != nil {
 			l.close()
+			x.reportBuild(ws, l)
 		}
 	}
 	x.servers = nil

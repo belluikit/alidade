@@ -129,6 +129,20 @@ says which crate. prost-reflect's conformance crate fails without its `protobuf`
 submodule ("protobuf sources are not checked out"). Its `main.rs` keeps 85 unknown
 expressions with the build or without it.
 
+*Built 2026-11-25 (#85), the owner's decisions recorded there.* The index says
+nothing when a script fails: `rust-analyzer scip` exits 0 and logs nothing of it,
+and Cargo keeps no record under `target/`. The server does, so it is started on
+every workspace with a build script. A server costs about 3.4 s on prost-reflect,
+paid only where no other step starts one. Its log, at `RA_LOG=error`, names each
+package (failed to run custom build command for `a v0.1.0 (…)`) and holds what
+the script printed. Each failed package is reported at its `Cargo.toml` with its exit
+and the last lines of its output, backtraces left out. One log entry can name
+several packages, in an order that varies between runs, so they are sorted. That
+line is log text, not an API: when it is missing, the server's status message is
+reported alone. On prost-reflect: `the build script of
+prost-reflect-conformance-tests v0.0.0 failed (exit status: 1)`, with the message
+above.
+
 ### Trait implementations come from LSP and SCIP together
 
 The SCIP index carries no relationships at all: 0 on protowire-rust, whose source has

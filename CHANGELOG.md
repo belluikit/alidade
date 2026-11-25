@@ -8,6 +8,14 @@ tracker's. From v0.12.1 on, every number is this repository's.
 
 ## Unreleased
 
+- **Added: a Rust build script that fails is reported** (#85). Its
+  package, how it exited and the last lines it printed are listed by
+  `graph_stats` among what the build skipped, at the package's
+  `Cargo.toml`. Before, the code it would have written was simply
+  missing. rust-analyzer's index says nothing of the failure; its server's
+  log does, so the server now starts on every workspace with a build
+  script. On prost-reflect that names the conformance tests, whose script
+  needs the `protobuf` submodule.
 - **Added: Rust code a build script writes, joined to its `.proto`
   messages** (#72). prost-build's output lives in Cargo's `target/`, which
   rust-analyzer's index leaves out. Each item of a file the workspace

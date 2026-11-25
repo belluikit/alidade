@@ -1,0 +1,221 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 TrendVidia, LLC.
+
+package rust
+
+import (
+	"os"
+	"path/filepath"
+	"slices"
+	"strconv"
+	"strings"
+	"testing"
+
+	"github.com/belluikit/alidade/internal/graph"
+)
+
+// TestBuildScriptFails reads testdata/buildfail, a workspace whose package
+// a has a build script that prints and panics, with a package c added
+// whose script exits 3 printing nothing. Each failed package is reported
+// at its manifest with how its script exited and what it printed, and
+// nothing that differs between two builds; package b beside them is read
+// (#85, the owner's decision). The index says nothing of the failures:
+// rust-analyzer's server does, which pins that its log names them. The
+// server is started for the build scripts alone, and a user's RA_LOG does
+// not silence it.
+func TestBuildScriptFails(t *testing.T) {
+	t.Setenv("RA_LOG", "off")
+	dir := fixtureOf(t, "buildfail", map[string]string{
+		"Cargo.toml":   "[workspace]\nmembers = [\"a\", \"b\", \"c\"]\nresolver = \"2\"\n",
+		"c/Cargo.toml": "[package]\nname = \"c\"\nversion = \"0.2.0\"\nedition = \"2021\"\n",
+		"c/build.rs":   "fn main() {\n    std::process::exit(3)\n}\n",
+		"c/src/lib.rs": "pub fn c() {}\n",
+	})
+	g, rep := extract(t, dir)
+	if rep.BuildScriptsFailed != 2 {
+		t.Errorf("BuildScriptsFailed %d; want 2", rep.BuildScriptsFailed)
+	}
+	var got []string
+	for _, s := range rep.Skipped {
+		got = append(got, s.File+": "+s.Reason)
+		if strings.Contains(s.Reason, dir) || strings.Contains(s.Reason, "/private/") || strings.Contains(s.Reason, "(1") {
+			t.Errorf("reason %q holds what differs between builds: a path or a thread id", s.Reason)
+		}
+	}
+	check(t, "skipped", got, []string{
+		"a/Cargo.toml: the build script of a v0.1.0 failed (exit status: 101), so the code it writes has no nodes; " +
+			"its stdout: need PROTOBUF; its stderr: protoc not found / thread 'main' panicked at a/build.rs:6:5: / no protoc",
+		"c/Cargo.toml: the build script of c v0.2.0 failed (exit status: 3), so the code it writes has no nodes",
+	})
+	for _, want := range []string{"b/src/lib.rs#b() -> b/src/lib.rs#helper()"} {
+		if !slices.Contains(edges(g, graph.KindCalls), want) {
+			t.Errorf("calls %v; want %s: the package beside the failed ones is read", edges(g, graph.KindCalls), want)
+		}
+	}
+	if !slices.Contains(nodes(g), "a/src/lib.rs#a() func") {
+		t.Errorf("nodes %v; want a's own a(), read though its build script failed", nodes(g))
+	}
+}
+
+// TestBuildFailuresFallBack: a log with no entry naming a package, as a
+// rust-analyzer that words it otherwise would write, reports the server's
+// status message on the workspace instead; a healthy one reports nothing.
+func TestBuildFailuresFallBack(t *testing.T) {
+	x := &extractor{m: graph.NewBuilder("/repo").Minter(), root: "/repo", report: &Report{}}
+	x.reportBuild("/repo", &lsp{stderr: &logBuffer{}, health: "warning",
+		status: "Failed to run build scripts of some packages.\n\nPlease refer to the language server logs for more details on the errors."})
+	x.reportBuild("/repo", &lsp{stderr: &logBuffer{}, health: "ok"})
+	if len(x.report.Skipped) != 1 || x.report.Skipped[0].Reason != "rust-analyzer's server reported warning: Failed to run build scripts of some packages." {
+		t.Errorf("skipped %+v; want the warning's first paragraph, once", x.report.Skipped)
+	}
+	if x.report.BuildScriptsFailed != 0 {
+		t.Errorf("BuildScriptsFailed %d; want 0: no package was named", x.report.BuildScriptsFailed)
+	}
+}
+
+// TestHasBuildScript decides as Cargo does: build.rs beside the manifest
+// unless `build = false`, or the script `build` names.
+func TestHasBuildScript(t *testing.T) {
+	for _, c := range []struct {
+		name, manifest string
+		buildRS, want  bool
+	}{
+		{"build.rs", "[package]\nname = \"p\"\n", true, true},
+		{"none", "[package]\nname = \"p\"\n", false, false},
+		{"turned off", "[package]\nname = \"p\"\nbuild = false\n", true, false},
+		{"named", "[package]\nname = \"p\"\nbuild = \"src/gen.rs\"\n", false, true},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			dir := t.TempDir()
+			if err := os.WriteFile(filepath.Join(dir, "Cargo.toml"), []byte(c.manifest), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			if c.buildRS {
+				if err := os.WriteFile(filepath.Join(dir, "build.rs"), []byte("fn main() {}\n"), 0o644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if got := hasBuildScript(filepath.Join(dir, "Cargo.toml")); got != c.want {
+				t.Errorf("got %v; want %v", got, c.want)
+			}
+		})
+	}
+}
+
+// recordedLog is rust-analyzer 1.100's log of TestBuildScriptFails's
+// workspace, as measured, its backtrace frames cut: one entry naming both
+// packages, c first (the order varies from run to run), and a line of a's
+// output holding the workspace's path.
+const recordedLog = `2026-11-24T21:49:24.578153-08:00  WARN notify error: No path was found. about ["/ws/rust-analyzer.toml"]
+2026-11-24T21:49:46.161943-08:00 ERROR FetchBuildDataError: error: failed to run custom build command for ` + "`c v0.2.0 (/ws/c)`" + `
+note: To improve backtraces for build dependencies, set the CARGO_PROFILE_DEV_BUILD_OVERRIDE_DEBUG=true environment variable to enable debug information generation.
+
+Caused by:
+  process didn't exit successfully: ` + "`/ws/target/debug/build/c/32fe21c9c9dcea50/out/build_script_build`" + ` (exit status: 3)
+error: failed to run custom build command for ` + "`a v0.1.0 (/ws/a)`" + `
+note: To improve backtraces for build dependencies, set the CARGO_PROFILE_DEV_BUILD_OVERRIDE_DEBUG=true environment variable to enable debug information generation.
+
+Caused by:
+  process didn't exit successfully: ` + "`/ws/target/debug/build/a/935b0e6bb13f6381/out/build_script_build`" + ` (exit status: 101)
+  --- stdout
+  need PROTOBUF in /ws/a/proto
+
+  --- stderr
+  protoc not found
+
+  thread 'main' (151298150) panicked at a/build.rs:6:5:
+  no protoc
+  stack backtrace:
+     0: __rustc::rust_begin_unwind
+               at /rustc/0ef1bc386059596dada8fb65b50425aab2ea637a/library/std/src/panicking.rs:676:5
+  note: Some details are omitted, run with ` + "`RUST_BACKTRACE=full`" + ` for a verbose backtrace.
+
+
+2026-11-24T21:49:46.284057-08:00  WARN notify error: No path was found. about ["/ws/rust-analyzer.toml"]
+`
+
+// TestBuildFailuresRecorded reads the recorded log: both packages, in
+// their packages' order, the workspace's path and the thread id taken out,
+// the backtrace left out, and nothing after the entry read as output.
+func TestBuildFailuresRecorded(t *testing.T) {
+	x := &extractor{m: graph.NewBuilder("/ws").Minter(), root: "/ws", report: &Report{}}
+	b := &logBuffer{}
+	if _, err := b.Write([]byte(recordedLog)); err != nil {
+		t.Fatal(err)
+	}
+	x.reportBuild("/ws", &lsp{stderr: b, health: "warning", status: "Failed to run build scripts of some packages."})
+	var got []string
+	for _, s := range x.report.Skipped {
+		got = append(got, s.File+": "+s.Reason)
+	}
+	want := []string{
+		"a/Cargo.toml: the build script of a v0.1.0 failed (exit status: 101), so the code it writes has no nodes; " +
+			"its stdout: need PROTOBUF in a/proto; its stderr: protoc not found / thread 'main' panicked at a/build.rs:6:5: / no protoc",
+		"c/Cargo.toml: the build script of c v0.2.0 failed (exit status: 3), so the code it writes has no nodes",
+	}
+	if !slices.Equal(got, want) {
+		t.Errorf("skipped\n%s\nwant, in this order\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
+}
+
+// TestBuildFailureReasonCapped: a reason quotes the last lines of a
+// stream a script printed, where a script that panics says why.
+func TestBuildFailureReasonCapped(t *testing.T) {
+	f := buildFailure{pkg: "a v0.1.0", exit: "exit status: 1"}
+	for i := range 12 {
+		f.stdout = append(f.stdout, "line"+strconv.Itoa(i))
+	}
+	want := "the build script of a v0.1.0 failed (exit status: 1), so the code it writes has no nodes; its stdout: " +
+		"line2 / line3 / line4 / line5 / line6 / line7 / line8 / line9 / line10 / line11"
+	if got := f.reason("/ws"); got != want {
+		t.Errorf("got  %q\nwant %q", got, want)
+	}
+}
+
+// anyhowLog is prost-reflect's (@f82c954), as measured, its frames cut to
+// three: the conformance tests' build script returns an anyhow error,
+// whose backtrace has no closing note.
+const anyhowLog = `2026-11-24T21:55:24.585119-08:00 ERROR FetchBuildDataError: error: failed to run custom build command for ` + "`prost-reflect-conformance-tests v0.0.0 (/ws/prost-reflect-conformance-tests)`" + `
+note: To improve backtraces for build dependencies, set the CARGO_PROFILE_DEV_BUILD_OVERRIDE_DEBUG=true environment variable to enable debug information generation.
+
+Caused by:
+  process didn't exit successfully: ` + "`/ws/target/debug/build/prost-reflect-conformance-tests/0a1b/out/build_script_build`" + ` (exit status: 1)
+  --- stderr
+  Error: protobuf sources are not checked out; Try ` + "`git submodule update --init --recursive`" + `
+
+  Stack backtrace:
+     0: std::backtrace_rs::backtrace::libunwind::trace
+               at /rustc/0ef1bc386059596dada8fb65b50425aab2ea637a/library/std/src/../../backtrace/src/backtrace/libunwind.rs:117:9
+     4: <anyhow::Error>::msg::<&str>
+    20: _main
+
+
+
+`
+
+// TestBuildFailuresAnyhow: a script returning an error prints its message
+// and anyhow's backtrace; the reason has the message alone.
+func TestBuildFailuresAnyhow(t *testing.T) {
+	got := buildFailures(anyhowLog)
+	if len(got) != 1 {
+		t.Fatalf("%d failures; want 1", len(got))
+	}
+	want := "the build script of prost-reflect-conformance-tests v0.0.0 failed (exit status: 1), so the code it writes has no nodes; " +
+		"its stderr: Error: protobuf sources are not checked out; Try `git submodule update --init --recursive`"
+	if r := got[0].reason("/ws"); r != want {
+		t.Errorf("got  %q\nwant %q", r, want)
+	}
+}
+
+// TestBuildFailureAfterTrace: a line that is no frame, location or note
+// ends a backtrace, and is read as output again.
+func TestBuildFailureAfterTrace(t *testing.T) {
+	var f buildFailure
+	stream := ""
+	for _, line := range []string{"  --- stderr", "  boom", "  stack backtrace:", "     0: main", "        at ./build.rs:3:5", "  after"} {
+		stream = f.read(line, stream)
+	}
+	if !slices.Equal(f.stderr, []string{"boom", "after"}) {
+		t.Errorf("stderr %q; want boom, after", f.stderr)
+	}
+}

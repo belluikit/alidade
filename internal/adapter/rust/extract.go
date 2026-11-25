@@ -84,6 +84,11 @@ type Report struct {
 	// a type with no node (a type parameter, a slice, a type outside the
 	// workspace), or by a name two workspace traits share.
 	Implements, ImplementsUnplaced int
+	// BuildScriptsFailed counts the packages whose build script failed,
+	// each reported in Skipped with what it printed (#85): what it would
+	// have written has no nodes, and calls into it count as
+	// CallsGenerated.
+	BuildScriptsFailed int
 	// ServerColumns is how rust-analyzer's server counted columns, "utf-8"
 	// or "utf-16"; "" when no server was asked.
 	ServerColumns string
@@ -138,7 +143,7 @@ func (x *extractor) read(files, manifests []string) error {
 		return err
 	}
 	defer x.closeServers()
-	for _, step := range []func() error{x.declarations, x.generated, x.macroWritten, x.edges, x.implementations} {
+	for _, step := range []func() error{x.declarations, x.generated, x.macroWritten, x.edges, x.implementations, x.buildScripts} {
 		if err := step(); err != nil {
 			return err
 		}
@@ -166,10 +171,12 @@ type extractor struct {
 	// funcs are each document's functions with a node, what a body is;
 	// defsOf all its items with a node.
 	funcs, defsOf map[*doc][]*def
-	// indexed are the roots of the workspaces rust-analyzer indexed;
-	// servers its servers on them, by root, once a step has asked.
-	indexed []string
-	servers map[string]*lsp
+	// indexed are the roots of the workspaces rust-analyzer indexed, and
+	// manifests their packages' Cargo.toml files, by root; servers its
+	// servers on them, by root, once a step has asked.
+	indexed   []string
+	manifests map[string][]string
+	servers   map[string]*lsp
 }
 
 // discover walks the tree for the files the layer reads and the Cargo
