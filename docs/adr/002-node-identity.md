@@ -288,15 +288,38 @@ Rules that follow, and are not open:
 
 16. **A Rust file is identified by its path; a declaration in it by its
     path inside the file.** `rust://crates/protowire-pb/src/wire.rs`, and
-    `rust://crates/protowire-pb/src/wire.rs#Reader.skip`. Each inline module,
+    `rust://crates/protowire-pb/src/wire.rs#Reader.skip()`. Each inline module,
     function or type holding the declaration is a segment, as in Python (rule
     15). Added 2026-11-24 with ADR 009, the owner's decision (#72).
 
+    - **A function's segment ends in `()`** (amended 2026-11-24, #72, the
+      owner's decision): `Reader.limits()` beside the field `Reader.limits`,
+      `area_of()`, `outer().inner()`. Rust lets a field and a method share a
+      name, and so a module and a function; with one ID for both the layer
+      kept the first and dropped the other. Measured before the amendment:
+      16 methods on protowire-rust and 18 on prost-reflect were missing that
+      way, all getters named after their field, and the fixture's function
+      `made()` beside its module `made`. A Rust function's ID differs from a
+      Go or Python one in that, which no other layer needs: neither language
+      lets the two names meet.
     - **A method of a trait implementation carries the trait:**
-      `codec.rs#Packed[Message].encode_to`. A type can implement two traits
+      `codec.rs#Packed[Message].encode_to()`. A type can implement two traits
       with methods of one name. prost-reflect's `DescriptorError` has `fmt`
       for both `Debug` and `Display`. A type's generic arguments are not part
       of the segment: `MarshalOptions<'a>` is `MarshalOptions`.
+    - **A type with no name has a word form** (amended 2026-11-24, #72, the
+      owner's decision): `slice(u8)[MapEntryField].write_to()` for
+      `impl MapEntryField for [u8]`, `array(u8;4)`, `tuple(i32,i32)`, each part
+      named the same way (`slice(tuple(u8,u16))`). Rust's own spelling cannot
+      be a segment: `[u8]` clashes with `[Trait]`. Before, such an impl's items
+      had no node: 2 on protowire-rust.
+    - **A method a derive or a macro writes is a node under its type**
+      (amended 2026-11-24, #72, the owner's decision):
+      `types.rs#EnumDescriptorProto.name()`, which `#[derive(prost::Message)]`
+      writes beside the field `name`; `Square[Clone].clone()`. It is
+      generated code (ADR 004), at its type's position. The index defines no
+      such method; a call's symbol names it, so only a method something calls
+      has a node: 56 on protowire-rust, 47 on prost-reflect.
     - **Code Cargo generates is identified where it is included.** A build
       script's output lives under a path holding a build hash
       (`target/debug/build/prost-reflect-tests-<hash>/out/test.rs`), so its
