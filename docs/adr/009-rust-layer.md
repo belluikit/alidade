@@ -321,7 +321,8 @@ Measured on prost-reflect, against main (25598e8):
   Its limits:
   - it sees only the functions rustc compiles as they are: a generic function only
     where it is instantiated, and a closure in a returned `impl Iterator` only where
-    the iterator is used;
+    the iterator is used (*since #98*, `-C link-dead-code` compiles the closure,
+    and an `async fn`'s body, in its own crate; see the last correction below);
   - a call through `dyn` is an indirect call it cannot name;
   - rustc 1.99's default symbol format needs a decoder. The comparison below used
     the legacy format, a nightly-only flag, through `RUSTC_BOOTSTRAP=1`.
@@ -401,6 +402,31 @@ Measured on prost-reflect, against main (25598e8):
   @f82c954): protowire-pb 53 functions, 101 agree, 4 rustc only, 1 layer only;
   prost-reflect 391, 969, 96 and 67, every difference of the same causes (16 of
   the rustc-only are operators').
+
+  *Corrected 2026-11-25 (#98), by two flags, the owner's choice over reading
+  MIR.* The IR left out two kinds of call, both measured on tokio @854013a with
+  `--features full`. A call of an `#[inline(always)]` function was inlined
+  even at opt-level 0 (tokio's `UnsafeCell::with_mut`). And the body of an
+  `async fn`, `async` block or closure was compiled only where something polls
+  or calls it, which is often another crate (tokio's `UdpSocket::peek_from`,
+  and the closures above). `-C no-prepopulate-passes` runs no LLVM pass, so
+  the inlined call stays a call. `-C link-dead-code` compiles every
+  non-generic item, those bodies included. On tokio, the source-written calls
+  of the reference went from 2,541 to 2,923, and the layer's edges it lacked
+  from 312 to 105. At the table's commits:
+
+  | crate | functions both have | agree | rustc only | layer only |
+  |---|---|---|---|---|
+  | protowire-pb | 56 | 109 | 3 | 1 |
+  | prost-reflect | 387 | 974 | 94 | 49 |
+
+  protowire-pb is unchanged, with one more rustc caller that the layer has no
+  edge from. prost-reflect's 18 layer-only edges in closures rustc never
+  compiled now agree. Its remaining differences: rustc only, 78 through a
+  generic trait bound, 14 an operator's and 2 others; layer only, 39 through a
+  generic trait bound, 9 through `dyn`, and 1 the configuration
+  (`option_to_message`). A generic function is still compiled only where it is
+  instantiated.
 
 Not in this version:
 - edges for `use` declarations;
