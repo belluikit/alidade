@@ -411,3 +411,71 @@ func byteCol(line []byte, u int32) int32 {
 func fileURI(path string) string {
 	return (&url.URL{Scheme: "file", Path: filepath.ToSlash(path)}).String()
 }
+
+// An outgoingCall is a call the server's call hierarchy finds in a
+// function: the file and name position of the function called, and each
+// range in the caller that names it. Columns are bytes.
+type outgoingCall struct {
+	path string
+	to   pos
+	from [][2]pos
+}
+
+// lspRange is an LSP range, both ends.
+type lspRange struct {
+	Start struct {
+		Line      int32 `json:"line"`
+		Character int32 `json:"character"`
+	} `json:"start"`
+	End struct {
+		Line      int32 `json:"line"`
+		Character int32 `json:"character"`
+	} `json:"end"`
+}
+
+// outgoing asks the server's call hierarchy what the function whose name
+// starts at p in dc calls: what rust-analyzer answers for a function of a
+// file that an include! reads, which its index has no document of (#88).
+func (l *lsp) outgoing(dc *doc, p pos, text func(path string) []byte) ([]outgoingCall, error) {
+	col := p.col
+	if !l.utf8 {
+		col = utf16Col(lineOf(dc.text, p.line), p.col)
+	}
+	var items []json.RawMessage
+	params := map[string]any{
+		"textDocument": map[string]any{"uri": fileURI(dc.abs)},
+		"position":     map[string]any{"line": p.line, "character": col},
+	}
+	if _, err := l.call("textDocument/prepareCallHierarchy", params, &items); err != nil || len(items) == 0 {
+		return nil, err
+	}
+	var calls []struct {
+		To struct {
+			URI            string   `json:"uri"`
+			SelectionRange lspRange `json:"selectionRange"`
+		} `json:"to"`
+		FromRanges []lspRange `json:"fromRanges"`
+	}
+	if _, err := l.call("callHierarchy/outgoingCalls", map[string]any{"item": items[0]}, &calls); err != nil {
+		return nil, err
+	}
+	var out []outgoingCall
+	for _, c := range calls {
+		path := location{URI: c.To.URI}
+		target, _ := path.at()
+		oc := outgoingCall{path: target, to: l.bytePos(text(target), c.To.SelectionRange.Start.Line, c.To.SelectionRange.Start.Character)}
+		for _, r := range c.FromRanges {
+			oc.from = append(oc.from, [2]pos{l.bytePos(dc.text, r.Start.Line, r.Start.Character), l.bytePos(dc.text, r.End.Line, r.End.Character)})
+		}
+		out = append(out, oc)
+	}
+	return out, nil
+}
+
+// bytePos is a server position as the index counts it, in bytes.
+func (l *lsp) bytePos(text []byte, line, col int32) pos {
+	if !l.utf8 {
+		col = byteCol(lineOf(text, line), col)
+	}
+	return pos{line, col}
+}

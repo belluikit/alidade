@@ -391,6 +391,7 @@ func (x *extractor) placeFile(l *lsp, s *site, out string) error {
 // items are marked generated and joined to their .proto messages, at the
 // file still.
 func (x *extractor) placeHand(l *lsp, s *site, out, rel string) error {
+	x.handSites[s.dc.rel] = append(x.handSites[s.dc.rel], s.at)
 	if items := x.included[rel]; items != nil {
 		s.out, s.hand, s.items = out, rel, items
 		x.report.IncludedAgain++
@@ -523,6 +524,9 @@ func (x *extractor) implItems(g *genFile, sy symbol, path []string, parent graph
 	file, _ := g.s.anchor()
 	if id, err := x.m.RustID(file, append(slices.Clone(path), ty)...); err == nil && x.emitted[id] {
 		owner = id
+		if g.hand != nil && trait != "" {
+			x.outlineImpls = append(x.outlineImpls, outlineImpl{ty: id, trait: trait})
+		}
 	}
 	for _, c := range sy.Children {
 		kind, ok := symbolKinds[c.Kind]

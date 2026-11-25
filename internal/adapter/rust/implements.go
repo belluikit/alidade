@@ -43,6 +43,9 @@ func (x *extractor) implementations() error {
 			return err
 		}
 	}
+	if err := x.fromOutlines(add); err != nil {
+		return err
+	}
 	return x.inBodies(add)
 }
 
@@ -80,6 +83,9 @@ func (x *extractor) askServer(ws string, add func(from, to graph.ID) error) erro
 			continue
 		}
 		for _, lo := range locs {
+			if x.atHandInclude(lo) {
+				continue // an implementation an included file writes: fromOutlines reads it
+			}
 			ty := x.typeAt(lo)
 			if ty == nil {
 				x.report.ImplementsUnplaced++
