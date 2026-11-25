@@ -29,6 +29,14 @@ tracker's. From v0.12.1 on, every number is this repository's.
   has. The items keep their IDs at the file (#84). On jj, which checks in
   its protos, that is 37 edges, every prost message and enum of its seven
   files.
+- **Fixed: the Rust calls oracle sees `#[inline(always)]` calls and
+  `async fn` bodies** (#98). LLVM inlined the first even at opt-level 0,
+  and rustc compiled the second, with closures nothing in the crate calls,
+  only where something polls it. The oracle now compiles with
+  `-C no-prepopulate-passes` and `-C link-dead-code`. On tokio
+  (`--features full`), the reference's source-written calls went from 2,541
+  to 2,923. On prost-reflect, the 18 layer-only edges ADR 009 put down to
+  closures rustc never compiled now agree.
 - **Added: the Rust calls oracle** (#86). `scripts/oracle.sh` now compiles
   each library of a Rust workspace to LLVM IR with rustc and compares its
   direct calls with the layer's calls edges, naming the cause of each edge
