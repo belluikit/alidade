@@ -113,8 +113,9 @@ func check(t *testing.T, what string, got, want []string) {
 // TestExtractGraph pins the layer on the fixture (ADR 009, ADR 002 rule
 // 16, ADR 006 rule 9): an item's ID is its path in its file, with the
 // function holding it, which rust-analyzer's symbol leaves out, and the
-// trait of an impl; a call is a reference followed by "(" or "::<", from
-// the innermost function holding it; a function named as a value is a
+// trait of an impl; a call is a reference followed by "(", or by a
+// turbofish and "(" (#100), from the innermost function holding it; a
+// function named as a value, with a turbofish or without, is a
 // reference; two crate roots of one package that define one symbol (each
 // integration test's helper) are told apart by file.
 func TestExtractGraph(t *testing.T) {
@@ -166,7 +167,7 @@ func TestExtractGraph(t *testing.T) {
 		"shapes/src/lib.rs#outer() func", "shapes/src/lib.rs#outer().inner() func",
 		"shapes/src/lib.rs#outer().inner().deepest() func",                            // two holders, each once
 		"shapes/src/lib.rs#made_first() func", "shapes/src/lib.rs#made_second() func", // a macro's, siblings
-		"shapes/src/lib.rs#parse_side() func", "shapes/src/lib.rs#total() func",
+		"shapes/src/lib.rs#parse_side() func", "shapes/src/lib.rs#pick() func", "shapes/src/lib.rs#total() func",
 		"shapes/src/lib.rs#tests module", "shapes/src/lib.rs#tests.check() func", "shapes/src/lib.rs#tests.squares() func",
 		"shapes/tests/common/mod.rs module", "shapes/tests/common/mod.rs#sample() func",
 		"shapes/tests/first.rs module", "shapes/tests/first.rs#first() func", "shapes/tests/first.rs#helper() func",
@@ -209,7 +210,8 @@ func TestExtractGraph(t *testing.T) {
 		"tool/src/main.rs#main() -> shapes/src/lib.rs#total()",
 	})
 	check(t, "references", edges(g, graph.KindReferences), []string{
-		"shapes/src/lib.rs#total() -> shapes/src/lib.rs#area_of()", // .map(area_of)
+		"shapes/src/lib.rs#total() -> shapes/src/lib.rs#area_of()",       // .map(area_of)
+		"shapes/src/lib.rs#pick() -> shapes/src/lib.rs#helper_generic()", // a turbofish alone: a value (#100)
 	})
 	check(t, "contains", edges(g, graph.KindContains), []string{
 		"shapes/build.rs -> shapes/build.rs#main()",
@@ -247,7 +249,7 @@ func TestExtractGraph(t *testing.T) {
 		"shapes/src/lib.rs -> shapes/src/lib.rs#made_second()",
 		"shapes/src/lib.rs -> shapes/src/lib.rs#outer()",
 		"shapes/src/lib.rs -> shapes/src/lib.rs#paired()",
-		"shapes/src/lib.rs -> shapes/src/lib.rs#parse_side()",
+		"shapes/src/lib.rs -> shapes/src/lib.rs#parse_side()", "shapes/src/lib.rs -> shapes/src/lib.rs#pick()",
 		"shapes/src/lib.rs -> shapes/src/lib.rs#pen()",
 		"shapes/src/lib.rs -> shapes/src/lib.rs#shown()",
 		"shapes/src/lib.rs -> shapes/src/lib.rs#tests",
@@ -314,13 +316,13 @@ func TestExtractGraph(t *testing.T) {
 // item skipped, and the workspace and engine that read it.
 func checkReport(t *testing.T, rep *Report) {
 	t.Helper()
-	if rep.Files != 9 || rep.Testdata != 1 || rep.Unanalyzed != 1 || rep.Declarations != 81 || rep.MacroWritten != 3 {
-		t.Errorf("Files %d, Testdata %d, Unanalyzed %d, Declarations %d, MacroWritten %d; want 9, 1, 1, 81, 3", rep.Files, rep.Testdata, rep.Unanalyzed, rep.Declarations, rep.MacroWritten)
+	if rep.Files != 9 || rep.Testdata != 1 || rep.Unanalyzed != 1 || rep.Declarations != 82 || rep.MacroWritten != 3 {
+		t.Errorf("Files %d, Testdata %d, Unanalyzed %d, Declarations %d, MacroWritten %d; want 9, 1, 1, 82, 3", rep.Files, rep.Testdata, rep.Unanalyzed, rep.Declarations, rep.MacroWritten)
 	}
 	// The call to made::Made::new() reaches code a build script wrote,
 	// which the index leaves out (ADR 009), and the server reads: an edge.
-	if rep.CallsGenerated != 0 || rep.Calls != 33 || rep.References != 1 {
-		t.Errorf("CallsGenerated %d, Calls %d, References %d; want 0, 33, 1", rep.CallsGenerated, rep.Calls, rep.References)
+	if rep.CallsGenerated != 0 || rep.Calls != 33 || rep.References != 2 {
+		t.Errorf("CallsGenerated %d, Calls %d, References %d; want 0, 33, 2", rep.CallsGenerated, rep.Calls, rep.References)
 	}
 	if rep.GeneratedFiles != 1 || rep.Generated != 2 || rep.Generates != 0 {
 		t.Errorf("GeneratedFiles %d, Generated %d, Generates %d; want 1, 2, 0: made.rs is no prost-build output", rep.GeneratedFiles, rep.Generated, rep.Generates)
