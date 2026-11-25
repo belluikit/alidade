@@ -339,6 +339,16 @@ feed rustc. No crate includes them, and each says so.
 - **A missing toolchain is reported, never silent.** A test with `rust-analyzer`, and
   separately `rust-src`, absent from the path must give file nodes marked
   `calls_unavailable`, and a report naming what is missing.
+- **Indexing writes nothing into the repository outside `target/`** (#81, the
+  owner's pick of option B). rust-analyzer 1.100's full `cargo metadata` writes a
+  `Cargo.lock` when there is none, which is a Rust input, so the next build reran
+  the layer with nothing edited. Both rust-analyzer processes therefore run with
+  `CARGO_RESOLVER_LOCKFILE_PATH` (Cargo's `resolver.lockfile-path`, stable since
+  1.97) pointing at a temporary copy of the workspace's `Cargo.lock`. A path the
+  environment already sets is kept. `TestRustWritesNothing` builds a package with
+  no lock file twice, and fails if a `Cargo.lock` appears or the second build
+  reruns anything. A path set in `.cargo/config.toml` instead is overridden: not
+  measured.
 - **The answers depend on the user's rust-analyzer version.** The report records the
   version from the index's metadata (`tool_info`). A cache of rust-analyzer's answers,
   if one is ever kept, is keyed on it, as Python's cache is keyed on its engine (ADR
