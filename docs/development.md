@@ -91,6 +91,7 @@ nothing.
 | Frontend calls | that same package's type checker (TypeScript 5 or 6 under Node, where the layer runs TypeScript 7's Go compiler), and a second writing of the layer's declaration rules, edge by edge |
 | Generated TypeScript exports | the descriptor protoc-gen-es embeds in each `_pb.ts` |
 | Rust calls | rustc: each library of a workspace compiled to LLVM IR at opt-level 0, with no LLVM pass run and dead code compiled (so `#[inline(always)]` calls and `async fn` bodies are in it, #98), into a scratch target directory, and its direct calls, decoded from Rust's v0 symbols. Each edge only one side has is classed: to a function with no node, through a generic trait bound, an operator's, or listed |
+| Rust calls, alidade's beside graphify's | the same rustc reference, scoring both tools' `calls` edges (#104). It is `TestOracleGraphifyRust`, outside `oracle.sh`: set `ALIDADE_GRAPHIFY_RUST=root=graph.json`, where graph.json is what `graphify update . --no-cluster` wrote for a copy of the repository at the same commit (no model calls), and `ALIDADE_GRAPHIFY_RUST_FEATURE=full` for a crate whose default features are none (tokio) |
 | goasm templates | the generator each `//go:generate` line pins, run on one template at a time |
 | PXF type references and `${path}` references | a reader written from the protowire specification over the raw text, each name confirmed by protoc |
 | PXF chain links | a census judged by reading (`internal/oracle/testdata/chain-census.pxf`), since only chameleon's own chain package expands them |
