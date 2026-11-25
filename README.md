@@ -74,6 +74,7 @@ Each layer is measured against a source that shares no code with it:
 | Go imports | `go list` | 5,667: none missing, none extra |
 | SQL | sqlc's own catalog | 75 of 75 tables, 351 of 351 queries |
 | Python calls | calls recorded while two projects' test suites ran | 10,234 of 10,612, and 1,002 of 1,192 |
+| Rust calls | rustc's compiled code, over three open-source repositories | 93.2% to 99.7% of the calls the source writes ([below](#rust-each-graph-against-rustc)) |
 
 Python is the layer where an answer can be incomplete, and those are its
 numbers. The repositories are in-house ones and two open-source Python
@@ -203,6 +204,8 @@ of 60, within a cent of each other.
 
 - **Only call-graph questions.** There are no text, documentation or
   schema-to-code questions, because no oracle generates those yet.
+- **No Rust questions.** The Rust comparison below scores the two graphs,
+  not agents using them.
 - **Nothing graphify does beyond calls.** graphify reads dozens of
   languages through tree-sitter where alidade reads four through their
   compilers, and it adds documents, images and community structure that
@@ -217,6 +220,49 @@ of 60, within a cent of each other.
 
 The question sets are in `internal/bench/testdata/gen-*.pxf`, and
 `scripts/bench.sh` runs them: see [Developing alidade](docs/development.md).
+
+### Rust: each graph against rustc
+
+This one compares the graphs themselves, with no agent and no model. It
+asks how many of the calls rustc compiles each tool's graph has, and how
+many of each tool's own edges are right. The reference is rustc's own
+output: each library compiled to LLVM IR, its calls read from the
+compiled code.
+
+| repository | alidade: calls found | alidade: edges right | graphify: calls found | graphify: edges right | run by |
+|---|---|---|---|---|---|
+| [tokio](https://github.com/tokio-rs/tokio) @854013a, `--features full` | 93.2% of 2,957 | 97.1% | 34.0% | 79.7% | maintainers |
+| [pdfcraft](https://github.com/storytold/pdfcraft) @6e91067, 33 libraries | 99.0% of 11,925 | 99.4% | 75.3% | 95.7% | maintainers |
+| [prost-reflect](https://github.com/andrewhickman/prost-reflect) @f82c954 | 99.7% of 1,088 | 99.9% | 36.4% | 83.2% | maintainers |
+
+- **What counts:** calls within one library that the source writes as a
+  call. Calls into other crates aren't scored. Neither are calls only a
+  derive, a macro or an operator makes.
+- **Versions:** graphify 0.9.119, run as `graphify update . --no-cluster`,
+  which makes no model calls. alidade at commit 33dc725, with rustc and
+  rust-analyzer 1.100.0, on macOS.
+- **Left out:** pdfcraft's `pdfcraft-ui-egui`, which doesn't compile on
+  macOS at that commit.
+- **Where graphify falls short:** it misses a method called on a parameter
+  or through a field, and calls inside a closure. Most of its wrong edges
+  go to another type's method of the same name.
+- **alidade is scored on its whole graph,** test edges included, not on
+  the production graph `exclude_tests` gives. The reference is the
+  library build, which has no test code, so where a test edge has both
+  ends in the library build, it can only count against alidade.
+
+`TestOracleGraphifyRust` runs it on any Rust repository: see
+[Developing alidade](docs/development.md). The scoring is
+[#104](https://github.com/belluikit/alidade/issues/104).
+
+### Add your results
+
+These numbers come from our machine, our harness and repositories we
+picked. If you run either comparison yourself, on another repository,
+with another model, or with a newer graphify, please send the result as a
+pull request with a row for the table. Results that come out worse for
+alidade are welcome too. [Contributing](CONTRIBUTING.md#benchmark-results)
+lists what the pull request needs so that anyone can run it again.
 
 ## Status
 

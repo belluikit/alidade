@@ -8,6 +8,11 @@ tracker's. From v0.12.1 on, every number is this repository's.
 
 ## Unreleased
 
+- **Docs: the README compares alidade's Rust graph with graphify's
+  against rustc** (#104), on tokio, pdfcraft and prost-reflect, measured
+  on this release's code. It also invites anyone to add their own
+  results, from either benchmark, as a pull request. CONTRIBUTING says
+  what such a pull request has to carry so that it can be run again.
 - **Fixed: a Rust function named as a value with a turbofish is a
   reference, not a call** (#100). `drop_arc_raw::<W>` in a waker's vtable
   passes the function and calls nothing, and it was a `calls` edge because
