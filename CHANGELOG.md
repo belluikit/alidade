@@ -8,6 +8,12 @@ tracker's. From v0.12.1 on, every number is this repository's.
 
 ## Unreleased
 
+- **Fixed: build caches are left out** (#75). A directory holding a
+  `CACHEDIR.TAG`, such as Cargo's `target/`, is read by no layer and the
+  server's change check ignores it. After a Rust repository's first build,
+  the next one reran the Markdown layer, because `target/` holds the `.rs`
+  files build scripts write.
+
 - **Added: Rust** (#72, ADR 009). Each `.rs` file is a node, and so is each
   item in it: functions, methods, types, fields, enum variants, constants,
   statics and inline modules, under ADR 002 rule 16's IDs
