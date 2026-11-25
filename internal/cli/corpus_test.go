@@ -143,14 +143,7 @@ func (c *corpus) testMarkers() {
 		if n.Pos.File != "" {
 			want = strings.HasSuffix(n.Pos.File, "_test.go")
 		} else if n.Kind == graph.KindPackage {
-			files := decls[n.ID]
-			if len(files) == 0 {
-				// A directory of *_test files only also has a package
-				// of its own name that declares nothing: its files are
-				// the external test package's.
-				files = decls[n.ID+"_test"]
-			}
-			want = externalTest(n, decls[n.ID]) || c.testOnlyOnDisk(files)
+			want = externalTest(n, decls[n.ID]) || c.testOnlyOnDisk(c.dirOf(n.ID, decls))
 		}
 		if want != marked && c.count(&bad) {
 			c.t.Errorf("test marker: %s at %s is marked %v", n.ID, n.Pos.File, marked)
@@ -232,16 +225,32 @@ func externalTest(n graph.Node, declFiles []string) bool {
 	return true
 }
 
+// dirOf finds a package node's directory, which the node does not carry:
+// the directory of the first file its declarations are in. A directory of
+// *_test files only also has a package of its own name that declares
+// nothing, whose files are the external test package's. A package the
+// type checker could not read declares nothing at all (#93: govm's
+// spike/goplus imports a package only a patched toolchain has), and its
+// directory is found from its import path and the module's go.mod.
+func (c *corpus) dirOf(id graph.ID, decls map[graph.ID][]string) string {
+	for _, files := range [][]string{decls[id], decls[id+"_test"]} {
+		if len(files) > 0 && files[0] != "" {
+			return filepath.Join(c.root, filepath.FromSlash(path.Dir(files[0])))
+		}
+	}
+	pkg, _, _ := strings.Cut(strings.TrimPrefix(string(id), "go://"), "#")
+	dir, _ := c.packageDir(pkg)
+	return dir
+}
+
 // testOnlyOnDisk re-derives #113's test package from the tree rather than
-// the loader: the directory its declarations are in holds Go files, and
-// every one is a _test.go file. A package declaring nothing is looked for
-// through its external test package's declarations, the only files its
-// directory has; with neither, it reads as unmarked.
-func (c *corpus) testOnlyOnDisk(declFiles []string) bool {
-	if len(declFiles) == 0 || declFiles[0] == "" {
+// the loader: the package's directory holds Go files, and every one is a
+// _test.go file. With no directory, it reads as unmarked.
+func (c *corpus) testOnlyOnDisk(dir string) bool {
+	if dir == "" {
 		return false
 	}
-	entries, err := os.ReadDir(filepath.Join(c.root, filepath.FromSlash(path.Dir(declFiles[0]))))
+	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return false
 	}
