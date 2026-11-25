@@ -98,13 +98,8 @@ func (x *extractor) throughSymbols(l *lsp, ws string, all []*site, refs map[stri
 		if at == nil {
 			continue
 		}
-		ref := refs[sym]
-		locs, err := l.definition(ref.dc, ref.at, x.text)
-		if err != nil || len(locs) != 1 {
-			continue
-		}
-		out, _ := locs[0].at()
-		if asked[at.sym+"\x00"+out] {
+		out := x.definedIn(l, refs[sym])
+		if out == "" || asked[at.sym+"\x00"+out] || placedIn(all, out, at.sym) {
 			continue
 		}
 		asked[at.sym+"\x00"+out] = true
@@ -118,6 +113,30 @@ func (x *extractor) throughSymbols(l *lsp, ws string, all []*site, refs map[stri
 		}
 	}
 	return all, nil
+}
+
+// definedIn is the file the server says the item named at ref is defined
+// in; "" when it names no one file.
+func (x *extractor) definedIn(l *lsp, ref *reference) string {
+	locs, err := l.definition(ref.dc, ref.at, x.text)
+	if err != nil || len(locs) != 1 {
+		return ""
+	}
+	out, _ := locs[0].at()
+	return out
+}
+
+// placedIn says whether a site of the module whose symbol is mod already
+// reads the file out: a symbol its outline has no item for, a method a
+// derive writes (ConfigMetadata[Clone].clone() on jj), leads back to it.
+func placedIn(sites []*site, out, mod string) bool {
+	ds := descriptors(mod)
+	for _, st := range sites {
+		if st.out == out && len(st.mod) == len(ds) && hasPrefix(st.mod, ds) {
+			return true
+		}
+	}
+	return false
 }
 
 // A reference is where a document names a symbol.

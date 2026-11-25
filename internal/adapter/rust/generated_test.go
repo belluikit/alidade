@@ -286,3 +286,24 @@ func TestHandWrittenIncludeInUTF16(t *testing.T) {
 		t.Errorf("by_hand() at column %d (-1: no node), want 21: the comment's characters are two bytes and one UTF-16 unit each", col)
 	}
 }
+
+// TestGeneratedPlacedOnce: a call of a method a derive writes on a
+// generated type, which the file's outline has no item for, does not lead
+// the search through macros (throughSymbols) back to the file it is in and
+// place it a second time. Measured on main before the fix: GeneratedFiles
+// 2 for one file; on jj, hand-written secure_config.rs reported as
+// included by two modules when one includes it.
+func TestGeneratedPlacedOnce(t *testing.T) {
+	dir := fixtureOf(t, "gen", map[string]string{"src/lib.rs": `pub mod pb {
+    include!(concat!(env!("OUT_DIR"), "/fixture.shapes.rs"));
+}
+
+pub fn cloned(s: &pb::Shape) -> pb::Shape {
+    s.clone()
+}
+`})
+	_, rep := extract(t, dir)
+	if rep.GeneratedFiles != 1 {
+		t.Errorf("GeneratedFiles %d; want 1", rep.GeneratedFiles)
+	}
+}
