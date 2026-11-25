@@ -191,6 +191,10 @@ type extractor struct {
 	indexed   []string
 	manifests map[string][]string
 	servers   map[string]*lsp
+	// tests are the modules found to be test code (#106), and testIDs
+	// the test items' IDs.
+	tests   testMarks
+	testIDs map[graph.ID]bool
 }
 
 // discover walks the tree for the files the layer reads and the Cargo
@@ -281,7 +285,8 @@ func (x *extractor) files(files []string) error {
 			}
 			attrs["calls_unavailable"] = "its declarations and calls are not read: " + why
 		}
-		if err := x.b.AddNode(graph.Node{ID: id, Kind: graph.KindModule, Name: filepath.Base(rel), Pos: graph.Position{File: rel}, Attrs: attrs}); err != nil {
+		if err := x.b.AddNode(graph.Node{ID: id, Kind: graph.KindModule, Name: filepath.Base(rel), Pos: graph.Position{File: rel}, Attrs: attrs,
+			Test: x.fileTest(rel)}); err != nil {
 			return err
 		}
 	}

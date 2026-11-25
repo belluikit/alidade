@@ -116,6 +116,13 @@ For `alidade serve` and `alidade graph`:
 `exclude_tests` on the MCP tools gives the production graph, and
 `graph_stats` says `go_test_nodes`.
 
+Rust's test code is always read, since rust-analyzer indexes the test
+build, and always marked (#106). That covers integration tests, items,
+impl blocks and modules behind `#[cfg(test)]`, and `#[test]` functions.
+`exclude_tests` leaves it out too. A call the library build makes through
+code behind `cfg(not(test))` is not read
+([ADR 009](adr/009-rust-layer.md)).
+
 Without `-tests-exact`, a production interface call can keep package-level
 edges into packages only tests bring in. With it, the production graph's Go
 nodes and Go-to-Go edges are exactly the no-tests build's. One cross-layer

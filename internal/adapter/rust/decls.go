@@ -50,16 +50,19 @@ func isFunc(k scip.SymbolInformation_Kind) bool {
 
 // A def is one item an index defines in a file.
 type def struct {
-	doc    *doc
-	sym    string
-	kind   scip.SymbolInformation_Kind
-	start  pos // of its name
-	end    pos // of the last character of the item, its enclosing range
-	encl   bool
-	own    []string // the path its symbol states, inside the file's module
-	path   []string // inside the file, its holders' before its own: ADR 002 rule 16
-	id     graph.ID
-	holder *def // the innermost function holding it, if one does
+	doc   *doc
+	sym   string
+	kind  scip.SymbolInformation_Kind
+	start pos // of its name
+	end   pos // of the last character of the item, its enclosing range
+	encl  bool
+	// encStart is where its enclosing range starts: at its attributes.
+	encStart pos
+	test     *bool    // test code (#106), once read
+	own      []string // the path its symbol states, inside the file's module
+	path     []string // inside the file, its holders' before its own: ADR 002 rule 16
+	id       graph.ID
+	holder   *def // the innermost function holding it, if one does
 }
 
 type pos struct{ line, col int32 }
@@ -105,6 +108,7 @@ func span(r []int32) (start, end pos, ok bool) {
 // at the first (ADR 002 rule 16).
 func (x *extractor) declarations() error {
 	x.bySym, x.funcs, x.defsOf = map[string][]*def{}, map[*doc][]*def{}, map[*doc][]*def{}
+	x.markTests()
 	for _, rel := range slices.Sorted(maps.Keys(x.docs)) {
 		defs := x.defs(x.docs[rel])
 		for _, d := range defs {
@@ -162,8 +166,8 @@ func items(dc *doc) (module []*scip.Descriptor, defs []*def) {
 			}
 		case kinds[k] != "":
 			d := &def{doc: dc, sym: sym, kind: k, start: start}
-			if _, end, ok := encRange(o); ok {
-				d.end, d.encl = end, true
+			if es, end, ok := encRange(o); ok {
+				d.encStart, d.end, d.encl = es, end, true
 			}
 			defs = append(defs, d)
 		}
@@ -415,11 +419,13 @@ func (x *extractor) declare(d *def) error {
 	if d.encl {
 		attrs["end_line"] = strconv.Itoa(int(d.end.line) + 1)
 	}
+	owner := x.owner(d.doc.rel, d.path[:len(d.path)-1])
 	if err := x.b.AddNode(graph.Node{ID: id, Kind: kinds[d.kind], Name: strings.TrimSuffix(d.path[len(d.path)-1], "()"),
-		Pos: graph.Position{File: d.doc.rel, Line: int(d.start.line) + 1, Col: int(d.start.col) + 1}, Attrs: attrs}); err != nil {
+		Pos: graph.Position{File: d.doc.rel, Line: int(d.start.line) + 1, Col: int(d.start.col) + 1}, Attrs: attrs,
+		Test: x.markTest(id, owner, d)}); err != nil {
 		return err
 	}
-	return x.b.AddEdge(graph.Edge{From: x.owner(d.doc.rel, d.path[:len(d.path)-1]), To: id, Kind: graph.KindContains, Derivation: graph.Extracted})
+	return x.b.AddEdge(graph.Edge{From: owner, To: id, Kind: graph.KindContains, Derivation: graph.Extracted})
 }
 
 // owner is the node of the item at path in a file: the innermost one that

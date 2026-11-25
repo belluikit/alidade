@@ -14,6 +14,16 @@ tracker's. From v0.12.1 on, every number is this repository's.
   the rule read any reference followed by `::<` as one. A turbofish is a
   call only with `(` after it. On tokio, 11 edges become `references`, all
   of them vtable entries.
+- **Added: Rust test code is marked** (#106, #99). Integration tests,
+  `#[cfg(test)]` items, impl blocks and modules, and `#[test]` functions
+  carry the test mark, and so does every edge touching them, so
+  `exclude_tests` now gives Rust's production graph. Until now no Rust node
+  was marked test: on tokio, 8,199 of the 13,601 calls are test edges. It
+  also fixes production code shown calling a test mock. rust-analyzer reads
+  the test build, so tokio's `File::poll_write` reaches
+  `fs::mocks::spawn_mandatory_blocking`. That is 19 edges on tokio and 22
+  on pdfcraft, and they are test edges now. The call the library build
+  makes instead is not read: ADR 009 states the limit.
 - **Added: calls and implementations written in a file an `include!`
   reads** (#88). rust-analyzer's index has no document for such a file, so
   the calls its functions make come from the server's call hierarchy, each

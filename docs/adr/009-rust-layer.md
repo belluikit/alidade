@@ -309,6 +309,53 @@ Measured on prost-reflect, against main (25598e8):
   TypeScript layer's import clauses (ADR 007).
 - **Implementations:** from LSP, and from the impl's header inside a function
   body, as above. RESOLVED (ADR 006 rule 9).
+- **Test code is marked** (*added 2026-11-25, #106, the owner's decision on #99*).
+  rust-analyzer indexes a crate's test build, with `cfg(test)` on, so items that
+  exist only there have nodes. Each is marked test, as ADR 004 rule 4 marks Go's,
+  and so is every edge touching one (that rule's derivation). An item is test code
+  when:
+  - its own attributes need `test`: `#[cfg(test)]`, `#[cfg(all(test, unix))]`, a
+    `#[test]` or a framework's `#[tokio::test]`;
+  - so do its impl block's, read from the block's header in the source, since the
+    index has no symbol of an impl;
+  - what holds it is test code: a function, a type, an inline module;
+  - a module on its symbol's path is declared only as `#[cfg(test)] mod x;`, or
+    opens with `#![cfg(test)]`. A file two crates compile through `#[path]` is
+    test code only when every declaration of it is;
+  - or its file is below a package's `tests/` directory, an integration test.
+
+  An item a `cfg(test)` marks is not test code when its file also declares
+  that name behind `not(test)`. The two variants (`#[cfg(not(test))] const
+  MAX_IMAGE: usize = 32 << 20;` beside `#[cfg(test)] const MAX_IMAGE: usize = 512;`)
+  share one ID, so the node is the library build's too. Marked test, production
+  code's edges to it would become test edges and leave the production view.
+
+  `any(test, X)` is not only a test's, whatever the host says of X. A platform's
+  cfg (`any(target_os = "linux", test)`) would otherwise make the graph differ
+  from one machine to another, which ADR 004 rule 4 rules out for Go's files.
+
+  Measured against rust-analyzer's own index with `cfg(test)` off, plus the
+  integration tests' files, which it still reads:
+  - **tokio @854013a:** 3,099 of its 3,115 test items are marked, and nothing
+    else. Of the 16 left, 12 are `#[cfg(any(test, fuzzing))]` and 4 have no
+    `cfg(test)` at all.
+  - **pdfcraft @6e91067:** 14,286 of 14,385 are marked. Most of the rest are
+    `any(target_os = "linux", test)` (23 in `desktop_theme.rs`), or depend on
+    features the test build turns on.
+  - **Marked and not test code, 13 on pdfcraft:** all are items of
+    `fonts/src/cjk_scripts.rs`. The library declares it `#[cfg(test)] mod
+    cjk_scripts;`, and the build script compiles it through `#[path]`. In the
+    test build rust-analyzer gives the file to the library alone, so the build
+    script's declaration and its calls into the file are not in the index.
+
+  **What this leaves, the limit #99 chose:** a call the library build makes
+  through code behind `cfg(not(test))` is not read, since the index is of the test
+  build. tokio's `File::poll_write` calls `fs::mocks::spawn_mandatory_blocking`, in
+  a test edge, and its call to `blocking::spawn_mandatory_blocking` is not in the
+  graph. That is 14 edges on tokio and 4 on pdfcraft. The test edges it gets in
+  their place are 19 and 22, which `exclude_tests` leaves out. A second index run
+  without `cfg(test)` would read them, at +70% (tokio) and +82% (pdfcraft) of the
+  build's time. `TestTestCode` pins the rule and this limit.
 - **A machine without the toolchain:** if `cargo`, `rust-analyzer` or the standard
   library's source is missing, each Rust file is a node marked `calls_unavailable`,
   and the report names what is missing and the `rustup` command that adds it. The

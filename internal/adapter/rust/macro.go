@@ -119,11 +119,14 @@ func (x *extractor) declareWritten(d *def) error {
 	}
 	x.emitted[id] = true
 	x.report.MacroWritten++
+	owner := x.owner(d.doc.rel, d.path[:len(d.path)-1])
+	// A derive on a test type writes test code (#106).
 	err = x.b.AddNode(graph.Node{ID: id, Kind: graph.KindMethod, Name: strings.TrimSuffix(d.path[len(d.path)-1], "()"),
 		Pos: graph.Position{File: d.doc.rel, Line: int(d.start.line) + 1, Col: int(d.start.col) + 1}, Generated: true,
-		Attrs: map[string]string{"written_by": "a derive or a macro: its node is where the type is declared"}})
+		Attrs: map[string]string{"written_by": "a derive or a macro: its node is where the type is declared"},
+		Test:  x.isTest(d) || x.testIDs[owner]})
 	if err != nil {
 		return err
 	}
-	return x.b.AddEdge(graph.Edge{From: x.owner(d.doc.rel, d.path[:len(d.path)-1]), To: id, Kind: graph.KindContains, Derivation: graph.Extracted})
+	return x.b.AddEdge(graph.Edge{From: owner, To: id, Kind: graph.KindContains, Derivation: graph.Extracted})
 }

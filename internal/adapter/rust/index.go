@@ -28,6 +28,7 @@ type doc struct {
 	// moduleSym is the symbol of the file's own module, which every
 	// item's symbol in the file starts with.
 	moduleSym string
+	split     [][]byte // text's lines, once read
 }
 
 // index has rust-analyzer index each Cargo workspace the manifests belong
