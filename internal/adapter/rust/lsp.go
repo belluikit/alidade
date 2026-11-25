@@ -33,6 +33,11 @@ type lsp struct {
 	// utf8 says the server counts columns in UTF-8 bytes, as the index
 	// does; otherwise in UTF-16 code units, LSP's default.
 	utf8 bool
+	// stderr is the server's log, at RA_LOG=error: where it says which
+	// build scripts failed (#85). health and status are its last status
+	// report's, "ok" and "" when nothing went wrong.
+	stderr         *logBuffer
+	health, status string
 }
 
 // lspReady bounds the wait for rust-analyzer to finish loading a
@@ -56,6 +61,9 @@ func startLSP(ws string) (*lsp, error) {
 	if err != nil {
 		return nil, err
 	}
+	cmd.Env = append(cmd.Environ(), "RA_LOG=error") // a build script's failure is logged at error, whatever the user's level
+	stderr := &logBuffer{}
+	cmd.Stderr = stderr
 	in, err := cmd.StdinPipe()
 	if err != nil {
 		unlock()
@@ -70,7 +78,7 @@ func startLSP(ws string) (*lsp, error) {
 		unlock()
 		return nil, fmt.Errorf("rust-analyzer: %w", err)
 	}
-	l := &lsp{cmd: cmd, in: in, out: bufio.NewReader(out), unlock: unlock}
+	l := &lsp{cmd: cmd, in: in, out: bufio.NewReader(out), unlock: unlock, stderr: stderr}
 	init := map[string]any{
 		"processId": nil,
 		"rootUri":   fileURI(ws),
@@ -127,9 +135,18 @@ func (l *lsp) waitQuiescent() error {
 			continue
 		}
 		var st struct {
-			Quiescent bool `json:"quiescent"`
+			Quiescent bool    `json:"quiescent"`
+			Health    string  `json:"health"`
+			Message   *string `json:"message"`
 		}
-		if json.Unmarshal(m.Params, &st) == nil && st.Quiescent {
+		if json.Unmarshal(m.Params, &st) != nil {
+			continue
+		}
+		l.health, l.status = st.Health, ""
+		if st.Message != nil {
+			l.status = *st.Message
+		}
+		if st.Quiescent {
 			return nil
 		}
 	}

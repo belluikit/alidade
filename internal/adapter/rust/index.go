@@ -53,9 +53,11 @@ func (x *extractor) index(manifests []string) {
 
 // workspaces finds the root of the Cargo workspace of each manifest, as
 // cargo itself does: a package's manifest names its workspace or is one.
+// It records each workspace's manifests.
 func (x *extractor) workspaces(manifests []string) []string {
 	seen := map[string]bool{}
 	var out []string
+	x.manifests = map[string][]string{}
 	for _, m := range manifests {
 		path, err := output(filepath.Dir(m), "cargo", "locate-project", "--workspace", "--message-format", "plain", "--manifest-path", m)
 		if err != nil {
@@ -66,6 +68,7 @@ func (x *extractor) workspaces(manifests []string) []string {
 		if real, err := filepath.EvalSymlinks(ws); err == nil {
 			ws = real
 		}
+		x.manifests[ws] = append(x.manifests[ws], m)
 		if !seen[ws] {
 			seen[ws] = true
 			out = append(out, ws)
