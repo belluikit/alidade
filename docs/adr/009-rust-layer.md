@@ -296,8 +296,12 @@ Measured on prost-reflect, against main (25598e8):
     `rust://prost-reflect-tests/src/lib.rs#proto.Scalars`. The generated file's own
     path holds a build hash, which ADR 002 forbids in an ID.
 - **Calls** (ADR 006 rule 9): a reference to a workspace function, inside a function
-  body, followed by `(` or `::<`, is a `calls` edge from the innermost function
-  holding it. A reference to a function used as a value is a `references` edge, as in
+  body, followed by `(`, or by a turbofish and then `(`, is a `calls` edge from the
+  innermost function holding it. (*Amended 2026-11-25, #100, the owner's
+  decision:* the rule read "followed by `(` or `::<`", so a function named as a
+  value with a turbofish was a call. On tokio @854013a that was 11 edges, every
+  one an entry of a vtable: `drop_arc_raw::<W>` in `waker_vtable`, and
+  `poll::<T, S>` and its like in `raw::vtable`.) A reference to a function used as a value is a `references` edge, as in
   Python. Measured on protowire-rust's 7,306 references to its own functions: 6,855
   are followed by `(` or `::<`, 428 are imports, and 23 are functions used as values
   (`.map(row)`, `Some(&deny_all)`, `LazyLock::new(ValidationCache::new)`). The rule
@@ -494,9 +498,11 @@ feed rustc. No crate includes them, and each says so.
   written by a `macro_rules!` macro and one inside a function body must give both
   `implements` edges. It fails the day either source stops supplying its half, or
   the symbol grammar changes.
-- **A call is a reference followed by `(` or `::<`.** A fixture calling a function,
-  passing it as a value, and calling it with a turbofish must give two `calls` edges
-  and one `references` edge.
+- **A call is a reference followed by `(`, or by a turbofish and `(`.** A fixture
+  calling a function, passing it as a value, calling it with a turbofish, and
+  naming it with a turbofish as a value must give two `calls` edges and two
+  `references` edges. `TestCallShaped` pins the turbofish's own shapes: nested
+  arguments, `->` inside one, and one spanning lines.
 - **A missing toolchain is reported, never silent.** A test with `rust-analyzer`, and
   separately `rust-src`, absent from the path must give file nodes marked
   `calls_unavailable`, and a report naming what is missing.

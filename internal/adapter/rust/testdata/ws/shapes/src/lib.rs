@@ -269,3 +269,7 @@ mod tests {
         assert!(check(&Square::new(1.0)));
     }
 }
+
+pub fn pick() -> fn(u8) -> u8 {
+    helper_generic::<u8>
+}

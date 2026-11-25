@@ -21,7 +21,8 @@ type edgeKey struct {
 
 // edges adds, for every reference to a function inside a function body,
 // a calls edge from the innermost function holding it when the reference
-// is followed by "(" or "::<", and a references edge otherwise: the
+// is followed by "(", or by a turbofish and "(" (#100), and a references
+// edge otherwise: the
 // function named as a value (ADR 006 rule 9). Once per pair; a function
 // that names itself is a call, recursion, and not a reference.
 func (x *extractor) edges() error {
@@ -134,7 +135,11 @@ func (x *extractor) resolve(sym string, from *doc) (d *def, known bool) {
 }
 
 // callShaped says whether what follows a reference ending at end is a
-// call's argument list: "(" or a turbofish, "::<", after any spaces.
+// call's argument list: "(" after any spaces, or a turbofish, "::<…>",
+// with "(" after it (#100). A turbofish alone names the function as a
+// value: tokio's `drop_arc_raw::<W>` in a waker's vtable. The turbofish may
+// span lines, and its arguments nest: `f::<Vec<u8>>(x)`, and `->` in
+// `f::<fn() -> u8>(g)` closes nothing.
 func callShaped(lines [][]byte, end pos) bool {
 	if int(end.line) >= len(lines) {
 		return false
@@ -144,7 +149,39 @@ func callShaped(lines [][]byte, end pos) bool {
 		return false
 	}
 	rest := bytes.TrimLeft(line[end.col:], " \t")
-	return bytes.HasPrefix(rest, []byte("(")) || bytes.HasPrefix(rest, []byte("::<"))
+	if bytes.HasPrefix(rest, []byte("(")) {
+		return true
+	}
+	if !bytes.HasPrefix(rest, []byte("::<")) {
+		return false
+	}
+	depth, prev := 0, byte(0)
+	l, i := int(end.line), int(end.col)+len(line[end.col:])-len(rest)+2
+	for ; l < len(lines); l, i = l+1, 0 {
+		for ; i < len(lines[l]); i++ {
+			switch c := lines[l][i]; {
+			case c == '<':
+				depth++
+			case c == '>' && prev != '-':
+				if depth--; depth == 0 {
+					return nextIsParen(lines, l, i+1)
+				}
+			}
+			prev = lines[l][i]
+		}
+	}
+	return false
+}
+
+// nextIsParen says whether the first byte after spaces, from line l at
+// column i on, is "(".
+func nextIsParen(lines [][]byte, l, i int) bool {
+	for ; l < len(lines); l, i = l+1, 0 {
+		if rest := bytes.TrimLeft(lines[l][i:], " \t\r"); len(rest) > 0 {
+			return rest[0] == '('
+		}
+	}
+	return false
 }
 
 // inUse says whether a reference starting at start is on a line holding a
