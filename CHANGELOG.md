@@ -8,6 +8,12 @@ tracker's. From v0.12.1 on, every number is this repository's.
 
 ## Unreleased
 
+- **Fixed: a Rust function named as a value with a turbofish is a
+  reference, not a call** (#100). `drop_arc_raw::<W>` in a waker's vtable
+  passes the function and calls nothing, and it was a `calls` edge because
+  the rule read any reference followed by `::<` as one. A turbofish is a
+  call only with `(` after it. On tokio, 11 edges become `references`, all
+  of them vtable entries.
 - **Added: calls and implementations written in a file an `include!`
   reads** (#88). rust-analyzer's index has no document for such a file, so
   the calls its functions make come from the server's call hierarchy, each
