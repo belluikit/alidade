@@ -329,8 +329,18 @@ Rules that follow, and are not open:
       2026-11-25): its fields, variants and nested modules, and an impl's
       items under its type, as in a hand-written file
       (`proto.complex_type.MyEnum.as_str_name()`). They are generated code
-      (ADR 004), at the `include!`. An `include!` of a hand-written file of
-      the repository is not covered by this rule (#84).
+      (ADR 004), at the `include!`.
+    - **A hand-written file that an `include!` reads is identified as itself**
+      (amended 2026-11-25, #84, the owner's decision): `include!("hand.rs")`
+      inside `pub mod hand_mod` in `src/lib.rs` makes `src/hand.rs#by_hand()`,
+      the file where the code is written, with the path inside that file. The
+      items are not generated, the file's node holds them, and they are at
+      their own positions. A file that two modules include is one node per
+      item for both, and the second `include!` is counted and reported. The
+      module path the `include!` gives is not in the ID, so that is what two
+      `include!`s of one file share. rust-analyzer's index has no document
+      for such a file: its items come from the server's outline, and the calls
+      and implementations written in it are not read (#88).
 
     Why the file, and not the crate's module path, which is how Rust itself
     names an item:

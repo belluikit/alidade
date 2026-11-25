@@ -20,8 +20,15 @@ tracker's. From v0.12.1 on, every number is this repository's.
   of its items. On prost-reflect, 160 items get nodes, each of the 22 proto
   messages and enums in the included packages has its edge, and 42 calls
   into generated code became edges. A `.proto` edit now reruns the Rust
-  layer, since that is when build scripts run. Not yet: an `include!` of a
-  hand-written file (#84).
+  layer, since that is when build scripts run.
+- **Added: the items of a hand-written file that an `include!` reads**
+  (#84). `include!("hand.rs")` inside a module gave the file a node and its
+  items none. They now have nodes at that file, `src/hand.rs#by_hand()`,
+  where they are written, not marked generated, and calls into them are
+  edges. A file that two modules include has one node per item, and
+  `graph_stats` lists the second `include!` among what the build skipped.
+  The calls and implementations written in the file are still not read, and
+  its file node says so (#88).
 
 - **Changed: the release is built with Go 1.27.4** (#74), up from 1.27.2,
   and links pylib v0.1.1. Go 1.27.4 refused pylib v0.1.0's macOS

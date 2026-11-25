@@ -5,8 +5,10 @@ package rust
 
 import (
 	"bytes"
+	"fmt"
 	"maps"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/belluikit/alidade/internal/graph"
@@ -22,9 +24,22 @@ type site struct {
 	path []string // the module's path in the document; empty at its top level
 	mod  []*scip.Descriptor
 	pkg  string // the Cargo package, as the index names it
-	out  string // the generated file, absolute, once the server has said it
+	out  string // the included file, absolute, once the server has said it
+	// hand is the included file, repo-relative, when it is a hand-written
+	// one of the repository rather than Cargo's output (#84).
+	hand string
 	// items are the nodes of the file's items, by ID.
 	items map[graph.ID]*def
+}
+
+// anchor is the file and the path in it under which the site's items are
+// identified (ADR 002 rule 16): the include!'s, for code Cargo generated;
+// the included file's own top level, for a hand-written one (#84).
+func (s *site) anchor() (string, []string) {
+	if s.hand != "" {
+		return s.hand, nil
+	}
+	return s.dc.rel, s.path
 }
 
 // generated adds a node for every item of the code Cargo's build writes
@@ -324,12 +339,17 @@ func (x *extractor) place(l *lsp, s *site) error {
 	return x.placeFile(l, s, out)
 }
 
-// placeFile adds the items of the file out under a site, when it is one
-// the layer does not read: Cargo's output, outside the repository or in a
-// directory it leaves out.
+// placeFile adds the items of the file out under a site, when the index
+// has no document of it: Cargo's output, outside the repository or in a
+// directory the layer leaves out, or a hand-written file of the repository
+// that no module declares (placeHand).
 func (x *extractor) placeFile(l *lsp, s *site, out string) error {
-	if rel, err := x.m.Rel(out); err == nil && x.reading[rel] {
-		return nil // a source file of the repository, read as itself
+	rel, err := x.m.Rel(out)
+	switch {
+	case err == nil && x.docs[rel] != nil:
+		return nil // a module of a crate, read as itself
+	case err == nil && x.reading[rel]:
+		return x.placeHand(l, s, out, rel)
 	}
 	syms, err := l.symbols(out)
 	if err != nil {
@@ -338,16 +358,55 @@ func (x *extractor) placeFile(l *lsp, s *site, out string) error {
 	}
 	s.out = out
 	x.report.GeneratedFiles++
-	g := &genFile{s: s, lines: bytes.Split(x.text(out), []byte("\n")), pkg: protoPackage(out)}
+	g := &genFile{s: s, l: l, lines: bytes.Split(x.text(out), []byte("\n")), pkg: protoPackage(out)}
 	return x.items(g, syms, slices.Clone(s.path), x.owner(s.dc.rel, s.path), []string{})
 }
 
-// A genFile is a generated file being read: its site, its text and the
-// .proto package prost-build named it after.
+// placeHand adds the items of a hand-written file of the repository that
+// the workspace includes, at the file, where they are written: `src/
+// hand.rs#by_hand()`, at their own positions, not generated (ADR 002 rule
+// 16, the owner's decision on #84). A file included twice has one node per
+// item for both, which is counted and reported at the second include!.
+func (x *extractor) placeHand(l *lsp, s *site, out, rel string) error {
+	if items := x.included[rel]; items != nil {
+		s.out, s.hand, s.items = out, rel, items
+		x.report.IncludedAgain++
+		x.skip(s.dc.abs, int(s.at.line)+1, fmt.Errorf("%s is included here and in another module: its items are one node each, at the file, for both", rel))
+		return nil
+	}
+	syms, err := l.symbols(out)
+	if err != nil {
+		x.skip(s.dc.abs, int(s.at.line)+1, err)
+		return nil
+	}
+	s.out, s.hand = out, rel
+	x.included[rel] = s.items
+	x.report.Included++
+	file, err := x.m.RustID(rel)
+	if err != nil {
+		return err
+	}
+	g := &genFile{s: s, l: l, lines: bytes.Split(x.text(out), []byte("\n"))}
+	return x.items(g, syms, []string{}, file, nil)
+}
+
+// A genFile is an included file being read: its site, the server that
+// outlined it, its text and the .proto package prost-build named it after.
 type genFile struct {
 	s     *site
+	l     *lsp
 	lines [][]byte
 	pkg   string
+}
+
+// at is where an item of a hand-written file is, its name's start and the
+// item's last line, columns in bytes whatever the server counts in.
+func (g *genFile) at(sy symbol) (start pos, endLine int32) {
+	start = pos{sy.SelectionRange.Start.Line, sy.SelectionRange.Start.Character}
+	if !g.l.utf8 && int(start.line) < len(g.lines) {
+		start.col = byteCol(g.lines[start.line], start.col)
+	}
+	return start, sy.Range.End.Line
 }
 
 // symbolKinds are the index's kinds for the server's (LSP's SymbolKind) of
@@ -381,7 +440,7 @@ func (x *extractor) items(g *genFile, syms []symbol, path []string, parent graph
 		if isFunc(kind) {
 			name += "()"
 		}
-		d, err := x.declareGenerated(g.s, append(slices.Clone(path), name), kind, parent)
+		d, err := x.declareItem(g, sy, append(slices.Clone(path), name), kind, parent)
 		if err != nil {
 			return err
 		}
@@ -411,7 +470,8 @@ func (x *extractor) implItems(g *genFile, sy symbol, path []string, parent graph
 		seg += "[" + trait + "]"
 	}
 	owner := parent
-	if id, err := x.m.RustID(g.s.dc.rel, append(slices.Clone(path), ty)...); err == nil && x.emitted[id] {
+	file, _ := g.s.anchor()
+	if id, err := x.m.RustID(file, append(slices.Clone(path), ty)...); err == nil && x.emitted[id] {
 		owner = id
 	}
 	for _, c := range sy.Children {
@@ -423,7 +483,7 @@ func (x *extractor) implItems(g *genFile, sy symbol, path []string, parent graph
 		if kind == scip.SymbolInformation_Function || kind == scip.SymbolInformation_Method {
 			kind, name = scip.SymbolInformation_Method, name+"()"
 		}
-		if _, err := x.declareGenerated(g.s, append(slices.Clone(path), seg, name), kind, owner); err != nil {
+		if _, err := x.declareItem(g, c, append(slices.Clone(path), seg, name), kind, owner); err != nil {
 			return err
 		}
 	}
@@ -454,11 +514,15 @@ func implName(name string) (ty, trait string) {
 	return typeName(rest), ""
 }
 
-// declareGenerated adds one generated item's node, at its site, contained
-// by parent. nil when its ID cannot be minted or another item already has
-// it (two included files declaring one name in one module).
-func (x *extractor) declareGenerated(s *site, path []string, kind scip.SymbolInformation_Kind, parent graph.ID) (*def, error) {
-	id, err := x.m.RustID(s.dc.rel, path...)
+// declareItem adds the node of one item of an included file, sy, under
+// its site's anchor, contained by parent: a generated one at the include!,
+// a hand-written one where it is. nil when its ID cannot be minted or
+// another item already has it (two included files declaring one name in
+// one module).
+func (x *extractor) declareItem(g *genFile, sy symbol, path []string, kind scip.SymbolInformation_Kind, parent graph.ID) (*def, error) {
+	s := g.s
+	file, _ := s.anchor()
+	id, err := x.m.RustID(file, path...)
 	if err != nil {
 		x.skip(s.dc.abs, int(s.at.line)+1, err)
 		return nil, nil
@@ -469,11 +533,18 @@ func (x *extractor) declareGenerated(s *site, path []string, kind scip.SymbolInf
 	x.emitted[id] = true
 	d := &def{doc: s.dc, kind: kind, start: s.at, path: path, id: id}
 	s.items[id] = d
-	x.report.Generated++
-	err = x.b.AddNode(graph.Node{ID: id, Kind: kinds[kind], Name: strings.TrimSuffix(path[len(path)-1], "()"),
-		Pos: graph.Position{File: s.dc.rel, Line: int(s.at.line) + 1, Col: int(s.at.col) + 1}, Generated: true,
-		Attrs: map[string]string{"generated_in": filepathBase(s.out)}})
-	if err != nil {
+	n := graph.Node{ID: id, Kind: kinds[kind], Name: strings.TrimSuffix(path[len(path)-1], "()"),
+		Pos: graph.Position{File: file, Line: int(s.at.line) + 1, Col: int(s.at.col) + 1}, Generated: true,
+		Attrs: map[string]string{"generated_in": filepathBase(s.out)}}
+	if s.hand != "" {
+		start, end := g.at(sy)
+		n.Pos.Line, n.Pos.Col, n.Generated = int(start.line)+1, int(start.col)+1, false
+		n.Attrs = map[string]string{"end_line": strconv.Itoa(int(end) + 1)}
+		x.report.Declarations++
+	} else {
+		x.report.Generated++
+	}
+	if err := x.b.AddNode(n); err != nil {
 		return nil, err
 	}
 	return d, x.b.AddEdge(graph.Edge{From: parent, To: id, Kind: graph.KindContains, Derivation: graph.Extracted})
@@ -515,7 +586,8 @@ func (st *site) declares(m *graph.Minter, sym string, s *scip.Symbol) *def {
 	if err != nil {
 		return nil
 	}
-	id, err := m.RustID(st.dc.rel, append(slices.Clone(st.path), segs...)...)
+	file, path := st.anchor()
+	id, err := m.RustID(file, append(slices.Clone(path), segs...)...)
 	if err != nil {
 		return nil
 	}
