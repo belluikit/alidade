@@ -150,7 +150,8 @@ Rules:
      trait, plus, for the ones written inside a function body, which LSP
      misses, the trait the index's reference on the impl's header names: the
      exact trait, not a name (amended 2026-11-24, #72, the owner's decision).
-   - **The oracle is rustc:** its direct calls in LLVM IR at opt-level 0.
+   - **The oracle is rustc:** its direct calls in LLVM IR at opt-level 0, with
+     no LLVM pass run and dead code compiled (#98, ADR 009).
 
    What would reopen this: rustc's calls disagreeing with the layer's on a
    meaningful share of a repository's functions. The probe covered 43
