@@ -56,9 +56,12 @@ lands on both surfaces or on neither.
 
 ### `scripts/corpus.sh`
 
-Runs `TestCorpus` over the repositories checked out beside this one, every
-one that is there, with tests on. It checks what a fixture cannot: that the
-graph agrees with the tree.
+Runs `TestCorpus` over the in-house repositories, every one that is checked
+out, with tests on. It checks what a fixture cannot: that the graph agrees
+with the tree. This script, `scripts/oracle.sh` and `scripts/mcp-e2e.sh`
+look for each repository beside this one, then beside it under
+`trendvidia/` (`../../trendvidia/<name>`), where the others stayed when
+alidade moved to `belluikit/` (`scripts/inhouse.sh`).
 
 - Test markers follow `_test.go` exactly.
 - Every positioned node names a file in the tree.
