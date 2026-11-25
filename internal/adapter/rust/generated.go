@@ -405,17 +405,22 @@ func (x *extractor) placeHand(l *lsp, s *site, out, rel string) error {
 	if err != nil {
 		return err
 	}
-	g := &genFile{s: s, l: l, lines: bytes.Split(x.text(out), []byte("\n"))}
+	text := x.text(out)
+	g := &genFile{s: s, l: l, lines: bytes.Split(text, []byte("\n")), hand: &doc{rel: rel, abs: out, ws: s.dc.ws, text: text}}
 	return x.items(g, syms, []string{}, file, nil)
 }
 
 // A genFile is an included file being read: its site, the server that
 // outlined it, its text and the .proto package prost-build named it after.
+// hand is a hand-written one's doc, with no index document: what its
+// items' defs are in, so a method a derive writes on one of its types
+// (macroWritten) is at the file too.
 type genFile struct {
 	s     *site
 	l     *lsp
 	lines [][]byte
 	pkg   string
+	hand  *doc
 }
 
 // at is where an item of a hand-written file is, its name's start and the
@@ -555,8 +560,9 @@ func (x *extractor) declareItem(g *genFile, sy symbol, path []string, kind scip.
 	n := graph.Node{ID: id, Kind: kinds[kind], Name: strings.TrimSuffix(path[len(path)-1], "()"),
 		Pos: graph.Position{File: file, Line: int(s.at.line) + 1, Col: int(s.at.col) + 1}, Generated: true,
 		Attrs: map[string]string{"generated_in": filepathBase(s.out)}}
-	if s.hand != "" {
+	if g.hand != nil {
 		start, end := g.at(sy)
+		d.doc, d.start = g.hand, start
 		n.Pos.Line, n.Pos.Col, n.Generated = int(start.line)+1, int(start.col)+1, false
 		n.Attrs = map[string]string{"end_line": strconv.Itoa(int(end) + 1)}
 		x.report.Declarations++

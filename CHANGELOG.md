@@ -29,6 +29,12 @@ tracker's. From v0.12.1 on, every number is this repository's.
   `graph_stats` lists the second `include!` among what the build skipped.
   The calls and implementations written in the file are still not read, and
   its file node says so (#88).
+- **Fixed: a call of a method a derive writes on an included type is an
+  edge** (#84), as on any other type: `s.clone()` on a generated
+  `pb::Shape` reaches `src/lib.rs#pb.Shape[Clone].clone()`, a node under
+  its type. It was counted as a call into generated code with no edge. An
+  included file is also placed once per module; such a call placed it a
+  second time.
 
 - **Changed: the release is built with Go 1.27.4** (#74), up from 1.27.2,
   and links pylib v0.1.1. Go 1.27.4 refused pylib v0.1.0's macOS

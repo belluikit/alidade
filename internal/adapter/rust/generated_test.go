@@ -185,10 +185,11 @@ pub trait Area {
 }
 
 pub fn uses_hand(h: &hand_mod::Hand) -> i32 {
-    hand_mod::by_hand() + again::by_hand() + h.get() + h.area()
+    hand_mod::by_hand() + again::by_hand() + h.get() + h.area() + h.clone().n
 }
 `,
-		"src/hand.rs": `pub struct Hand {
+		"src/hand.rs": `#[derive(Clone)]
+pub struct Hand {
     pub n: i32,
 }
 
@@ -227,11 +228,12 @@ func TestHandWrittenInclude(t *testing.T) {
 	}
 	slices.Sort(hand)
 	check(t, "hand.rs nodes", hand, []string{
-		"src/hand.rs#Hand type 1:12 end 3 generated false",
-		"src/hand.rs#Hand.get() method 6:12 end 8 generated false",
-		"src/hand.rs#Hand.n field 2:9 end 2 generated false",
-		"src/hand.rs#Hand[Area].area() method 12:8 end 14 generated false",
-		"src/hand.rs#by_hand() func 17:21 end 19 generated false", // past the comment's six bytes of three characters
+		"src/hand.rs#Hand type 2:12 end 4 generated false",
+		"src/hand.rs#Hand.get() method 7:12 end 9 generated false",
+		"src/hand.rs#Hand.n field 3:9 end 3 generated false",
+		"src/hand.rs#Hand[Area].area() method 13:8 end 15 generated false",
+		"src/hand.rs#Hand[Clone].clone() method 2:12 end  generated true", // the derive's, at its type
+		"src/hand.rs#by_hand() func 18:21 end 20 generated false",         // past the comment's six bytes of three characters
 	})
 	var calls []string
 	for _, e := range edges(g, graph.KindCalls) {
@@ -242,6 +244,7 @@ func TestHandWrittenInclude(t *testing.T) {
 	check(t, "calls", calls, []string{ // again::by_hand() is the same node
 		"src/lib.rs#uses_hand() -> src/hand.rs#Hand.get()",
 		"src/lib.rs#uses_hand() -> src/hand.rs#Hand[Area].area()",
+		"src/lib.rs#uses_hand() -> src/hand.rs#Hand[Clone].clone()",
 		"src/lib.rs#uses_hand() -> src/hand.rs#by_hand()",
 	})
 	checkHandReport(t, g, rep)
@@ -292,7 +295,9 @@ func TestHandWrittenIncludeInUTF16(t *testing.T) {
 // the search through macros (throughSymbols) back to the file it is in and
 // place it a second time. Measured on main before the fix: GeneratedFiles
 // 2 for one file; on jj, hand-written secure_config.rs reported as
-// included by two modules when one includes it.
+// included by two modules when one includes it. The method is a node
+// under its type, at the include!, and the call an edge (ADR 009; on main
+// it was CallsGenerated).
 func TestGeneratedPlacedOnce(t *testing.T) {
 	dir := fixtureOf(t, "gen", map[string]string{"src/lib.rs": `pub mod pb {
     include!(concat!(env!("OUT_DIR"), "/fixture.shapes.rs"));
@@ -302,8 +307,12 @@ pub fn cloned(s: &pb::Shape) -> pb::Shape {
     s.clone()
 }
 `})
-	_, rep := extract(t, dir)
-	if rep.GeneratedFiles != 1 {
-		t.Errorf("GeneratedFiles %d; want 1", rep.GeneratedFiles)
+	g, rep := extract(t, dir)
+	if rep.GeneratedFiles != 1 || rep.MacroWritten != 1 || rep.CallsGenerated != 0 {
+		t.Errorf("GeneratedFiles %d, MacroWritten %d, CallsGenerated %d; want 1, 1, 0", rep.GeneratedFiles, rep.MacroWritten, rep.CallsGenerated)
+	}
+	check(t, "calls", edges(g, graph.KindCalls), []string{"src/lib.rs#cloned() -> src/lib.rs#pb.Shape[Clone].clone()"})
+	if !slices.Contains(generatedNodes(g), "src/lib.rs#pb.Shape[Clone].clone() method") {
+		t.Errorf("generated nodes %v; want pb.Shape[Clone].clone() among them", generatedNodes(g))
 	}
 }
