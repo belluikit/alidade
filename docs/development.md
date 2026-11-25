@@ -56,9 +56,12 @@ lands on both surfaces or on neither.
 
 ### `scripts/corpus.sh`
 
-Runs `TestCorpus` over the repositories checked out beside this one, every
-one that is there, with tests on. It checks what a fixture cannot: that the
-graph agrees with the tree.
+Runs `TestCorpus` over the in-house repositories, every one that is checked
+out, with tests on. It checks what a fixture cannot: that the graph agrees
+with the tree. This script, `scripts/oracle.sh` and `scripts/mcp-e2e.sh`
+look for each repository beside this one, then beside it under
+`trendvidia/` (`../../trendvidia/<name>`), where the others stayed when
+alidade moved to `belluikit/` (`scripts/inhouse.sh`).
 
 - Test markers follow `_test.go` exactly.
 - Every positioned node names a file in the tree.
@@ -87,6 +90,7 @@ nothing.
 | Frontend imports | TypeScript's own module resolution, from the `typescript` package the repository installs |
 | Frontend calls | that same package's type checker (TypeScript 5 or 6 under Node, where the layer runs TypeScript 7's Go compiler), and a second writing of the layer's declaration rules, edge by edge |
 | Generated TypeScript exports | the descriptor protoc-gen-es embeds in each `_pb.ts` |
+| Rust calls | rustc: each library of a workspace compiled to LLVM IR at opt-level 0, into a scratch target directory, and its direct calls, decoded from Rust's v0 symbols. Each edge only one side has is classed: to a function with no node, through a generic trait bound, an operator's, or listed |
 | goasm templates | the generator each `//go:generate` line pins, run on one template at a time |
 | PXF type references and `${path}` references | a reader written from the protowire specification over the raw text, each name confirmed by protoc |
 | PXF chain links | a census judged by reading (`internal/oracle/testdata/chain-census.pxf`), since only chameleon's own chain package expands them |
