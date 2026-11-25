@@ -119,7 +119,7 @@ func Extract(b *graph.Builder, root string, opts Options) (*Report, error) {
 		abs = real // rust-analyzer reports resolved paths; the walk must agree
 	}
 	x := &extractor{b: b, m: b.Minter(), root: abs, report: &Report{}, emitted: map[graph.ID]bool{},
-		docs: map[string]*doc{}, external: map[string]bool{}, included: map[string]map[graph.ID]*def{}}
+		docs: map[string]*doc{}, external: map[string]bool{}, included: map[string]map[graph.ID]*def{}, handSites: map[string][]pos{}}
 	files, manifests, err := x.discover(opts)
 	if err != nil {
 		return nil, fmt.Errorf("rust: discover under %s: %w", abs, err)
@@ -149,7 +149,7 @@ func (x *extractor) read(files, manifests []string) error {
 		}
 	}
 	defer x.closeServers()
-	for _, step := range []func() error{x.declarations, x.generated, x.macroWritten, x.edges, x.implementations, x.buildScripts} {
+	for _, step := range []func() error{x.declarations, x.generated, x.macroWritten, x.edges, x.includedCalls, x.implementations, x.buildScripts} {
 		if err := step(); err != nil {
 			return err
 		}
@@ -173,6 +173,11 @@ type extractor struct {
 	// included are the items of each hand-written file an include! reads,
 	// by its repo-relative path (#84).
 	included map[string]map[graph.ID]*def
+	// handSites are the include!s of those files, by the repo-relative
+	// path of the file holding each; outlineImpls their impl blocks of a
+	// type they declare, by trait name (#88).
+	handSites    map[string][]pos
+	outlineImpls []outlineImpl
 	// bySym maps a symbol to the declarations defining it: one per symbol
 	// but in a package with several crate roots, whose tests, benches and
 	// build script share its symbols (ADR 002 rule 16).
@@ -267,7 +272,7 @@ func (x *extractor) files(files []string) error {
 		attrs := map[string]string{}
 		switch {
 		case x.included[rel] != nil:
-			attrs["calls_unavailable"] = "its calls and implementations are not read: an include! reads it, and rust-analyzer's index has no document for such a file; its items are read from the server's outline (#88)"
+			attrs["calls_unavailable"] = "some of its calls are not read: an include! reads it, so rust-analyzer's index has no document of it, and its calls come from the server's call hierarchy, which leaves out a call of a method of an impl block the file writes and a function named as a value (#88)"
 		case x.docs[rel] == nil:
 			x.report.Unanalyzed++
 			why := "no crate rust-analyzer indexed includes the file: it is outside every Cargo workspace, or no target or module declaration names it"

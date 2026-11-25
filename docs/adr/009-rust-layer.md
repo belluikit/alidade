@@ -376,13 +376,35 @@ Not in this version:
 - a module file (one the index reads) whose header says prost-build wrote it.
   An `include!`d one is joined to its `.proto` messages (ADR 002 rule 16, #89):
   on jj, all 37 of its prost messages and enums, with no conflicting name;
-- the calls and implementations written in a hand-written file the workspace
-  `include!`s. Its items are nodes, from the server's outline (ADR 002 rule 16,
-  #84), and calls into them are edges, but rust-analyzer's index has no document
-  for the file. Asked for a trait's implementations, the server places one
-  written in such a file at the `include!`, not in the file (#88);
+- of what a hand-written file the workspace `include!`s writes (#88, below): a
+  call of a method of an impl block the file itself writes (`h.area()`,
+  `Hand::area(&h)`), a function it names as a value, and an implementation
+  elsewhere of a trait it declares. The server answers none of them;
 - a generated file included only through a macro when no workspace code names
   any of its items. Nothing then leads to it.
+
+**Calls and implementations inside an included file** (*added 2026-11-25, #88,
+the owner's decision*). rust-analyzer's index has no document for a hand-written
+file that an `include!` reads (ADR 002 rule 16), so two more derivations read
+what it writes:
+- **Calls** come from the server's call hierarchy (`callHierarchy/outgoingCalls`
+  on each function of the file), which answers there. It finds the call sites;
+  each is then named by the server's definition at the last character of its
+  range, as the index would name it. `crate::Area::area(&h)` reaches the impl's
+  `Hand[Area].area()`, where the call hierarchy names the trait's `Area.area()`.
+  The call hierarchy reports calls alone, so there is no references edge from
+  such a file, and it leaves out a call of a method of an impl block the file
+  itself writes (measured, rust-analyzer 1.100).
+- **Implementations** come from the impl blocks of the file's outline: `impl
+  crate::Area for Hand` is an implements edge from the file's `Hand` to the
+  workspace trait named `Area`, when exactly one has that name, as the index's
+  names are joined inside function bodies. The server's own answer for such an
+  implementation points at the `include!`, or into the file, and names no type;
+  it is passed over, not counted as unplaced.
+
+On the repositories measured, neither adds an edge: protowire-rust and
+prost-reflect include no hand-written file, and jj's included files are its
+prost output, whose 4 written functions call no workspace code.
 
 **Measured on the built layer** (`alidade graph`, the whole graph, all layers):
 
