@@ -7,12 +7,18 @@
 # scored against its reference (see internal/bench). It spends API
 # money — each session is capped at ALIDADE_BENCH_BUDGET dollars — so
 # run it deliberately. ALIDADE_BENCH defaults to the protocompile checkout
-# beside this one, which must be at the commit the set's references were
-# written against; ALIDADE_BENCH_OUT defaults to a dated file under
+# beside this one or under ../../trendvidia (scripts/inhouse.sh), which
+# must be at the commit the set's references were written against: the
+# benchmark refuses another before it spends anything. ALIDADE_BENCH_OUT defaults to a dated file under
 # bench-results/. The other knobs are listed in internal/bench/live_test.go.
 set -eu
 cd "$(dirname "$0")/.."
-: "${ALIDADE_BENCH:=$(cd .. && pwd)/protocompile}"
+. scripts/inhouse.sh
+: "${ALIDADE_BENCH:=$(inhouse protocompile)}"
+if [ -z "$ALIDADE_BENCH" ]; then
+  echo "bench: no protocompile checked out beside this one or under ../../trendvidia; set ALIDADE_BENCH" >&2
+  exit 2
+fi
 if [ ! -e "$ALIDADE_BENCH/.git" ]; then
   echo "bench: $ALIDADE_BENCH is not a checkout; set ALIDADE_BENCH" >&2
   exit 2

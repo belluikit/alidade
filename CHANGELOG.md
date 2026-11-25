@@ -21,7 +21,7 @@ tracker's. From v0.12.1 on, every number is this repository's.
   again** (#86). `oracle.sh`, `corpus.sh` and `mcp-e2e.sh` looked only
   beside this repository, where 1 of 16 is since the move to `belluikit/`
   (mcp-e2e.sh found none, and stopped). They now also look under
-  `../../trendvidia/`.
+  `../../trendvidia/`, and so does `bench.sh` for protocompile (#92).
 - **Added: a Rust build script that fails is reported** (#85). Its
   package, how it exited and the last lines it printed are listed by
   `graph_stats` among what the build skipped, at the package's
