@@ -373,8 +373,11 @@ Not in this version:
   prost-reflect, 14 of rustc's call edges are `==`;
 - more than one configuration. rust-analyzer reads one: the workspace's features
   as Cargo unifies them, and the host's target;
-- the items of a hand-written file the workspace `include!`s: they have no node
-  (#84, an ID rule to decide);
+- the calls and implementations written in a hand-written file the workspace
+  `include!`s. Its items are nodes, from the server's outline (ADR 002 rule 16,
+  #84), and calls into them are edges, but rust-analyzer's index has no document
+  for the file. Asked for a trait's implementations, the server places one
+  written in such a file at the `include!`, not in the file (#88);
 - a generated file included only through a macro when no workspace code names
   any of its items. Nothing then leads to it.
 

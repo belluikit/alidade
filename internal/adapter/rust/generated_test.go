@@ -4,6 +4,7 @@
 package rust
 
 import (
+	"fmt"
 	"slices"
 	"strings"
 	"testing"
@@ -162,5 +163,156 @@ pub fn via() -> wrapped::Via {
 	check(t, "generated nodes", generatedNodes(g), []string{"src/lib.rs#wrapped.Via type"})
 	if rep.GeneratedFiles != 1 || rep.Generated != 1 {
 		t.Errorf("GeneratedFiles %d, Generated %d; want 1, 1", rep.GeneratedFiles, rep.Generated)
+	}
+}
+
+// handFixture is the crate of the generated-code fixture, its build script
+// kept, whose lib.rs includes a hand-written file of its own, hand.rs, in
+// two modules.
+func handFixture(t *testing.T) string {
+	t.Helper()
+	return fixtureOf(t, "gen", map[string]string{
+		"src/lib.rs": `pub mod hand_mod {
+    include!("hand.rs");
+}
+
+pub mod again {
+    include!("hand.rs");
+}
+
+pub trait Area {
+    fn area(&self) -> i32;
+}
+
+pub fn uses_hand(h: &hand_mod::Hand) -> i32 {
+    hand_mod::by_hand() + again::by_hand() + h.get() + h.area() + h.clone().n
+}
+`,
+		"src/hand.rs": `#[derive(Clone)]
+pub struct Hand {
+    pub n: i32,
+}
+
+impl Hand {
+    pub fn get(&self) -> i32 {
+        self.n
+    }
+}
+
+impl crate::Area for Hand {
+    fn area(&self) -> i32 {
+        2
+    }
+}
+
+/* ééé */ pub fn by_hand() -> i32 {
+    1
+}
+`,
+	})
+}
+
+// TestHandWrittenInclude reads a hand-written file that an include! reads
+// in two modules: its items are nodes at the file, where they are written,
+// not generated, once for both include!s, and the workspace's calls into
+// them are edges (ADR 002 rule 16, the owner's decision on #84). What the
+// file itself calls is not read, and its file node says so (#88).
+func TestHandWrittenInclude(t *testing.T) {
+	g, rep := extract(t, handFixture(t))
+	var hand []string
+	for n := range g.Nodes() {
+		if strings.HasPrefix(string(n.ID), "rust://src/hand.rs#") {
+			hand = append(hand, fmt.Sprintf("%s %s %d:%d end %s generated %v", strings.TrimPrefix(string(n.ID), "rust://"),
+				n.Kind, n.Pos.Line, n.Pos.Col, n.Attrs["end_line"], n.Generated))
+		}
+	}
+	slices.Sort(hand)
+	check(t, "hand.rs nodes", hand, []string{
+		"src/hand.rs#Hand type 2:12 end 4 generated false",
+		"src/hand.rs#Hand.get() method 7:12 end 9 generated false",
+		"src/hand.rs#Hand.n field 3:9 end 3 generated false",
+		"src/hand.rs#Hand[Area].area() method 13:8 end 15 generated false",
+		"src/hand.rs#Hand[Clone].clone() method 2:12 end  generated true", // the derive's, at its type
+		"src/hand.rs#by_hand() func 18:21 end 20 generated false",         // past the comment's six bytes of three characters
+	})
+	var calls []string
+	for _, e := range edges(g, graph.KindCalls) {
+		if strings.HasPrefix(e, "src/lib.rs#uses_hand()") {
+			calls = append(calls, e)
+		}
+	}
+	check(t, "calls", calls, []string{ // again::by_hand() is the same node
+		"src/lib.rs#uses_hand() -> src/hand.rs#Hand.get()",
+		"src/lib.rs#uses_hand() -> src/hand.rs#Hand[Area].area()",
+		"src/lib.rs#uses_hand() -> src/hand.rs#Hand[Clone].clone()",
+		"src/lib.rs#uses_hand() -> src/hand.rs#by_hand()",
+	})
+	checkHandReport(t, g, rep)
+}
+
+// checkHandReport pins TestHandWrittenInclude's counts, the report of the
+// second include!, and hand.rs's file node saying what is not read.
+func checkHandReport(t *testing.T, g *graph.Graph, rep *Report) {
+	t.Helper()
+	if rep.Included != 1 || rep.IncludedAgain != 1 || rep.CallsGenerated != 0 || rep.Unanalyzed != 0 {
+		t.Errorf("Included %d, IncludedAgain %d, CallsGenerated %d, Unanalyzed %d; want 1, 1, 0, 0",
+			rep.Included, rep.IncludedAgain, rep.CallsGenerated, rep.Unanalyzed)
+	}
+	if len(rep.Skipped) != 1 || rep.Skipped[0].File != "src/lib.rs" || rep.Skipped[0].Line != 6 ||
+		!strings.Contains(rep.Skipped[0].Reason, "src/hand.rs is included here and in another module") {
+		t.Errorf("skipped %+v; want the second include!, at src/lib.rs:6, alone", rep.Skipped)
+	}
+	for n := range g.Nodes() {
+		if n.ID == "rust://src/hand.rs" && !strings.Contains(n.Attrs["calls_unavailable"], "an include! reads it") {
+			t.Errorf("hand.rs's calls_unavailable is %q; want it to say an include! reads it", n.Attrs["calls_unavailable"])
+		}
+	}
+}
+
+// TestHandWrittenIncludeInUTF16: a server counting in UTF-16 has an
+// included item's column converted to bytes, as the index counts.
+func TestHandWrittenIncludeInUTF16(t *testing.T) {
+	old := lspEncodings
+	lspEncodings = []string{"utf-16"}
+	t.Cleanup(func() { lspEncodings = old })
+	g, rep := extract(t, handFixture(t))
+	if rep.ServerColumns != "utf-16" {
+		t.Fatalf("the server counted in %q, want utf-16", rep.ServerColumns)
+	}
+	col := -1
+	for n := range g.Nodes() {
+		if n.ID == "rust://src/hand.rs#by_hand()" {
+			col = n.Pos.Col
+		}
+	}
+	if col != 21 {
+		t.Errorf("by_hand() at column %d (-1: no node), want 21: the comment's characters are two bytes and one UTF-16 unit each", col)
+	}
+}
+
+// TestGeneratedPlacedOnce: a call of a method a derive writes on a
+// generated type, which the file's outline has no item for, does not lead
+// the search through macros (throughSymbols) back to the file it is in and
+// place it a second time. Measured on main before the fix: GeneratedFiles
+// 2 for one file; on jj, hand-written secure_config.rs reported as
+// included by two modules when one includes it. The method is a node
+// under its type, at the include!, and the call an edge (ADR 009; on main
+// it was CallsGenerated).
+func TestGeneratedPlacedOnce(t *testing.T) {
+	dir := fixtureOf(t, "gen", map[string]string{"src/lib.rs": `pub mod pb {
+    include!(concat!(env!("OUT_DIR"), "/fixture.shapes.rs"));
+}
+
+pub fn cloned(s: &pb::Shape) -> pb::Shape {
+    s.clone()
+}
+`})
+	g, rep := extract(t, dir)
+	if rep.GeneratedFiles != 1 || rep.MacroWritten != 1 || rep.CallsGenerated != 0 {
+		t.Errorf("GeneratedFiles %d, MacroWritten %d, CallsGenerated %d; want 1, 1, 0", rep.GeneratedFiles, rep.MacroWritten, rep.CallsGenerated)
+	}
+	check(t, "calls", edges(g, graph.KindCalls), []string{"src/lib.rs#cloned() -> src/lib.rs#pb.Shape[Clone].clone()"})
+	if !slices.Contains(generatedNodes(g), "src/lib.rs#pb.Shape[Clone].clone() method") {
+		t.Errorf("generated nodes %v; want pb.Shape[Clone].clone() among them", generatedNodes(g))
 	}
 }

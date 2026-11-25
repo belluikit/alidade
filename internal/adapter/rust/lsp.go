@@ -341,11 +341,16 @@ type symbol struct {
 	Children       []symbol  `json:"children"`
 }
 
-// A lineRange is where an LSP range starts, by line.
+// A lineRange is where an LSP range starts, its column counted as the
+// server negotiated, and the line it ends on.
 type lineRange struct {
 	Start struct {
-		Line int32 `json:"line"`
+		Line      int32 `json:"line"`
+		Character int32 `json:"character"`
 	} `json:"start"`
+	End struct {
+		Line int32 `json:"line"`
+	} `json:"end"`
 }
 
 // symbols lists the items of a file, nested, as the server's outline
