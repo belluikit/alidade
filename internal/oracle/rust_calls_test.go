@@ -72,11 +72,21 @@ start:
 }
 
 ; lib::g
-define i32 @_RNvCs2xfZtAFMfmm_3lib1g() unnamed_addr #0 {
+define i32 @_RNvCs2xfZtAFMfmm_3lib1g() unnamed_addr #0 !dbg !10 {
 start:
   %_2 = call i32 @_RNvCs2xfZtAFMfmm_3lib1g()
   ret i32 1
 }
+
+; lib::f::{closure#0}: a closure's own line is not its function's
+define void @_RNCNvCs2xfZtAFMfmm_3lib1f0B3_() unnamed_addr #0 !dbg !11 {
+start:
+  ret void
+}
+
+!11 = distinct !DISubprogram(name: "{closure#0}", scope: !1, file: !2, line: 9, type: !3, scopeLine: 9, spFlags: DISPFlagDefinition, unit: !4)
+!10 = distinct !DISubprogram(name: "g", linkageName: "_RNvCs2xfZtAFMfmm_3lib1g", scope: !1, file: !2, line: 7, type: !3, scopeLine: 7, spFlags: DISPFlagDefinition, unit: !4)
+!2 = !DIFile(filename: "src/lib.rs", directory: "/ws", checksumkind: CSK_MD5, checksum: "00")
 `
 
 // TestReadIR reads the functions an IR module defines and the crate's
@@ -91,6 +101,9 @@ func TestReadIR(t *testing.T) {
 	}
 	if !rc.Calls["f"]["g"] || len(rc.Calls) != 1 || len(rc.Calls["f"]) != 1 {
 		t.Errorf("calls %v; want f -> g alone: core's panic is outside the crate, g -> g a function calling itself", rc.Calls)
+	}
+	if want := []string{"/ws/src/lib.rs:7"}; !slices.Equal(rc.Locs["g"], want) || len(rc.Locs) != 1 {
+		t.Errorf("locs %v; want g at %v, from its debug info, and f nowhere: it has none", rc.Locs, want)
 	}
 }
 
