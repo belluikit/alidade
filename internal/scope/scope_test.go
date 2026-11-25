@@ -115,6 +115,39 @@ func TestInstalledPackages(t *testing.T) {
 	}
 }
 
+// TestBuildCaches pins #75: a directory holding a CACHEDIR.TAG that
+// starts with the specification's signature is left out, as Cargo's
+// target/ is, whatever its name, and the list cannot bring it back; a
+// CACHEDIR.TAG without the signature marks nothing, and a directory named
+// target without one is read (zitadel's internal/repository/target is a
+// Go package).
+func TestBuildCaches(t *testing.T) {
+	root := t.TempDir()
+	for _, d := range []string{"target/debug", "out", "fake", "internal/target"} {
+		if err := os.MkdirAll(filepath.Join(root, d), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	tag := cacheTag + "\n# This file is a cache directory tag created by cargo.\n"
+	for dir, text := range map[string]string{"target": tag, "out": tag, "fake": "not a tag\n"} {
+		if err := os.WriteFile(filepath.Join(root, dir, "CACHEDIR.TAG"), []byte(text), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, d := range []*Dirs{New(nil), New([]string{})} {
+		for rel, want := range map[string]bool{"target": true, "out": true, "fake": false, "internal/target": false} {
+			if got := d.SkipsDir(root, filepath.Join(root, rel)); got != want {
+				t.Errorf("SkipsDir(%q) = %v, want %v", rel, got, want)
+			}
+		}
+		for rel, want := range map[string]bool{"target/debug/build/x/out/made.rs": true, "out/a.md": true, "fake/a.md": false, "internal/target/a.go": false} {
+			if got := d.SkipsUnder(root, filepath.Join(root, rel)); got != want {
+				t.Errorf("SkipsUnder(%q) = %v, want %v", rel, got, want)
+			}
+		}
+	}
+}
+
 // TestOtherCheckout pins #24: a worktree of root's repository nested in
 // it is skipped, a repository of its own nested the same way is not, nor
 // is a directory inside the worktree, which its top already covers.

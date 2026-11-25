@@ -503,3 +503,31 @@ func TestNestedWorktreeIsLeftOut(t *testing.T) {
 		t.Error("an edit in a nested worktree changed the fingerprint")
 	}
 }
+
+// TestCargoTargetIsLeftOut pins #75: once Cargo has written target/ — its
+// CACHEDIR.TAG and the .rs files build scripts write there — the next
+// build reruns no layer and the change check sees nothing. Before, the
+// Markdown layer's signature read the .rs files' existence and reran once
+// after a Rust repository's first build. target/ is written here as Cargo
+// writes it, and the tree has no Cargo.toml, so no toolchain runs: with
+// one, Cargo may change the tree on its own (a Cargo.lock it writes),
+// which is not what this pins.
+func TestCargoTargetIsLeftOut(t *testing.T) {
+	root := t.TempDir()
+	write(t, filepath.Join(root, "src/lib.rs"), "pub fn f() {}\n")
+	write(t, filepath.Join(root, "README.md"), "# Hi\n")
+	s := newSession(t, root)
+	mustSessionBuild(t, s)
+	before, err := s.Fingerprint()
+	if err != nil {
+		t.Fatal(err)
+	}
+	write(t, filepath.Join(root, "target/CACHEDIR.TAG"), "Signature: 8a477f597d28d172789f06886806bc55\n# This file is a cache directory tag created by cargo.\n")
+	write(t, filepath.Join(root, "target/debug/build/tool-0123456789abcdef/out/made.rs"), "pub fn made() {}\n")
+	if after, _ := s.Fingerprint(); after != before {
+		t.Error("Cargo's target/ changed the fingerprint")
+	}
+	if _, rep := mustSessionBuild(t, s); len(rep.Rebuilt) != 0 {
+		t.Errorf("after Cargo wrote target/, rebuilt %v; want nothing", rep.Rebuilt)
+	}
+}
