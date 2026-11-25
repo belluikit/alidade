@@ -69,6 +69,7 @@ func measure(t *testing.T, root string) bool {
 	measured = measureGoasm(t, g, rep.Root) || measured
 	measured = measurePXF(t, g, rep.Root, proto) || measured
 	measured = measurePython(t, g, rep.Root) || measured
+	measured = measureRust(t, g, rep) || measured
 	if !measured {
 		t.Skip("no oracle had anything to compare")
 	}
@@ -311,4 +312,40 @@ func measurePython(t *testing.T, g *graph.Graph, root string) bool {
 	}
 	t.Logf("%s", r)
 	return true
+}
+
+// measureRust compares the calls edges of each library of each Cargo
+// workspace the Rust layer indexed with rustc's (ADR 009, #86). A library
+// that does not compile (a build script that fails) is said and passed
+// over; libraries that all compile yet hold no call measured nothing.
+func measureRust(t *testing.T, g *graph.Graph, rep *build.Report) bool {
+	if rep.Rust == nil || len(rep.Rust.Workspaces) == 0 {
+		if rep.Rust != nil && rep.Rust.Unavailable != "" {
+			t.Logf("rust: no oracle: %s", rep.Rust.Unavailable)
+		}
+		return false
+	}
+	compiled, calls := 0, 0
+	for _, rel := range rep.Rust.Workspaces {
+		ws := filepath.Join(rep.Root, rel)
+		libs, err := RustLibs(rep.Root, ws)
+		if err != nil {
+			t.Fatalf("rust: %s: %v", rel, err)
+		}
+		target := t.TempDir()
+		for _, lib := range libs {
+			rc, err := ReadRustCalls(ws, target, lib)
+			if err != nil {
+				t.Logf("rust %s: not compared: %v", lib.Package, err)
+				continue
+			}
+			compiled++
+			calls += len(rc.Calls)
+			t.Logf("%s", CompareRustCalls(g, rc))
+		}
+	}
+	if compiled > 0 && calls == 0 {
+		t.Fatalf("rustc compiled %d libraries and the oracle read no call: it measured nothing", compiled)
+	}
+	return compiled > 0
 }

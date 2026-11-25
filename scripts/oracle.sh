@@ -12,7 +12,7 @@ set -eu
 cd "$(dirname "$0")/.."
 . scripts/inhouse.sh
 if [ -z "${ALIDADE_ORACLE:-}" ]; then
-  ALIDADE_ORACLE="$(inhouse drover steward govm protocompile voya chameleon protowire-go syzygo pxfed protovalidate protolsp goed gameflow clair golias protoregistry)"
+  ALIDADE_ORACLE="$(inhouse drover steward govm protocompile voya chameleon protowire-go syzygo pxfed protovalidate protolsp goed gameflow clair golias protoregistry protowire-rust prost-reflect)"
 fi
 if [ -z "$(echo $ALIDADE_ORACLE)" ]; then
   echo "oracle: no repository checked out beside this one or under ../../trendvidia, and ALIDADE_ORACLE is unset; nothing to run" >&2
