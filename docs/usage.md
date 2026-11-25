@@ -194,6 +194,10 @@ Rust is read by the toolchain already on the machine ([ADR 009](adr/009-rust-lay
 - **What runs.** For each Cargo workspace, alidade runs `rust-analyzer scip`.
   That runs the workspace's build scripts and compiles its proc macros first,
   as `cargo build` does: building the graph runs that code.
+- **What it writes.** Build output goes to the workspace's `target/`, which
+  alidade leaves out. Nothing else in the repository is written: Cargo is
+  given a temporary copy of `Cargo.lock`, so a workspace without one does not
+  get one.
 - **When it reruns.** After any change to a `.rs` file, a `Cargo.toml`, a
   `Cargo.lock` or a toolchain file, the whole workspace is indexed again:
   6.5 s on protowire-rust's 49,000 lines. A tool call waits for it, so an
@@ -289,11 +293,16 @@ are not edges.
 reference followed by `(` or `::<` is a call; a function named without being
 called (`.map(area_of)`) is a reference. A call through a trait's method, as
 in a generic function bounded by the trait, goes to the trait's method, not
-to each implementation. A method of a trait implementation is
-`Type[Trait].method`: `Square[Display].fmt` and `Square[Debug].fmt` are two
-nodes. **`implements`** joins a type to each trait of the workspace it
-implements, a macro's implementations included; one on a type with no node
-(a primitive, a slice, a type parameter) has no edge.
+to each implementation. A function's ID ends in `()`, so a field and a method
+of one name are two nodes: `Reader.limits` and `Reader.limits()`. A method of a
+trait implementation is `Type[Trait].method()`: `Square[Display].fmt()` and
+`Square[Debug].fmt()` are two nodes. An implementation on a type with no name
+has a word form: `slice(u8)[Area].area()`. A method a derive or a macro writes,
+such as prost's `EnumDescriptorProto.name()`, is a node under its type, marked
+generated, when something calls it. **`implements`** joins a type to each trait
+of the workspace it implements, a macro's implementations included; one on a
+type with no node (a primitive, a slice, a type parameter) has no edge. A call
+an operator makes (`==`, `+`, `?`) is not an edge.
 
 **`documents`** joins a doc to a declaration. The edge comes from a code
 span naming exactly one declaration. A schema field and the `.pxf` entries

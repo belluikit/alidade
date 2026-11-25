@@ -306,8 +306,9 @@ func (ix *index) addFileDecl(n graph.Node, body string) {
 		ix.file(rel, n.ID)
 	case strings.HasPrefix(string(n.ID), "rust://"):
 		// A Rust declaration answers last too, as Python's (ADR 009), and
-		// also as Rust writes its path.
-		ix.put(ix.byFrontend, decl, n.ID)
+		// also as Rust writes its path; a doc names a function without
+		// the () its ID ends in (ADR 002 rule 16).
+		ix.put(ix.byFrontend, strings.ReplaceAll(decl, "()", ""), n.ID)
 		ix.put(ix.byRustPath, rustPath(decl), n.ID)
 	case (strings.HasPrefix(string(n.ID), "ts://") || strings.HasPrefix(string(n.ID), "py://")) && !n.Generated:
 		// A hand-written TypeScript or Python declaration answers a
@@ -320,12 +321,13 @@ func (ix *index) addFileDecl(n graph.Node, body string) {
 }
 
 // rustPath is a Rust declaration's path in a file as Rust writes it: its
-// segments joined by "::", an implementation's trait left out
-// ("Square[Area].area" is Square::area).
+// segments joined by "::", an implementation's trait and a function's ()
+// left out ("Square[Area].area()" is Square::area).
 func rustPath(decl string) string {
 	segs := strings.Split(decl, ".")
 	for i, s := range segs {
-		segs[i], _, _ = strings.Cut(s, "[")
+		s, _, _ = strings.Cut(s, "[")
+		segs[i] = strings.TrimSuffix(s, "()")
 	}
 	return strings.Join(segs, "::")
 }
