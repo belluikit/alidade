@@ -194,6 +194,10 @@ Rust is read by the toolchain already on the machine ([ADR 009](adr/009-rust-lay
 - **What runs.** For each Cargo workspace, alidade runs `rust-analyzer scip`.
   That runs the workspace's build scripts and compiles its proc macros first,
   as `cargo build` does: building the graph runs that code.
+- **What it writes.** Build output goes to the workspace's `target/`, which
+  alidade leaves out. Nothing else in the repository is written: Cargo is
+  given a temporary copy of `Cargo.lock`, so a workspace without one does not
+  get one.
 - **When it reruns.** After any change to a `.rs` file, a `Cargo.toml`, a
   `Cargo.lock` or a toolchain file, the whole workspace is indexed again:
   6.5 s on protowire-rust's 49,000 lines. A tool call waits for it, so an

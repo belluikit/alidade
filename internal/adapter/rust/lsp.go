@@ -28,6 +28,8 @@ type lsp struct {
 	in   io.WriteCloser
 	out  *bufio.Reader
 	next int
+	// unlock removes the server's copy of the lock file.
+	unlock func()
 	// utf8 says the server counts columns in UTF-8 bytes, as the index
 	// does; otherwise in UTF-16 code units, LSP's default.
 	utf8 bool
@@ -50,18 +52,25 @@ var lspEncodings = []string{"utf-8", "utf-16"}
 func startLSP(ws string) (*lsp, error) {
 	cmd := exec.Command("rust-analyzer")
 	cmd.Dir = ws
+	unlock, err := lockOutside(cmd, ws)
+	if err != nil {
+		return nil, err
+	}
 	in, err := cmd.StdinPipe()
 	if err != nil {
+		unlock()
 		return nil, err
 	}
 	out, err := cmd.StdoutPipe()
 	if err != nil {
+		unlock()
 		return nil, err
 	}
 	if err := cmd.Start(); err != nil {
+		unlock()
 		return nil, fmt.Errorf("rust-analyzer: %w", err)
 	}
-	l := &lsp{cmd: cmd, in: in, out: bufio.NewReader(out)}
+	l := &lsp{cmd: cmd, in: in, out: bufio.NewReader(out), unlock: unlock}
 	init := map[string]any{
 		"processId": nil,
 		"rootUri":   fileURI(ws),
@@ -214,6 +223,7 @@ func (l *lsp) read() (*message, error) {
 
 // close ends the server: politely, then for good.
 func (l *lsp) close() {
+	defer l.unlock()
 	if l.cmd.ProcessState != nil {
 		return
 	}

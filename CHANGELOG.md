@@ -8,6 +8,13 @@ tracker's. From v0.12.1 on, every number is this repository's.
 
 ## Unreleased
 
+- **Fixed: building a Rust workspace with no `Cargo.lock` no longer writes
+  one into it** (#81). rust-analyzer 1.100's `cargo metadata` did, so the
+  next build reran the Rust layer with nothing edited. rust-analyzer's Cargo
+  now gets a temporary copy of the lock file, through Cargo's
+  `CARGO_RESOLVER_LOCKFILE_PATH` (Cargo 1.97 and later). On prost-reflect
+  the graph is the same with and without the change.
+
 - **Fixed: build caches are left out** (#75). A directory holding a
   `CACHEDIR.TAG`, such as Cargo's `target/`, is read by no layer and the
   server's change check ignores it. After a Rust repository's first build,

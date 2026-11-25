@@ -85,6 +85,11 @@ func runSCIP(ws string) (*scip.Index, error) {
 	defer os.Remove(out)
 	cmd := exec.Command("rust-analyzer", "scip", ws, "--output", out)
 	cmd.Dir = ws
+	done, err := lockOutside(cmd, ws)
+	if err != nil {
+		return nil, err
+	}
+	defer done()
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
