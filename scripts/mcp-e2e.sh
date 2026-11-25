@@ -10,16 +10,12 @@
 # ALIDADE_E2E_BIN checks an existing binary, a release as shipped.
 set -eu
 cd "$(dirname "$0")/.."
+. scripts/inhouse.sh
 if [ -z "${ALIDADE_E2E:-}" ]; then
-  parent="$(cd .. && pwd)"
-  roots=""
-  for r in steward drover gameflow; do
-    [ -e "$parent/$r/.git" ] && roots="$roots $parent/$r"
-  done
-  ALIDADE_E2E="$roots"
+  ALIDADE_E2E="$(inhouse steward drover gameflow)"
 fi
 if [ -z "$(echo $ALIDADE_E2E)" ]; then
-  echo "mcp-e2e: no repository checked out beside this one, and ALIDADE_E2E is unset; nothing to run" >&2
+  echo "mcp-e2e: no repository checked out beside this one or under ../../trendvidia, and ALIDADE_E2E is unset; nothing to run" >&2
   exit 2
 fi
 export ALIDADE_E2E

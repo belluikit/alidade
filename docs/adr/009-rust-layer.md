@@ -325,6 +325,10 @@ Measured on prost-reflect, against main (25598e8):
   - a call through `dyn` is an indirect call it cannot name;
   - rustc 1.99's default symbol format needs a decoder. The comparison below used
     the legacy format, a nightly-only flag, through `RUSTC_BOOTSTRAP=1`.
+    *Since #86 (2026-11-25)*, `scripts/oracle.sh` runs it, decoding the default
+    v0 symbols with `github.com/ianlancetaylor/demangle` (the owner's choice,
+    a dependency of `internal/oracle` alone, so not of the release). See the
+    correction after the table.
 
   *Corrected 2026-11-24, by the layer's own edges.* The probe this bullet first
   reported (65 edges agree on 43 functions, one edge "not explained yet") came
@@ -360,6 +364,43 @@ Measured on prost-reflect, against main (25598e8):
     turns it on; the rustc build was of the one package.
   - **The comparison's own reading:** 1, a closure attributed to the function
     defining it.
+
+  *Corrected 2026-11-25 (#86), by the oracle as a script.* The hand-run
+  comparison misread one more legacy name form: a trait's impl written
+  `api::<impl core::fmt::Debug for DescriptorPool>::fmt` was named
+  `DescriptorPool::fmt`, the trait dropped. So a method of a trait impl in that
+  form never matched the layer's `DescriptorPool[Debug].fmt()`, as a caller or
+  as a callee. v0 symbols name the trait (`<DescriptorPool as Debug>::fmt`).
+  The same script with that one reading fixed, run on legacy IR, and the oracle
+  on v0 IR agree on every number below. Both were compiled by rustc 1.100 at the
+  commits the table above was measured at, protowire-rust @91f60b5 and
+  prost-reflect @2d0e184:
+
+  | crate | functions both have | agree | rustc only | layer only |
+  |---|---|---|---|---|
+  | protowire-pb | 56 | 109 | 3 | 1 |
+  | prost-reflect | 379 | 939 | 94 | 67 |
+
+  protowire-pb is unchanged. prost-reflect's causes, now each counted by the
+  oracle and the rest listed by it:
+  - rustc only: 78 through a generic trait bound, 14 an operator's, 1 the
+    configuration, 1 the comparison's own reading (`Writer::fmt_list`'s closure);
+  - layer only: 39 through a generic trait bound, 9 through `dyn`
+    (`visit::Context` holds a `&mut dyn Visitor`, an indirect call rustc cannot
+    name; counted with the bound above, by hand), 18 in closures rustc never
+    compiles, 1 the configuration.
+
+  The oracle leaves out what rustc compiles from code outside the crate for a
+  crate type, which the layer has no node for and legacy symbols never named by
+  the crate: a blanket impl (`<KeyedError as Into>::into`) or a provided method
+  of a trait outside it (`<Cardinality as PartialEq>::ne`); 16 edges on
+  prost-reflect. A provided method of a trait inside the crate is named by the
+  trait, as the layer names it.
+
+  At their commits of 2026-11-25 (protowire-rust @7832c11, prost-reflect
+  @f82c954): protowire-pb 53 functions, 101 agree, 4 rustc only, 1 layer only;
+  prost-reflect 391, 969, 96 and 67, every difference of the same causes (16 of
+  the rustc-only are operators').
 
 Not in this version:
 - edges for `use` declarations;
