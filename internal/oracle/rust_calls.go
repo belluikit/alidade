@@ -57,6 +57,11 @@ type RustCalls struct {
 	Lib   RustLib
 	Calls map[string]map[string]bool
 	Funcs map[string]bool
+	// Locs is where each function rustc compiled is declared, from its
+	// debug info: "file:line" of its `fn`, the file absolute. A closure's
+	// is its function's, so it adds none; a provided method's copy for a
+	// type is the trait's method.
+	Locs map[string][]string
 	// Foreign are the names of methods of a trait outside the crate,
 	// `<KeyedError as Into>::into`: the crate's own when it implements
 	// them, otherwise code from outside it that rustc compiled for a crate
@@ -181,6 +186,9 @@ func lastLine(s string) string {
 
 var (
 	defineRE = regexp.MustCompile(`^define .*?@"?(_R[0-9A-Za-z_$.]+)"?\(`)
+	dbgRE    = regexp.MustCompile(`!dbg !(\d+)`)
+	subRE    = regexp.MustCompile(`^!(\d+) = distinct !DISubprogram\(.*?\bfile: !(\d+), line: (\d+)`)
+	fileRE   = regexp.MustCompile(`^!(\d+) = !DIFile\(filename: "((?:[^"\\]|\\.)*)", directory: "((?:[^"\\]|\\.)*)"`)
 	callRE   = regexp.MustCompile(`(?:call|invoke) .*?@"?(_R[0-9A-Za-z_$.]+)"?\(`)
 )
 
@@ -188,16 +196,22 @@ var (
 // each calls directly, named by rustKey. A call through a pointer, `dyn`
 // among them, names no function and is not read.
 func readIR(r io.Reader, lib RustLib) (*RustCalls, error) {
-	out := &RustCalls{Lib: lib, Calls: map[string]map[string]bool{}, Funcs: map[string]bool{}, Foreign: map[string]bool{}}
+	out := &RustCalls{Lib: lib, Calls: map[string]map[string]bool{}, Funcs: map[string]bool{}, Foreign: map[string]bool{}, Locs: map[string][]string{}}
+	var d debugInfo
 	sc := bufio.NewScanner(r)
 	sc.Buffer(nil, 64<<20)
 	cur := ""
 	for sc.Scan() {
 		line := sc.Text()
+		if strings.HasPrefix(line, "!") {
+			d.read(line)
+			continue
+		}
 		if m := defineRE.FindStringSubmatch(line); m != nil {
 			cur = out.key(m[1])
 			if cur != "" {
 				out.Funcs[cur] = true
+				d.define(line, m[1], cur)
 			}
 			continue
 		}
@@ -217,7 +231,58 @@ func readIR(r io.Reader, lib RustLib) (*RustCalls, error) {
 			}
 		}
 	}
+	d.locate(out.Locs)
 	return out, sc.Err()
+}
+
+// debugInfo is what readIR keeps of an IR module's debug metadata: the
+// subprogram of each function it defines, and each subprogram's file and
+// line.
+type debugInfo struct {
+	defined map[string]string    // subprogram id -> function key
+	subs    map[string][2]string // subprogram id -> file id, line
+	files   map[string]string    // file id -> absolute path
+}
+
+func (d *debugInfo) define(line, sym, key string) {
+	m := dbgRE.FindStringSubmatch(line)
+	if m == nil || closureRE.MatchString(demangled(sym)) {
+		return
+	}
+	if d.defined == nil {
+		d.defined = map[string]string{}
+	}
+	d.defined[m[1]] = key
+}
+
+func (d *debugInfo) read(line string) {
+	if m := subRE.FindStringSubmatch(line); m != nil {
+		if d.subs == nil {
+			d.subs = map[string][2]string{}
+		}
+		d.subs[m[1]] = [2]string{m[2], m[3]}
+	} else if m := fileRE.FindStringSubmatch(line); m != nil {
+		if d.files == nil {
+			d.files = map[string]string{}
+		}
+		f := m[2]
+		if !filepath.IsAbs(f) {
+			f = filepath.Join(m[3], f)
+		}
+		d.files[m[1]] = f
+	}
+}
+
+func (d *debugInfo) locate(locs map[string][]string) {
+	for id, key := range d.defined {
+		sub, ok := d.subs[id]
+		if f := d.files[sub[0]]; ok && f != "" {
+			loc := f + ":" + sub[1]
+			if !slices.Contains(locs[key], loc) {
+				locs[key] = append(locs[key], loc)
+			}
+		}
+	}
 }
 
 // key names a symbol by rustKey, and records whether it is a method of a
@@ -506,12 +571,7 @@ func (r *RustCompare) ownCode(rc *RustCalls) map[string]map[string]bool {
 // is the trait's `Message::encode_to_vec`. A method the type declares
 // keeps its own name.
 func (r *RustCompare) provided(calls map[string]map[string]bool) map[string]map[string]bool {
-	name := func(k string) string {
-		if tr, m, ok := traitMethod(k); ok && !r.layerFuncs[k] && r.layerFuncs[tr+"::"+m] {
-			return tr + "::" + m
-		}
-		return k
-	}
+	name := r.providedName
 	out := map[string]map[string]bool{}
 	for c, tos := range calls {
 		from := name(c)
@@ -526,6 +586,14 @@ func (r *RustCompare) provided(calls map[string]map[string]bool) map[string]map[
 		}
 	}
 	return out
+}
+
+// providedName is the name provided gives one function.
+func (r *RustCompare) providedName(k string) string {
+	if tr, m, ok := traitMethod(k); ok && !r.layerFuncs[k] && r.layerFuncs[tr+"::"+m] {
+		return tr + "::" + m
+	}
+	return k
 }
 
 // compareCaller counts one caller's edges, and keeps the ones only one
