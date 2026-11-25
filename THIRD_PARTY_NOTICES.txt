@@ -234,7 +234,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ==============================================================================
-github.com/mark3labs/mcp-go v1.5.0
+github.com/mark3labs/mcp-go v1.6.0
 
 --- LICENSE
 
@@ -1724,7 +1724,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ==============================================================================
-github.com/trendvidia/chameleon v0.27.1
+github.com/trendvidia/chameleon v0.28.0
 
 --- LICENSE
 
@@ -2012,7 +2012,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ==============================================================================
-github.com/trendvidia/protowire-go v1.13.0
+github.com/trendvidia/protowire-go v1.19.0
 
 --- LICENSE
 
@@ -2274,7 +2274,7 @@ rights granted to you under this License for this implementation of Go
 shall terminate as of the date such litigation is filed.
 
 ==============================================================================
-golang.org/x/sync v0.24.0
+golang.org/x/sync v0.25.0
 
 --- LICENSE
 
@@ -2332,7 +2332,7 @@ rights granted to you under this License for this implementation of Go
 shall terminate as of the date such litigation is filed.
 
 ==============================================================================
-golang.org/x/sys v0.49.0
+golang.org/x/sys v0.50.0
 
 --- LICENSE
 
@@ -2448,7 +2448,7 @@ rights granted to you under this License for this implementation of Go
 shall terminate as of the date such litigation is filed.
 
 ==============================================================================
-golang.org/x/tools v0.52.0
+golang.org/x/tools v0.53.0
 
 --- LICENSE
 
