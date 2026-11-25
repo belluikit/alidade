@@ -180,7 +180,7 @@ Dependabot stops rebasing a branch someone else has committed to:
 
 ```
 gh pr checkout <number>
-GOTOOLCHAIN=go1.27.2 go run scripts/notices.go   # the Go version ci.yml pins
+GOTOOLCHAIN=go1.27.2 go run scripts/notices.go   # any toolchain from go.dev
 git diff THIRD_PARTY_NOTICES.txt
 ```
 

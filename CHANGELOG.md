@@ -8,6 +8,12 @@ tracker's. From v0.12.1 on, every number is this repository's.
 
 ## Unreleased
 
+- **Changed: the release is built with Go 1.27.4** (#74), up from 1.27.2,
+  and links pylib v0.1.1. Go 1.27.4 refused pylib v0.1.0's macOS
+  `libpython.a` (`disallowed LTO section __LLVM,__cg_profile`), which
+  v0.1.1 no longer carries (trendvidia/pylib#12). CPython is the same
+  3.14.8.
+
 - **Fixed: build caches are left out** (#75). A directory holding a
   `CACHEDIR.TAG`, such as Cargo's `target/`, is read by no layer and the
   server's change check ignores it. After a Rust repository's first build,
