@@ -16,6 +16,20 @@ tracker's. From v0.12.1 on, every number is this repository's.
   has. The items keep their IDs at the file (#84). On jj, which checks in
   its protos, that is 37 edges, every prost message and enum of its seven
   files.
+- **Added: the Rust calls oracle** (#86). `scripts/oracle.sh` now compiles
+  each library of a Rust workspace to LLVM IR with rustc and compares its
+  direct calls with the layer's calls edges, naming the cause of each edge
+  only one side has. It decodes rustc's default v0 symbols, so no nightly
+  flag is needed, and it builds into a scratch directory, never the
+  repository's `target/`. protowire-rust and prost-reflect join its list.
+  Run as a script, it corrected ADR 009's hand-run table: prost-reflect's
+  functions both sides have are 379, with 939 edges agreeing, where a
+  misread name form had given 364 and 858.
+- **Fixed: the scripts that run over the in-house repositories find them
+  again** (#86). `oracle.sh`, `corpus.sh` and `mcp-e2e.sh` looked only
+  beside this repository, where 1 of 16 is since the move to `belluikit/`
+  (mcp-e2e.sh found none, and stopped). They now also look under
+  `../../trendvidia/`.
 - **Added: a Rust build script that fails is reported** (#85). Its
   package, how it exited and the last lines it printed are listed by
   `graph_stats` among what the build skipped, at the package's

@@ -4,6 +4,7 @@ go 1.26.2
 
 require (
 	github.com/evanw/esbuild v0.28.2
+	github.com/ianlancetaylor/demangle v0.0.0-20261012173340-cbb8aaea4290
 	github.com/jinzhu/inflection v1.0.0
 	github.com/mark3labs/mcp-go v1.5.0
 	github.com/microsoft/typescript-go/shim v0.0.0
