@@ -63,6 +63,38 @@ installed, such as Homebrew's go1.27.4, fetches nothing.
 - **PXF, not JSON**, for anything alidade writes; JSON only where an
   outside protocol requires it, as MCP does.
 
+## Benchmark results
+
+The README's comparisons are ours: one machine, one harness, the
+repositories we picked. Results from anyone else are welcome as a pull
+request, including ones that come out worse for alidade. Some examples:
+
+- the Rust graph comparison on another repository, or ours rerun with a
+  newer alidade or graphify;
+- the agent benchmark run on your own account, with any model;
+- a correction to how we set graphify up.
+
+A result goes in as a row of the README's table, with "run by" linking to
+the pull request. The pull request carries what someone else needs to run
+it again:
+
+- **The subject:** the repository's URL and the full commit, and the
+  features or build flags used.
+- **The tools:** alidade's version or commit, graphify's version and the
+  command that built its graph, and for Rust the `rustc` and `rust-analyzer`
+  versions.
+- **The command** that produced the numbers, exactly as it was run.
+- **The output:** the summary lines in the description, and the whole log
+  attached. For the Rust comparison those are the `TOTAL` lines of
+  `TestOracleGraphifyRust`; for the agent benchmark, `TestReport` over
+  the results files.
+- **Anything left out** and why, such as a library that does not compile
+  on your platform.
+
+[Developing alidade](docs/development.md) says how each benchmark runs.
+A result we cannot reproduce from what the pull request says is not merged
+until we can; we will say in the pull request what is missing.
+
 ## Reporting
 
 Bugs and ideas go to [issues](https://github.com/belluikit/alidade/issues).
