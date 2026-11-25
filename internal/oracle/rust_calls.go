@@ -41,7 +41,15 @@ import (
 // the repository.
 type RustLib struct {
 	Package, Crate, Dir string
+	// Features are the package's features, by name; the comparison builds
+	// with the default ones unless RustFeature names one of them.
+	Features map[string]bool
 }
+
+// RustFeature is a feature to build each library with when its package
+// declares it ("full", for tokio's crates, whose default features are
+// none); "" builds the defaults.
+var RustFeature string
 
 // RustCalls is rustc's view of one library: its direct calls, by caller
 // and callee name, and the functions it compiled.
@@ -75,8 +83,9 @@ func RustLibs(root, ws string) ([]RustLib, error) {
 	}
 	var meta struct {
 		Packages []struct {
-			Name    string `json:"name"`
-			Targets []struct {
+			Name     string              `json:"name"`
+			Features map[string][]string `json:"features"`
+			Targets  []struct {
 				Name    string   `json:"name"`
 				Kind    []string `json:"kind"`
 				SrcPath string   `json:"src_path"`
@@ -96,7 +105,11 @@ func RustLibs(root, ws string) ([]RustLib, error) {
 			if err != nil {
 				continue
 			}
-			libs = append(libs, RustLib{Package: p.Name, Crate: strings.ReplaceAll(t.Name, "-", "_"), Dir: filepath.ToSlash(dir)})
+			features := map[string]bool{}
+			for f := range p.Features {
+				features[f] = true
+			}
+			libs = append(libs, RustLib{Package: p.Name, Crate: strings.ReplaceAll(t.Name, "-", "_"), Dir: filepath.ToSlash(dir), Features: features})
 		}
 	}
 	slices.SortFunc(libs, func(a, b RustLib) int { return strings.Compare(a.Package, b.Package) })
@@ -127,8 +140,8 @@ func cargoEnv(ws string) (env []string, done func(), err error) {
 	return append(os.Environ(), "CARGO_RESOLVER_LOCKFILE_PATH="+lock), done, nil
 }
 
-// ReadRustCalls compiles one library to LLVM IR, at opt-level 0 and in one
-// codegen unit, into target (a directory of the caller's, never the
+// ReadRustCalls compiles one library to LLVM IR, at opt-level 0, in one
+// codegen unit and with no LLVM pass run, into target (a directory of the caller's, never the
 // repository's), and reads its direct calls.
 func ReadRustCalls(ws, target string, lib RustLib) (*RustCalls, error) {
 	env, done, err := cargoEnv(ws)
@@ -137,8 +150,16 @@ func ReadRustCalls(ws, target string, lib RustLib) (*RustCalls, error) {
 	}
 	defer done()
 	ll := filepath.Join(target, lib.Crate+".ll")
-	cmd := exec.Command("cargo", "rustc", "-q", "--manifest-path", filepath.Join(ws, "Cargo.toml"), "-p", lib.Package, "--lib", "--",
-		"--emit=llvm-ir="+ll, "-C", "opt-level=0", "-C", "codegen-units=1")
+	args := []string{"rustc", "-q", "--manifest-path", filepath.Join(ws, "Cargo.toml"), "-p", lib.Package, "--lib"}
+	if RustFeature != "" && lib.Features[RustFeature] {
+		args = append(args, "--features", RustFeature)
+	}
+	// no-prepopulate-passes runs no LLVM pass, so a call of an
+	// #[inline(always)] function, which LLVM inlines even at opt-level 0,
+	// stays a call (tokio's UnsafeCell::with_mut: 15 calls without it, 90
+	// with).
+	args = append(args, "--", "--emit=llvm-ir="+ll, "-C", "opt-level=0", "-C", "codegen-units=1", "-C", "no-prepopulate-passes", "-C", "link-dead-code")
+	cmd := exec.Command("cargo", args...)
 	cmd.Env = append(env, "CARGO_TARGET_DIR="+target, "CARGO_INCREMENTAL=0")
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
@@ -220,7 +241,7 @@ func foreignTrait(name, crate string) bool {
 	if end < 0 {
 		return false
 	}
-	_, trait, ok := strings.Cut(name[1:end], " as ")
+	_, trait, ok := cutTop(name[1:end], " as ")
 	tr := rustPath(trait)
 	return ok && len(tr) > 0 && tr[0] != crate
 }
@@ -252,7 +273,7 @@ func rustKey(name, crate string) string {
 		if len(method) == 0 {
 			return ""
 		}
-		ty, trait, hasTrait := strings.Cut(self, " as ")
+		ty, trait, hasTrait := cutTop(self, " as ")
 		// A reference's or a pointer's type (`&Kind`) is not the crate's:
 		// its impls are the standard library's blanket ones.
 		tp := rustPath(ty)
@@ -273,6 +294,26 @@ func rustKey(name, crate string) string {
 		return ""
 	}
 	return typed(segs[1:])
+}
+
+// cutTop is strings.Cut at the first sep outside angle brackets: in
+// `Harness<Task<<File as AsyncSeek>::seek::{closure#0}>>` the " as " is
+// a generic argument's, and the type has no trait.
+func cutTop(s, sep string) (before, after string, found bool) {
+	depth := 0
+	for i := 0; i < len(s); i++ {
+		switch s[i] {
+		case '<':
+			depth++
+		case '>':
+			depth--
+		default:
+			if depth == 0 && strings.HasPrefix(s[i:], sep) {
+				return s[:i], s[i+len(sep):], true
+			}
+		}
+	}
+	return s, "", false
 }
 
 // matching is the index of the '>' that closes the '<' at s[0], -1 when

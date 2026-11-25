@@ -4,6 +4,9 @@
 package oracle
 
 import (
+	"os"
+	"os/exec"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -26,6 +29,8 @@ func TestRustKey(t *testing.T) {
 		{"<[u8] as protowire_pb::codec::MapEntryField>::write_to", ""},                              // a type outside the crate
 		{"<core::option::Option<u32>>::and_then::<&&str, protowire_pb::big::corrupt::{closure#0}>", ""},
 		{"core::ptr::drop_in_place::<protowire_pb::wire::Error>", ""},
+		// a generic argument holding a trait's method: " as " is the argument's
+		{"<protowire_pb::wire::Reader<<protowire_pb::big::BigInt as protowire_pb::codec::Message>::encode_to::{closure#0}>>::len_view", "Reader::len_view"},
 	} {
 		if got := rustKey(c.name, "protowire_pb"); got != c.want {
 			t.Errorf("rustKey(%q) = %q; want %q", c.name, got, c.want)
@@ -161,8 +166,9 @@ func TestRustProvided(t *testing.T) {
 // for a crate type, and the crate does not declare, is left out and
 // counted; the crate's own implementation of such a trait is compared.
 func TestRustOutsideCode(t *testing.T) {
-	if !foreignTrait("<p::Big as core::convert::Into<u8>>::into", "p") || foreignTrait("<p::Big as p::Message>::encode", "p") {
-		t.Fatal("foreignTrait: want Into outside the crate, Message inside it")
+	if !foreignTrait("<p::Big as core::convert::Into<u8>>::into", "p") || foreignTrait("<p::Big as p::Message>::encode", "p") ||
+		foreignTrait("<p::Big<<p::Small as core::convert::Into<u8>>::into::{closure#0}> as p::Message>::encode", "p") {
+		t.Fatal("foreignTrait: want Into outside the crate, Message inside it, whatever a generic argument names")
 	}
 	g := rustGraph(t, map[string][]string{"run": {"run()"}, "fmt": {"Big[Display]", "fmt()"}}, [][2]string{{"run", "fmt"}})
 	rc := &RustCalls{Lib: RustLib{Crate: "p", Dir: "src"}, Calls: map[string]map[string]bool{
@@ -172,4 +178,81 @@ func TestRustOutsideCode(t *testing.T) {
 	if r.Agree != 1 || r.RustcOnly != 0 || r.Outside != 1 {
 		t.Errorf("agree %d, rustc only %d, outside %d; want 1, 0, 1", r.Agree, r.RustcOnly, r.Outside)
 	}
+}
+
+// TestReadRustCallsBodies compiles a crate and reads the two calls the IR
+// left out before #98: one of an #[inline(always)] function, which LLVM
+// inlined even at opt-level 0, and the calls in an async method's body and
+// in a closure a returned iterator holds, which rustc compiled only where
+// something polls the future or uses the iterator.
+func TestReadRustCallsBodies(t *testing.T) {
+	if _, err := exec.LookPath("cargo"); err != nil {
+		t.Skip("cargo is not on the PATH")
+	}
+	ws := fxCrate(t, "", `#[inline(always)]
+fn inlined() -> u32 { 1 }
+pub fn calls_inlined() -> u32 { inlined() }
+fn helper() -> u32 { 2 }
+fn mapped(i: u32) -> u32 { i }
+pub struct S;
+impl S {
+    pub async fn peek(&self) -> u32 { helper() }
+}
+pub fn items() -> impl Iterator<Item = u32> { (0..3).map(|i| mapped(i)) }
+`)
+	rc, err := ReadRustCalls(ws, t.TempDir(), RustLib{Package: "fx", Crate: "fx", Dir: "src"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !rc.Calls["calls_inlined"]["inlined"] || !rc.Calls["S::peek"]["helper"] || !rc.Calls["items"]["mapped"] {
+		t.Errorf("calls %v; want calls_inlined -> inlined, S::peek -> helper and items -> mapped", rc.Calls)
+	}
+}
+
+// TestReadRustCallsFeature builds a library with RustFeature when its
+// package declares it, and with its default features otherwise.
+func TestReadRustCallsFeature(t *testing.T) {
+	if _, err := exec.LookPath("cargo"); err != nil {
+		t.Skip("cargo is not on the PATH")
+	}
+	ws := fxCrate(t, "\n[features]\nextra = []\n", `fn helper() -> u32 { 2 }
+#[cfg(feature = "extra")]
+pub fn gated() -> u32 { helper() }
+`)
+	libs, err := RustLibs(ws, ws)
+	if err != nil || len(libs) != 1 || !libs[0].Features["extra"] {
+		t.Fatalf("libs %+v, %v; want fx, with its feature extra", libs, err)
+	}
+	defer func(f string) { RustFeature = f }(RustFeature)
+	for _, f := range []string{"", "extra", "missing"} {
+		RustFeature = f
+		rc, err := ReadRustCalls(ws, t.TempDir(), libs[0])
+		if err != nil {
+			t.Fatalf("feature %q: %v", f, err)
+		}
+		if got := rc.Calls["gated"]["helper"]; got != (f == "extra") {
+			t.Errorf("feature %q: gated -> helper is %v", f, got)
+		}
+	}
+}
+
+// fxCrate writes a crate named fx, with manifest text after its package
+// table and lib.rs, and returns its directory.
+func fxCrate(t *testing.T, manifest, lib string) string {
+	t.Helper()
+	ws := t.TempDir()
+	files := map[string]string{
+		"Cargo.toml": "[package]\nname = \"fx\"\nversion = \"0.1.0\"\nedition = \"2021\"\n" + manifest,
+		"src/lib.rs": lib,
+	}
+	for name, text := range files {
+		p := filepath.Join(ws, filepath.FromSlash(name))
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(text), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return ws
 }
