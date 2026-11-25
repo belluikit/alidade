@@ -20,8 +20,14 @@ import (
 // there would pass the layer unchecked.
 func fixture(t *testing.T, extra map[string]string) string {
 	t.Helper()
+	return fixtureOf(t, "ws", extra)
+}
+
+// fixtureOf copies the workspace testdata/name, as fixture does testdata/ws.
+func fixtureOf(t *testing.T, name string, extra map[string]string) string {
+	t.Helper()
 	dir := tempDir(t)
-	if err := os.CopyFS(dir, os.DirFS(filepath.Join("testdata", "ws"))); err != nil {
+	if err := os.CopyFS(dir, os.DirFS(filepath.Join("testdata", name))); err != nil {
 		t.Fatal(err)
 	}
 	for rel, text := range extra {
@@ -152,6 +158,7 @@ func TestExtractGraph(t *testing.T) {
 		"shapes/src/lib.rs#paired().Two[Pair].first() method", "shapes/src/lib.rs#paired().Two[Pair].second() method",
 		"shapes/src/lib.rs#paired().Two[Pair].first().Inner type", "shapes/src/lib.rs#paired().Two[Pair].first().Inner[Area].area() method",
 		"shapes/src/lib.rs#made module", "shapes/src/lib.rs#made() func", // a module and a function of one name
+		"shapes/src/lib.rs#made.Made type", "shapes/src/lib.rs#made.Made.new() method", // build.rs writes them, made includes them
 		"shapes/src/lib.rs#Named type", "shapes/src/lib.rs#Named.name() method",
 		"shapes/src/lib.rs#T[Named].name() method", // a blanket impl's, held by its file
 		"shapes/src/lib.rs#Wide type", "shapes/src/lib.rs#Wide[Area].area() method",
@@ -180,6 +187,7 @@ func TestExtractGraph(t *testing.T) {
 		"shapes/src/lib.rs#paired() -> shapes/src/lib.rs#paired().Two[Pair].first()",
 		"shapes/src/lib.rs#paired() -> shapes/src/lib.rs#paired().Two[Pair].second()",
 		"shapes/src/lib.rs#paired().Two[Pair].first() -> shapes/src/lib.rs#paired().Two[Pair].first().Inner[Area].area()",
+		"shapes/src/lib.rs#made() -> shapes/src/lib.rs#made.Made.new()",        // into generated code
 		"shapes/src/lib.rs#parse_side() -> shapes/src/lib.rs#helper_generic()", // a turbofish, ::<
 		"shapes/src/lib.rs#pen() -> shapes/src/lib.rs#pen().Pen[Write].write_str()",
 		"shapes/src/lib.rs#tests.check() -> shapes/src/lib.rs#area_of()",
@@ -232,6 +240,8 @@ func TestExtractGraph(t *testing.T) {
 		"shapes/src/lib.rs -> shapes/src/lib.rs#helper_generic()",
 		"shapes/src/lib.rs -> shapes/src/lib.rs#local_impl()",
 		"shapes/src/lib.rs -> shapes/src/lib.rs#made",
+		"shapes/src/lib.rs#made -> shapes/src/lib.rs#made.Made", // generated, under the module that includes it
+		"shapes/src/lib.rs#made.Made -> shapes/src/lib.rs#made.Made.new()",
 		"shapes/src/lib.rs -> shapes/src/lib.rs#made()",
 		"shapes/src/lib.rs -> shapes/src/lib.rs#made_first()",
 		"shapes/src/lib.rs -> shapes/src/lib.rs#made_second()",
@@ -300,17 +310,20 @@ func TestExtractGraph(t *testing.T) {
 }
 
 // checkReport pins TestExtractGraph's report: the fixture's files and
-// declarations, the one call into code a build script wrote, no item
-// skipped, and the workspace and engine that read it.
+// declarations, the one file a build script wrote and the call into it, no
+// item skipped, and the workspace and engine that read it.
 func checkReport(t *testing.T, rep *Report) {
 	t.Helper()
 	if rep.Files != 9 || rep.Testdata != 1 || rep.Unanalyzed != 1 || rep.Declarations != 81 || rep.MacroWritten != 3 {
 		t.Errorf("Files %d, Testdata %d, Unanalyzed %d, Declarations %d, MacroWritten %d; want 9, 1, 1, 81, 3", rep.Files, rep.Testdata, rep.Unanalyzed, rep.Declarations, rep.MacroWritten)
 	}
 	// The call to made::Made::new() reaches code a build script wrote,
-	// which the index leaves out (ADR 009): counted, not an edge.
-	if rep.CallsGenerated != 1 || rep.Calls != 32 || rep.References != 1 {
-		t.Errorf("CallsGenerated %d, Calls %d, References %d; want 1, 32, 1", rep.CallsGenerated, rep.Calls, rep.References)
+	// which the index leaves out (ADR 009), and the server reads: an edge.
+	if rep.CallsGenerated != 0 || rep.Calls != 33 || rep.References != 1 {
+		t.Errorf("CallsGenerated %d, Calls %d, References %d; want 0, 33, 1", rep.CallsGenerated, rep.Calls, rep.References)
+	}
+	if rep.GeneratedFiles != 1 || rep.Generated != 2 || rep.Generates != 0 {
+		t.Errorf("GeneratedFiles %d, Generated %d, Generates %d; want 1, 2, 0: made.rs is no prost-build output", rep.GeneratedFiles, rep.Generated, rep.Generates)
 	}
 	checkEngine(t, rep)
 }

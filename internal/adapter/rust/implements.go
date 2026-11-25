@@ -69,15 +69,9 @@ func (x *extractor) askServer(ws string, add func(from, to graph.ID) error) erro
 	if len(traits) == 0 {
 		return nil
 	}
-	l, err := startLSP(ws)
-	if err != nil {
-		x.skip(ws, 0, err)
+	l := x.server(ws)
+	if l == nil {
 		return nil
-	}
-	defer l.close()
-	x.report.ServerColumns = "utf-16"
-	if l.utf8 {
-		x.report.ServerColumns = "utf-8"
 	}
 	for _, t := range traits {
 		locs, err := l.implementations(t.doc, t.start, x.text)

@@ -8,6 +8,21 @@ tracker's. From v0.12.1 on, every number is this repository's.
 
 ## Unreleased
 
+- **Added: Rust code a build script writes, joined to its `.proto`
+  messages** (#72). prost-build's output lives in Cargo's `target/`, which
+  rust-analyzer's index leaves out. Each item of a file the workspace
+  includes now has a node, marked generated, where it is included
+  (`src/lib.rs#proto.Scalars`), and calls into it are edges. A `.proto`
+  message or enum has a `generates` edge (DECLARED, `via=prost`) to the
+  struct or enum written for it. rust-analyzer's server says which file an
+  `include!` reads and what the file declares. A file included through a
+  macro, such as tonic's `include_proto!`, is found from a reference to one
+  of its items. On prost-reflect, 160 items get nodes, each of the 22 proto
+  messages and enums in the included packages has its edge, and 42 calls
+  into generated code became edges. A `.proto` edit now reruns the Rust
+  layer, since that is when build scripts run. Not yet: an `include!` of a
+  hand-written file (#84).
+
 - **Changed: the release is built with Go 1.27.4** (#74), up from 1.27.2,
   and links pylib v0.1.1. Go 1.27.4 refused pylib v0.1.0's macOS
   `libpython.a` (`disallowed LTO section __LLVM,__cg_profile`), which
@@ -45,8 +60,7 @@ tracker's. From v0.12.1 on, every number is this repository's.
   prost-reflect's library, 864 edges agreed and every difference had a cause
   other than a wrong edge: a call through a generic trait bound goes to the
   trait's method, a function a derive writes has no node, and each side
-  compiles some code the other does not. Not yet: the link from
-  prost-generated types to their `.proto` messages.
+  compiles some code the other does not.
 - **Added: Rust `implements` edges** (#72), from each type to each workspace
   trait it implements. rust-analyzer's server names them, including the
   ones a `macro_rules!` macro writes, and the index's names add the ones

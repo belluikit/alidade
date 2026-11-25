@@ -96,8 +96,11 @@ var (
 		"config.toml": {{"rust", own}},
 	}
 	byExt = map[string][]read{
-		".go":    {{"go", own}, {"goasm", own}, {"md", presence}},
-		".proto": {{"proto", own}, {"ts", own}},
+		".go": {{"go", own}, {"goasm", own}, {"md", presence}},
+		// A .proto file is also the Rust layer's: the code prost-build
+		// writes from it is in the layer, and is written again only when
+		// the layer reruns, which runs the build scripts (#72).
+		".proto": {{"proto", own}, {"ts", own}, {"rust", own}},
 		".sql":   {{"sql", own}}, ".pxf": {{"pxf", own}}, ".goasm": {{"goasm", own}}, ".md": {{"md", own}},
 		// A Python file is the Python layer's, and the Markdown layer's
 		// links to it resolve by its existence.
