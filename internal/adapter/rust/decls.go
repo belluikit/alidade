@@ -158,7 +158,7 @@ func items(dc *doc) (module []*scip.Descriptor, defs []*def) {
 		case !ok:
 		case k == scip.SymbolInformation_Module && start == (pos{}):
 			if s, err := scip.ParseSymbol(sym); err == nil {
-				module = s.GetDescriptors()
+				module, dc.moduleSym = s.GetDescriptors(), sym
 			}
 		case kinds[k] != "":
 			d := &def{doc: dc, sym: sym, kind: k, start: start}

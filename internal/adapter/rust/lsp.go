@@ -77,6 +77,7 @@ func startLSP(ws string) (*lsp, error) {
 		"capabilities": map[string]any{
 			"general":      map[string]any{"positionEncodings": lspEncodings},
 			"experimental": map[string]any{"serverStatusNotification": true},
+			"textDocument": map[string]any{"documentSymbol": map[string]any{"hierarchicalDocumentSymbolSupport": true}},
 		},
 	}
 	var res struct {
@@ -277,10 +278,19 @@ func (lo location) at() (path string, p pos) {
 	return path, pos{start.Line, start.Character}
 }
 
-// implementations asks where the trait named at p in dc is implemented. p
-// and the answers' positions are the index's, UTF-8 bytes; a server that
-// counts in UTF-16 has them converted, by the text of each file.
+// implementations asks where the trait whose name starts at p in dc is
+// implemented; definition where the item named at p is defined. Each
+// answer's columns are bytes, as the index's are, whatever the server
+// counts in.
 func (l *lsp) implementations(dc *doc, p pos, text func(path string) []byte) ([]location, error) {
+	return l.locations("textDocument/implementation", dc, p, text)
+}
+
+func (l *lsp) definition(dc *doc, p pos, text func(path string) []byte) ([]location, error) {
+	return l.locations("textDocument/definition", dc, p, text)
+}
+
+func (l *lsp) locations(method string, dc *doc, p pos, text func(path string) []byte) ([]location, error) {
 	col := p.col
 	if !l.utf8 {
 		col = utf16Col(lineOf(dc.text, p.line), p.col)
@@ -290,7 +300,7 @@ func (l *lsp) implementations(dc *doc, p pos, text func(path string) []byte) ([]
 		"textDocument": map[string]any{"uri": fileURI(dc.abs)},
 		"position":     map[string]any{"line": p.line, "character": col},
 	}
-	if _, err := l.call("textDocument/implementation", params, &locs); err != nil {
+	if _, err := l.call(method, params, &locs); err != nil {
 		return nil, err
 	}
 	if !l.utf8 {
@@ -300,6 +310,33 @@ func (l *lsp) implementations(dc *doc, p pos, text func(path string) []byte) ([]
 		}
 	}
 	return locs, nil
+}
+
+// A symbol is one item of a file as the server lists it: its name, its
+// LSP SymbolKind, its lines, and the items inside it.
+type symbol struct {
+	Name string `json:"name"`
+	Kind int    `json:"kind"`
+	// Range is the whole item, its attributes included; SelectionRange
+	// its name.
+	Range          lineRange `json:"range"`
+	SelectionRange lineRange `json:"selectionRange"`
+	Children       []symbol  `json:"children"`
+}
+
+// A lineRange is where an LSP range starts, by line.
+type lineRange struct {
+	Start struct {
+		Line int32 `json:"line"`
+	} `json:"start"`
+}
+
+// symbols lists the items of a file, nested, as the server's outline
+// does (a module's items under it, a struct's fields, an impl's methods).
+func (l *lsp) symbols(path string) ([]symbol, error) {
+	var out []symbol
+	_, err := l.call("textDocument/documentSymbol", map[string]any{"textDocument": map[string]any{"uri": fileURI(path)}}, &out)
+	return out, err
 }
 
 // setCol replaces a location's start column, in whichever form it came.

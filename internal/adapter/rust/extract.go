@@ -72,6 +72,13 @@ type Report struct {
 	// References counts the edges from a function to a function it names
 	// as a value, not calling it.
 	References int
+	// GeneratedFiles counts the files Cargo's build wrote that the
+	// workspace includes, and Generated the nodes of their items, at each
+	// include! (ADR 002 rule 16). Generates counts the edges from a .proto
+	// message or enum to the struct or enum prost-build wrote for it;
+	// GeneratesConflicting the ones left out because the code states
+	// other names for itself.
+	GeneratedFiles, Generated, Generates, GeneratesConflicting int
 	// Implements counts the edges from a type to a workspace trait it
 	// implements; ImplementsUnplaced the implementations with no edge: of
 	// a type with no node (a type parameter, a slice, a type outside the
@@ -130,7 +137,8 @@ func (x *extractor) read(files, manifests []string) error {
 	if err := x.files(files); err != nil {
 		return err
 	}
-	for _, step := range []func() error{x.declarations, x.macroWritten, x.edges, x.implementations} {
+	defer x.closeServers()
+	for _, step := range []func() error{x.declarations, x.generated, x.macroWritten, x.edges, x.implementations} {
 		if err := step(); err != nil {
 			return err
 		}
@@ -158,8 +166,10 @@ type extractor struct {
 	// funcs are each document's functions with a node, what a body is;
 	// defsOf all its items with a node.
 	funcs, defsOf map[*doc][]*def
-	// indexed are the roots of the workspaces rust-analyzer indexed.
+	// indexed are the roots of the workspaces rust-analyzer indexed;
+	// servers its servers on them, by root, once a step has asked.
 	indexed []string
+	servers map[string]*lsp
 }
 
 // discover walks the tree for the files the layer reads and the Cargo

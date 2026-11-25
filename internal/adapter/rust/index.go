@@ -25,6 +25,9 @@ type doc struct {
 	ws   string // the workspace whose index it is
 	d    *scip.Document
 	text []byte
+	// moduleSym is the symbol of the file's own module, which every
+	// item's symbol in the file starts with.
+	moduleSym string
 }
 
 // index has rust-analyzer index each Cargo workspace the manifests belong
