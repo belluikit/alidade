@@ -32,7 +32,7 @@ func withExcludeGenerated() mcpsdk.ToolOption {
 
 func withExcludeTests() mcpsdk.ToolOption {
 	return mcpsdk.WithBoolean("exclude_tests", mcpsdk.DefaultBool(false),
-		mcpsdk.Description("Leave out _test.go declarations and their edges: the production graph."))
+		mcpsdk.Description("Leave out test code and its edges: _test.go declarations, Rust's cfg(test) items and integration tests. The production graph."))
 }
 
 // withRoot is the graph tools' root: another worktree of the repository,
