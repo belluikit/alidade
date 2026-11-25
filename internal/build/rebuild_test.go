@@ -385,7 +385,7 @@ func TestRustWritesNothing(t *testing.T) {
 		}
 		t.Skipf("no Rust toolchain: %s", rep.Rust.Unavailable)
 	}
-	if !linked(g, "rust://src/lib.rs#g", "rust://src/lib.rs#f") {
+	if !linked(g, "rust://src/lib.rs#g()", "rust://src/lib.rs#f()") {
 		t.Fatal("g's call of f is not in the graph, so rust-analyzer did not index the package")
 	}
 	if rep.Rust.ServerColumns == "" || !linked(g, "rust://src/lib.rs#Square", "rust://src/lib.rs#Shape") {
