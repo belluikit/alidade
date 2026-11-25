@@ -368,6 +368,23 @@ func TestRebuildRust(t *testing.T) {
 	}
 }
 
+// TestProtoEditRerunsRust edits a .proto beside Rust code: the Rust layer
+// reruns, as its build scripts may write Rust from it (prost-build), and
+// those run only when the layer does (#72, the owner's decision). No
+// Cargo.toml, so no toolchain runs: the layer's file nodes are enough to
+// see it rerun.
+func TestProtoEditRerunsRust(t *testing.T) {
+	root := t.TempDir()
+	write(t, filepath.Join(root, "proto/shapes.proto"), "syntax = \"proto3\";\npackage shapes;\nmessage Shape {}\n")
+	write(t, filepath.Join(root, "src/lib.rs"), "pub fn f() {}\n")
+	s := newSession(t, root)
+	mustSessionBuild(t, s)
+	write(t, filepath.Join(root, "proto/shapes.proto"), "syntax = \"proto3\";\npackage shapes;\nmessage Shape {}\nmessage Square {}\n")
+	if _, rep := mustSessionBuild(t, s); !slices.Contains(rep.Rebuilt, "rust") || !slices.Contains(rep.Rebuilt, "proto") {
+		t.Errorf("after a .proto edit rebuilt %v; want proto and rust", rep.Rebuilt)
+	}
+}
+
 // TestRustWritesNothing builds a Cargo package that has no Cargo.lock.
 // rust-analyzer 1.100's cargo metadata writes one into the tree unless
 // it is pointed elsewhere, and the next build then reran the Rust layer
