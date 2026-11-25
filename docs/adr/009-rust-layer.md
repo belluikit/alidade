@@ -414,6 +414,9 @@ Not in this version:
   prost-reflect, 14 of rustc's call edges are `==`;
 - more than one configuration. rust-analyzer reads one: the workspace's features
   as Cargo unifies them, and the host's target;
+- a module file (one the index reads) whose header says prost-build wrote it.
+  An `include!`d one is joined to its `.proto` messages (ADR 002 rule 16, #89):
+  on jj, all 37 of its prost messages and enums, with no conflicting name;
 - the calls and implementations written in a hand-written file the workspace
   `include!`s. Its items are nodes, from the server's outline (ADR 002 rule 16,
   #84), and calls into them are edges, but rust-analyzer's index has no document

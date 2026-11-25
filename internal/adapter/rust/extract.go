@@ -81,10 +81,13 @@ type Report struct {
 	GeneratedFiles, Generated, Generates, GeneratesConflicting int
 	// Included counts the hand-written files of the repository that the
 	// workspace includes with include! and no module declares, whose items
-	// are nodes at the file (#84) and are counted in Declarations;
+	// are nodes at the file (#84) and are counted in Declarations (in
+	// Generated for prost-build's);
 	// IncludedAgain the include!s of such a file after its first, which
-	// add no nodes and are reported.
-	Included, IncludedAgain int
+	// add no nodes and are reported. IncludedGenerated counts those whose
+	// header says prost-build wrote them, checked in (#89): their items
+	// are counted in Generated, and joined to their .proto messages.
+	Included, IncludedAgain, IncludedGenerated int
 	// Implements counts the edges from a type to a workspace trait it
 	// implements; ImplementsUnplaced the implementations with no edge: of
 	// a type with no node (a type parameter, a slice, a type outside the
