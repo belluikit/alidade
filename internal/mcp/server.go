@@ -248,7 +248,7 @@ var pythonNote = func() string {
 // rust-analyzer resolves it, so a machine without one has the files only,
 // each saying why.
 const rustNote = "Rust is resolved by the machine's own rust-analyzer, a Rust file's node saying so when its toolchain is missing: " +
-	"a function reference followed by ( or ::< is a call, one named as a value a references edge, and a trait implementation's method is Type[Trait].method"
+	"a function reference followed by ( or ::< is a call, one named as a value a references edge, a trait implementation's method is Type[Trait].method, and a type's implements edges reach the workspace traits it implements"
 
 // instructions load with the server even when an agent defers the tool
 // schemas, so they carry what the graph cannot answer (#173): a text

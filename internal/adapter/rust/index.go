@@ -22,6 +22,7 @@ import (
 type doc struct {
 	rel  string
 	abs  string
+	ws   string // the workspace whose index it is
 	d    *scip.Document
 	text []byte
 }
@@ -39,6 +40,7 @@ func (x *extractor) index(manifests []string) {
 		}
 		rel, _ := filepath.Rel(x.root, ws)
 		x.report.Workspaces = append(x.report.Workspaces, filepath.ToSlash(rel))
+		x.indexed = append(x.indexed, ws)
 		if t := idx.GetMetadata().GetToolInfo(); t != nil {
 			x.report.Engine = strings.TrimSpace(t.GetName() + " " + t.GetVersion())
 		}
@@ -126,7 +128,7 @@ func (x *extractor) add(ws string, idx *scip.Index) {
 			x.skip(abs, 0, err)
 			continue
 		}
-		x.docs[rel] = &doc{rel: rel, abs: abs, d: d, text: text}
+		x.docs[rel] = &doc{rel: rel, abs: abs, ws: ws, d: d, text: text}
 	}
 	for _, s := range idx.GetExternalSymbols() {
 		x.external[s.GetSymbol()] = true
