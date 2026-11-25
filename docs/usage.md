@@ -291,7 +291,9 @@ called (`.map(area_of)`) is a reference. A call through a trait's method, as
 in a generic function bounded by the trait, goes to the trait's method, not
 to each implementation. A method of a trait implementation is
 `Type[Trait].method`: `Square[Display].fmt` and `Square[Debug].fmt` are two
-nodes.
+nodes. **`implements`** joins a type to each trait of the workspace it
+implements, a macro's implementations included; one on a type with no node
+(a primitive, a slice, a type parameter) has no edge.
 
 **`documents`** joins a doc to a declaration. The edge comes from a code
 span naming exactly one declaration. A schema field and the `.pxf` entries

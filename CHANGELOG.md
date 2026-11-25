@@ -28,9 +28,16 @@ tracker's. From v0.12.1 on, every number is this repository's.
   prost-reflect's library, 864 edges agreed and every difference had a cause
   other than a wrong edge: a call through a generic trait bound goes to the
   trait's method, a function a derive writes has no node, and each side
-  compiles some code the other does not. Not yet:
-  `implements` edges, and the link from prost-generated types to their
-  `.proto` messages.
+  compiles some code the other does not. Not yet: the link from
+  prost-generated types to their `.proto` messages.
+- **Added: Rust `implements` edges** (#72), from each type to each workspace
+  trait it implements. rust-analyzer's server names them, including the
+  ones a `macro_rules!` macro writes, and the index's names add the ones
+  written inside a function body, which the server misses. On
+  protowire-rust, all 55 implementations of its `Message`; on
+  prost-reflect, the 3 of its own `Visitor` and none of the 24 of serde's
+  trait of that name. It costs a second load of the workspace: 10.7 s
+  against 7.2 s for protowire-rust's whole graph.
 
 ## v0.15.0 — 2026-10-30
 

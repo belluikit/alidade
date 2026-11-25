@@ -141,12 +141,15 @@ Rules:
    - **A call:** a reference to a workspace function inside a function body,
      followed by `(` or `::<`, is a call. Another reference to a function, a
      function used as a value, is a `references` edge, `RESOLVED` as well.
-     That one token is the only source text the layer reads to decide an
-     edge's kind.
+     That one token, and an impl's header inside a function body (below), are
+     the only source text the layer reads to decide an edge. The header is
+     read as lines: from a line starting `impl` up to the one holding its `{`,
+     the first reference to a type of the trait's name, which comes before
+     `for`.
    - **An implementation:** from LSP's implementations of each workspace
-     trait, plus SCIP's symbol names for those LSP misses. A name joins only
-     when exactly one workspace trait has its simple name, so a name that
-     matches two gives no edge rather than a guess.
+     trait, plus, for the ones written inside a function body, which LSP
+     misses, the trait the index's reference on the impl's header names: the
+     exact trait, not a name (amended 2026-11-24, #72, the owner's decision).
    - **The oracle is rustc:** its direct calls in LLVM IR at opt-level 0.
 
    What would reopen this: rustc's calls disagreeing with the layer's on a
