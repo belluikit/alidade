@@ -199,7 +199,8 @@ Rust is read by the toolchain already on the machine ([ADR 009](adr/009-rust-lay
   given a temporary copy of `Cargo.lock`, so a workspace without one does not
   get one.
 - **When it reruns.** After any change to a `.rs` file, a `Cargo.toml`, a
-  `Cargo.lock` or a toolchain file, the whole workspace is indexed again:
+  `Cargo.lock`, a toolchain file or a `.proto` file (prost-build writes Rust
+  from it), the whole workspace is indexed again:
   6.5 s on protowire-rust's 49,000 lines. A tool call waits for it, so an
   answer is never stale.
 - **Without the toolchain,** each Rust file is still a node, with a
@@ -303,6 +304,15 @@ generated, when something calls it. **`implements`** joins a type to each trait
 of the workspace it implements, a macro's implementations included; one on a
 type with no node (a primitive, a slice, a type parameter) has no edge. A call
 an operator makes (`==`, `+`, `?`) is not an edge.
+
+**Code a build script writes** (prost-build's, in Cargo's `target/`) has a node
+for every item, marked generated, identified where it is included: `include!`
+inside `pub mod proto` in `src/lib.rs` makes `src/lib.rs#proto.Scalars`. Calls
+into it are edges. A `.proto` message or enum has a **`generates`** edge
+(DECLARED, `via=prost`) to the struct or enum prost-build wrote for it. A struct
+that states another name for itself (prost-reflect's `message_name`, prost's
+`impl Name`) has none, and `graph_issues` lists it. An `include!` of a
+hand-written file in the repository is not followed (#84).
 
 **`documents`** joins a doc to a declaration. The edge comes from a code
 span naming exactly one declaration. A schema field and the `.pxf` entries

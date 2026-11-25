@@ -325,6 +325,12 @@ Rules that follow, and are not open:
       (`target/debug/build/prost-reflect-tests-<hash>/out/test.rs`), so its
       types are anchored at the file holding the `include!`, through the
       module that holds it: `rust://prost-reflect-tests/src/lib.rs#proto.Scalars`.
+      Every item of such a file has a node (the owner's decision on #72,
+      2026-11-25): its fields, variants and nested modules, and an impl's
+      items under its type, as in a hand-written file
+      (`proto.complex_type.MyEnum.as_str_name()`). They are generated code
+      (ADR 004), at the `include!`. An `include!` of a hand-written file of
+      the repository is not covered by this rule (#84).
 
     Why the file, and not the crate's module path, which is how Rust itself
     names an item:

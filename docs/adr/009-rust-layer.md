@@ -6,8 +6,8 @@ build runs. Then, on #72, the same day: the layer's IDs, its call rule, where tr
 implementations come from (revising #71's answer after a measurement), a machine
 without the toolchain, when `serve` answers, and the oracle ("The layer" below).
 Built so far (#72): file nodes, declarations, calls, references and
-implementations, and a machine without the toolchain. Not yet: the link from
-generated types to their `.proto` messages.
+implementations, a machine without the toolchain, and the code Cargo's build
+generates, joined to its `.proto` messages.
 **Date:** 2026-11-24
 **Relates to:** [000](000-composition-boundary.md), [002](002-node-identity.md),
 [003](003-corpus-scope.md), [004](004-generated-code.md),
@@ -222,6 +222,47 @@ struct (24 of 24 in prost-reflect: `#[prost_reflect(message_name = "test.Scalars
 `impl ::prost::Name` when `enable_type_names()` is set. None of prost-reflect's
 generated files has the latter.
 
+**Built 2026-11-25** (#72), with two decisions of the owner's: every item of a
+generated file gets a node, and a `.proto` edit reruns the Rust layer.
+- **Which file an include reads.** rust-analyzer's server resolves it: its
+  definition of a string literal in an `include!` call is the file the call reads,
+  `target/debug/build/prost-reflect-tests/<hash>/out/test.rs`. An include the
+  index shows only inside a macro's definition (tonic's `include_proto!`) is
+  found from the other side instead. A reference to a symbol the index lists
+  without a definition has the generated file as its definition, and the file is
+  placed under the innermost workspace module the symbol is inside. Only a file
+  whose items workspace code names is found that way.
+- **What it declares.** The server's outline of the file (`documentSymbol`): every
+  struct, enum, field, variant, module, function and constant, and each impl's
+  items under its type. Each is a node at the `include!` (ADR 002 rule 16),
+  marked generated, with `generated_in` naming the file. The index's symbols for
+  them, `proto/Scalars#double.`, are registered as their definitions, so a call
+  into generated code is an edge, and a method a derive writes on a generated type
+  has a node, as on any type.
+- **Which items are messages.** The generator's own derive says so:
+  `::prost::Message` on a struct, `::prost::Enumeration` on an enum. A oneof's
+  enum (`::prost::Oneof`) is neither, and gets no edge. rustfmt spreads a long
+  derive over several lines, so the derive is read over the item's whole range.
+- **Nesting.** prost-build writes a message's nested types in a module named
+  after it in snake case, beside its struct. The module beside struct
+  `ComplexType` is `complex_type`, so `complex_type::MyEnum` is
+  `test.ComplexType.MyEnum`.
+- **Stated names.** A struct whose stated names (every `message_name`, since a
+  build can stack two, and `impl Name`'s `PACKAGE` and `NAME`) do not include the
+  rule's name gets no edge, and is reported.
+
+Measured on prost-reflect, against main (25598e8):
+- 3 generated files are included, by `prost-reflect-tests`, and 160 items get
+  nodes. Its proto messages and enums in their packages number 22, and each has
+  its `generates` edge. Counting prost's derives in the three files' text also
+  gives 22.
+- All 24 stated `message_name` attributes agree with the rule. The 3 structs
+  with a second, conflicting one have a first that agrees.
+- 42 new call edges, all to methods a derive wrote on a generated type
+  (`proto.Scalars[Default].default()`). No call edge is lost.
+- The time is unchanged: 18.1 s on main, 17.9 s here. protowire-rust, which
+  generates no code, gives the same graph as on main.
+
 ## The layer (decided 2026-11-24, the owner's calls on #72)
 
 - **IDs** (ADR 002 rule 16): the file, then the item's path inside it, as for Python,
@@ -317,7 +358,11 @@ Not in this version:
   end `Drop::drop`, `?` `From::from`, with no reference in the source to read. On
   prost-reflect, 14 of rustc's call edges are `==`;
 - more than one configuration. rust-analyzer reads one: the workspace's features
-  as Cargo unifies them, and the host's target.
+  as Cargo unifies them, and the host's target;
+- the items of a hand-written file the workspace `include!`s: they have no node
+  (#84, an ID rule to decide);
+- a generated file included only through a macro when no workspace code names
+  any of its items. Nothing then leads to it.
 
 **Measured on the built layer** (`alidade graph`, the whole graph, all layers):
 
@@ -333,8 +378,9 @@ feed rustc. No crate includes them, and each says so.
 
 - **rust-analyzer leaves generated files out of its SCIP index, and LSP's definition
   lands in them.** If a release starts indexing them, the LSP lookups become
-  unnecessary. If LSP stops landing there, the `.proto` link is lost. A fixture with a
-  `build.rs` that generates one type pins both.
+  unnecessary. If LSP stops landing there, the `.proto` link is lost.
+  `TestGeneratedCode` pins both, with a `build.rs` that writes what prost-build
+  does; `TestGeneratedThroughMacroAlone` pins the include found through a macro.
 - **Implementations come from both sources.** A fixture with one implementation
   written by a `macro_rules!` macro and one inside a function body must give both
   `implements` edges. It fails the day either source stops supplying its half, or
