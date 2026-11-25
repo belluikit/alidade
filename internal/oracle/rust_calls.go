@@ -241,7 +241,7 @@ func foreignTrait(name, crate string) bool {
 	if end < 0 {
 		return false
 	}
-	_, trait, ok := strings.Cut(name[1:end], " as ")
+	_, trait, ok := cutTop(name[1:end], " as ")
 	tr := rustPath(trait)
 	return ok && len(tr) > 0 && tr[0] != crate
 }
@@ -273,7 +273,7 @@ func rustKey(name, crate string) string {
 		if len(method) == 0 {
 			return ""
 		}
-		ty, trait, hasTrait := strings.Cut(self, " as ")
+		ty, trait, hasTrait := cutTop(self, " as ")
 		// A reference's or a pointer's type (`&Kind`) is not the crate's:
 		// its impls are the standard library's blanket ones.
 		tp := rustPath(ty)
@@ -294,6 +294,26 @@ func rustKey(name, crate string) string {
 		return ""
 	}
 	return typed(segs[1:])
+}
+
+// cutTop is strings.Cut at the first sep outside angle brackets: in
+// `Harness<Task<<File as AsyncSeek>::seek::{closure#0}>>` the " as " is
+// a generic argument's, and the type has no trait.
+func cutTop(s, sep string) (before, after string, found bool) {
+	depth := 0
+	for i := 0; i < len(s); i++ {
+		switch s[i] {
+		case '<':
+			depth++
+		case '>':
+			depth--
+		default:
+			if depth == 0 && strings.HasPrefix(s[i:], sep) {
+				return s[:i], s[i+len(sep):], true
+			}
+		}
+	}
+	return s, "", false
 }
 
 // matching is the index of the '>' that closes the '<' at s[0], -1 when
