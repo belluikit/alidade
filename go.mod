@@ -7,6 +7,7 @@ require (
 	github.com/jinzhu/inflection v1.0.0
 	github.com/mark3labs/mcp-go v1.5.0
 	github.com/microsoft/typescript-go/shim v0.0.0
+	github.com/scip-code/scip/bindings/go/scip v0.10.0
 	github.com/sqlc-dev/oliphant v0.2.0
 	github.com/tommie/v8go v0.44.0
 	github.com/trendvidia/caliper v1.7.0
@@ -15,7 +16,7 @@ require (
 	github.com/trendvidia/protocompile v0.38.1
 	github.com/trendvidia/protos v0.1.4
 	github.com/trendvidia/protowire-go v1.13.0
-	github.com/trendvidia/pylib v0.1.0
+	github.com/trendvidia/pylib v0.1.1
 	github.com/yuin/goldmark v1.8.7
 	golang.org/x/mod v0.43.0
 	golang.org/x/tools v0.52.0
@@ -33,7 +34,6 @@ require (
 	github.com/petermattis/goid v0.0.0-20260113132338-7c7de50cc741 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2 // indirect
-	github.com/scip-code/scip/bindings/go/scip v0.10.0 // indirect
 	github.com/sourcegraph/beaut v0.0.0-20240611013027-627e4c25335a // indirect
 	github.com/spf13/cast v1.7.1 // indirect
 	github.com/tidwall/btree v1.8.2 // indirect
