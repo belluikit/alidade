@@ -8,6 +8,11 @@ tracker's. From v0.12.1 on, every number is this repository's.
 
 ## Unreleased
 
+- **Changed: the release is built with Go 1.27.4** (#74), up from 1.27.2,
+  and links pylib v0.1.1. Go 1.27.4 refused pylib v0.1.0's macOS
+  `libpython.a` (`disallowed LTO section __LLVM,__cg_profile`), which
+  v0.1.1 no longer carries (trendvidia/pylib#12). CPython is the same
+  3.14.8.
 - **Fixed: building a Rust workspace with no `Cargo.lock` no longer writes
   one into it** (#81). rust-analyzer 1.100's `cargo metadata` did, so the
   next build reran the Rust layer with nothing edited. rust-analyzer's Cargo

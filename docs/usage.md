@@ -169,7 +169,7 @@ machine only to analyse Go: the Go layer runs the `go` command on PATH and
 loads packages the way `go build` does. A repository that builds is a
 repository alidade can read.
 
-- **Versions.** A release binary is built with stock Go (go1.27.2 today;
+- **Versions.** A release binary is built with stock Go (go1.27.4 today;
   `go version /path/to/alidade` shows it). A `go` from a newer release than
   that is refused, with an error naming both versions, so that it is never
   analysed wrongly. Keep alidade at or above your toolchain, or

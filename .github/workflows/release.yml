@@ -84,7 +84,7 @@ jobs:
       # Stock Go (#282), the version CI tests with.
       - uses: actions/setup-go@v7
         with:
-          go-version: 1.27.2
+          go-version: 1.27.4
 
       # The toolchain that builds the release, checked on the machine that
       # builds it. A compiler bug once shipped every MCP parameter with one
