@@ -8,6 +8,8 @@ tracker's. From v0.12.1 on, every number is this repository's.
 
 ## Unreleased
 
+## v0.16.0 — 2026-11-26
+
 This release adds Rust (ADR 009). The entries for it describe the layer
 as released: the fixes made to it before its first release are folded
 into the entry they refine.
