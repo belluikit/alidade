@@ -16,6 +16,14 @@ tracker's. From v0.12.1 on, every number is this repository's.
   from `Type::method()` spans to that method, and 8 on jj. A path
   opening with a crate's name, `tokio_util::io::simplex`, still links
   nothing.
+- **Fixed: a Rust `use` that spans lines inside a function no longer
+  gives `references` edges** (#114). In `use crate::codec::{` with
+  `parse,` and `decode,` on the next lines, each name became a
+  `references` edge from the function to what it imports. The same held
+  for a `use` after a visibility with a path, `pub(in crate) use`. Only
+  a `use` on one line, after `pub`, `pub(crate)` or `pub(super)`, was
+  recognised. Neither tokio's graph nor jj's changes, since neither has
+  this shape.
 - **Fixed: a Rust module in a directory named `target` is read** (#115).
   The Rust layer skipped every directory of that name, so `src/target/`
   had no nodes and no calls, and nothing reported it. Cargo's output
