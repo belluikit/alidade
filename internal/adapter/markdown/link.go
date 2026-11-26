@@ -140,8 +140,10 @@ type index struct {
 	// byRustPath holds the Rust layer's declarations as Rust writes a
 	// path, Holder::member (ADR 009): `Square::new`, and a trait
 	// implementation's method by its type, `Square::area`, whichever
-	// trait it implements.
-	byRustPath map[string][]graph.ID
+	// trait it implements. byCratePath holds them by the public paths
+	// the Rust layer gives a library's items and modules (#116), as
+	// another crate names them: `tokio::spawn`.
+	byRustPath, byCratePath map[string][]graph.ID
 }
 
 func newIndex() *index {
@@ -149,7 +151,7 @@ func newIndex() *index {
 		byBase: map[string][]graph.ID{}, byProcedure: map[string][]graph.ID{},
 		byPkgMethod: map[string][]graph.ID{}, byPackagePath: map[string][]graph.ID{}, byField: map[string][]graph.ID{},
 		byFrontend: map[string][]graph.ID{}, byPathSuffix: map[string][]graph.ID{}, byCommand: map[string][]graph.ID{},
-		byRustPath: map[string][]graph.ID{}}
+		byRustPath: map[string][]graph.ID{}, byCratePath: map[string][]graph.ID{}}
 }
 
 func (ix *index) put(m map[string][]graph.ID, key string, id graph.ID) {
@@ -301,6 +303,11 @@ func (ix *index) addFileDecl(n graph.Node, body string) {
 		return
 	}
 	rel, decl, hasDecl := strings.Cut(body, "#")
+	if strings.HasPrefix(string(n.ID), "rust://") {
+		for _, p := range strings.Fields(n.Attrs["paths"]) {
+			ix.put(ix.byCratePath, p, n.ID)
+		}
+	}
 	switch {
 	case !hasDecl:
 		ix.file(rel, n.ID)
@@ -330,6 +337,15 @@ func rustPath(decl string) string {
 		segs[i] = strings.TrimSuffix(s, "()")
 	}
 	return strings.Join(segs, "::")
+}
+
+// rust answers a Rust path: by the path within a file, then by a public
+// path, as another crate writes it (#116).
+func (ix *index) rust(text string) []graph.ID {
+	if ids := ix.byRustPath[rustLocal(text)]; len(ids) > 0 {
+		return ids
+	}
+	return ix.byCratePath[text]
 }
 
 // rustLocal is a Rust path with a leading crate::, self:: or super::
@@ -380,7 +396,7 @@ func (ix *index) lookup(text string) []graph.ID {
 	case dottedRE.MatchString(text):
 		ids = ix.dotted(text)
 	case rustRE.MatchString(text):
-		ids = ix.byRustPath[rustLocal(text)]
+		ids = ix.rust(text)
 	case bareRE.MatchString(text) && strings.ToUpper(text) != text, hyphenRE.MatchString(text):
 		ids = ix.bare(text)
 	}

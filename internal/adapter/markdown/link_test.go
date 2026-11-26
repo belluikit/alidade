@@ -652,17 +652,21 @@ func TestRustDeclarations(t *testing.T) {
 // TestRustMentionForms: a Rust function is mentioned as a call as often
 // as by its path, and its path may open with crate::, self:: or super::
 // (#116). Each spelling below is its own section's one mention. A path
-// opening with a crate's name links nothing yet: the graph holds no
-// crate names (#116), and a std path must not reach the workspace's
-// function of the same last name.
+// opening with a crate's name links by the public paths the Rust layer
+// puts on a node: its defining path, `probe::Square::new`, or a name a
+// pub use gives it, `probe::parse_it`, and a module's, to its file. A std
+// path must not reach the workspace's function of the same last name.
 func TestRustMentionForms(t *testing.T) {
 	b := graph.NewBuilder(t.TempDir())
 	m := b.Minter()
 	for _, n := range []graph.Node{
 		{ID: "rust://src/lib.rs", Kind: graph.KindModule, Name: "lib.rs"},
-		{ID: "rust://src/lib.rs#Square", Kind: graph.KindType, Name: "Square"},
-		{ID: "rust://src/lib.rs#Square.new()", Kind: graph.KindMethod, Name: "new"},
-		{ID: "rust://src/lib.rs#swap()", Kind: graph.KindFunc, Name: "swap"},
+		{ID: "rust://src/lib.rs#Square", Kind: graph.KindType, Name: "Square", Attrs: map[string]string{"paths": "probe::Square"}},
+		{ID: "rust://src/lib.rs#Square.new()", Kind: graph.KindMethod, Name: "new", Attrs: map[string]string{"paths": "probe::Square::new"}},
+		{ID: "rust://src/lib.rs#swap()", Kind: graph.KindFunc, Name: "swap", Attrs: map[string]string{"paths": "probe::swap"}},
+		{ID: "rust://src/codec.rs", Kind: graph.KindModule, Name: "codec.rs", Attrs: map[string]string{"paths": "probe::codec"}},
+		{ID: "rust://src/codec.rs#parse()", Kind: graph.KindFunc, Name: "parse",
+			Attrs: map[string]string{"paths": "probe::parse_it probe::codec::parse"}},
 	} {
 		if err := b.AddNode(n); err != nil {
 			t.Fatal(err)
@@ -678,7 +682,12 @@ func TestRustMentionForms(t *testing.T) {
 		"crate::Square::new()":           square,
 		"self::Square::new":              square,
 		"super::super::Square::new":      square,
-		"probe::Square::new":             "", // a crate's name: the graph has none
+		"probe::Square::new":             square,
+		"probe::Square::new()":           square,
+		"probe::parse_it":                "rust://src/codec.rs#parse()",
+		"probe::codec::parse":            "rust://src/codec.rs#parse()",
+		"probe::codec":                   "rust://src/codec.rs",
+		"other::Square::new":             "",
 		"std::mem::swap(&mut a, &mut b)": "",
 		"crate::mem::swap":               "",
 	}
