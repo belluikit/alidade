@@ -604,7 +604,8 @@ func TestErrorLine(t *testing.T) {
 // pins a toolchain that is not installed is skipped, saying so, and
 // rustup is not let install it (#133); the root's workspace is read. It
 // needs rustup's proxy as cargo, which a machine with Homebrew's Rust
-// first on the PATH has not, and skips there. The dist server is a closed
+// first on the PATH has not, and skips there (fails under
+// ALIDADE_REQUIRE_RUST, as CI sets it). The dist server is a closed
 // port, so a regression fails on rustup's download error, not by
 // downloading a toolchain.
 func TestPinnedToolchainNotInstalled(t *testing.T) {
@@ -617,6 +618,9 @@ func TestPinnedToolchainNotInstalled(t *testing.T) {
 	probe := exec.Command("cargo", "+1.42.0", "--version")
 	probe.Env = append(os.Environ(), "RUSTUP_AUTO_INSTALL=0")
 	if out, _ := probe.CombinedOutput(); !strings.Contains(string(out), "is not installed") {
+		if os.Getenv("ALIDADE_REQUIRE_RUST") != "" { // CI installs Rust with rustup: a skip there would pass #133 unchecked
+			t.Fatalf("ALIDADE_REQUIRE_RUST is set and cargo on the PATH is not rustup's proxy, or 1.42.0 is installed: %s", out)
+		}
 		t.Skipf("cargo on the PATH is not rustup's proxy, or 1.42.0 is installed: %s", out)
 	}
 	g, rep := extract(t, dir)
