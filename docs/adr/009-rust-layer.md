@@ -148,8 +148,16 @@ above.
 A dependency from outside the repository has no `Cargo.toml` in the tree, so its
 failure is reported at the workspace's, naming it (#117): `the build script of
 dependency regdep v0.1.0 failed`. Cargo's home is written `$CARGO_HOME` in what it
-printed. The server is started only for a workspace's own build scripts, so a
-dependency's failure is reported only there (#127).
+printed. A dependency's failure is reported in every workspace a step starts the
+server on (#127, the owner's pick of option b): one with a build script of its own,
+one that declares a trait (the implementations step), and one with an `include!` or
+a call into generated code. A workspace with none of these starts no server, and a
+dependency's failure there is not reported. Measured 2026-11-26: that is 2 of
+tokio's 3 workspaces (its fuzz crates, whose one outside dependency, libfuzzer-sys,
+writes no Rust) and none of jj's, and a server on every workspace would cost tokio
+5.9 s (+17%) on every build. Failing dependencies changed no edge on tokio (serde)
+and 8 of jj's 45,817 (thiserror's `source()` methods), all in workspaces that report
+them. `TestDependencyFailureWhereServerRuns` pins both sides.
 
 ### Trait implementations come from LSP and SCIP together
 
