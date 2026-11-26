@@ -76,6 +76,12 @@ func TestInUse(t *testing.T) {
 		{"let v = [\n    @parse,\n];", false},
 		{"usefoo::@parse(1);", false},
 		{"let x = reuse::@parse(1);", false},
+		// A divergence, pinned: a block comment in the tree stops the walk,
+		// so the name after it is read as named outside a use. Letting "/"
+		// into the run would read `/* we use it */ f()` as a use, which
+		// loses a call; this loses only a false reference, and is rare.
+		{"use crate::codec::{/* the parser */ @parse};", false},
+		{"/* we use it */ @parse(1);", false},
 	} {
 		text := []byte(c.text)
 		at := bytes.IndexByte(text, '@')
