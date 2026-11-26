@@ -8,6 +8,15 @@ tracker's. From v0.12.1 on, every number is this repository's.
 
 ## Unreleased
 
+- **Fixed: Rust test marking in three shapes** (#112). An inline
+  module whose body opens with `#![cfg(test)]` marked its whole file test,
+  production functions beside it included. Now only that module is
+  marked. The items of a hand-written file an `include!` reads were never
+  test, even below `tests/`. They are now marked as the file is, and the
+  file is test code when every `include!` of it is in test code. Cargo's
+  output included in a test module is marked too. A package inside
+  another package's `tests/` was all test, and now only its own `tests/`
+  holds integration tests. Neither tokio nor jj has a mark that changes.
 - **Fixed: a Rust method whose `impl` block comes before its type is
   contained by the type** (#113). It was contained by its file, and it
   did not inherit a test type's mark. The same held in a file an
