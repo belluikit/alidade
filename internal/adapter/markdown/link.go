@@ -332,6 +332,26 @@ func rustPath(decl string) string {
 	return strings.Join(segs, "::")
 }
 
+// rustLocal is a Rust path with a leading crate::, self:: or super::
+// left out (#116), so `crate::Square::new` is answered as
+// `Square::new` is: by the path within a file, the only one the index
+// has.
+func rustLocal(text string) string {
+	if rest, ok := strings.CutPrefix(text, "crate::"); ok {
+		return rest
+	}
+	for {
+		rest, ok := strings.CutPrefix(text, "self::")
+		if !ok {
+			rest, ok = strings.CutPrefix(text, "super::")
+		}
+		if !ok {
+			return text
+		}
+		text = rest
+	}
+}
+
 // file indexes a file node by its path as a link or a mention writes it:
 // the ID's path with its escape read back (#124).
 func (ix *index) file(rel string, id graph.ID) {
@@ -360,7 +380,7 @@ func (ix *index) lookup(text string) []graph.ID {
 	case dottedRE.MatchString(text):
 		ids = ix.dotted(text)
 	case rustRE.MatchString(text):
-		ids = ix.byRustPath[text]
+		ids = ix.byRustPath[rustLocal(text)]
 	case bareRE.MatchString(text) && strings.ToUpper(text) != text, hyphenRE.MatchString(text):
 		ids = ix.bare(text)
 	}
@@ -440,12 +460,14 @@ func (ix *index) packageSuffix(rel string) []graph.ID {
 }
 
 // callRE is a span written as a call or a signature: a name, perhaps
-// dotted, perhaps with type arguments, then "(" — Engine.Failed(),
-// Validate(msg, present) error. methodValueRE is a method reached through
+// dotted or, as Rust writes a path, joined by "::" (#116), perhaps with
+// type arguments, Go's or a Rust turbofish, then "(" — Engine.Failed(),
+// Validate(msg, present) error, Square::new(side), iter::<u8>().
+// methodValueRE is a method reached through
 // a value or a receiver: UnmarshalOptions{SkipValidate: true}.Unmarshal,
 // (*Resolver[T]).Resolve(ctx, req).
 var (
-	callRE        = regexp.MustCompile(`^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)(?:\[[^\]]*\])?\(`)
+	callRE        = regexp.MustCompile(`^([A-Za-z_][A-Za-z0-9_]*(?:(?:\.|::)[A-Za-z_][A-Za-z0-9_]*)*)(?:\[[^\]]*\]|::<[^()]*>)?\(`)
 	methodValueRE = regexp.MustCompile(`^(?:\(\*?([A-Za-z_][A-Za-z0-9_.]*)(?:\[[^\]]*\])?\)|([A-Za-z_][A-Za-z0-9_.]*)\{[^{}]*\})\.([A-Za-z_][A-Za-z0-9_]*)(?:$|\()`)
 )
 
