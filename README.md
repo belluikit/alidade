@@ -23,7 +23,7 @@ that already exist, and owns the graph they feed.
 | Go, type-resolved | [caliper](https://github.com/trendvidia/caliper), over the Go type checker |
 | TypeScript, JavaScript, Svelte | TypeScript 7's compiler ([typescript-go](https://github.com/microsoft/typescript-go), in process) for declarations and calls; esbuild's resolver for imports |
 | Python | jedi, in a CPython linked into the binary ([pylib](https://github.com/trendvidia/pylib)) |
-| Rust | the machine's own rust-analyzer, through its SCIP index ([ADR 009](docs/adr/009-rust-layer.md)) |
+| Rust | the machine's own rust-analyzer, through its SCIP index and LSP lookups ([ADR 009](docs/adr/009-rust-layer.md)) |
 | `.proto` | [protocompile](https://github.com/trendvidia/protocompile) |
 | SQL (PostgreSQL, sqlc) | `sqlc.yaml` and the migrations |
 | `.pxf` | [protowire-go](https://github.com/trendvidia/protowire-go) |
@@ -207,8 +207,8 @@ of 60, within a cent of each other.
 - **No Rust questions.** The Rust comparison below scores the two graphs,
   not agents using them.
 - **Nothing graphify does beyond calls.** graphify reads dozens of
-  languages through tree-sitter where alidade reads four through their
-  compilers, and it adds documents, images and community structure that
+  languages through tree-sitter where alidade reads Go, TypeScript and
+  JavaScript, Python and Rust through each language's own analyzer, and it adds documents, images and community structure that
   alidade has no counterpart for. The fourth row is its graph tools with
   no text search beside them, which is not how it is meant to be run.
 - **Python answers are the calls a test suite made.** A call no test made
@@ -236,7 +236,10 @@ compiled code.
 | [prost-reflect](https://github.com/andrewhickman/prost-reflect) @f82c954 | 99.7% of 1,088 | 99.9% | 36.4% | 83.2% | maintainers |
 
 - **What counts:** calls within one library that the source writes as a
-  call. Calls into other crates aren't scored. Neither are calls only a
+  call. A function rustc names differently from alidade (a `#[path]`
+  module renames tokio's `process::imp`) is placed by the line it is
+  declared on. ADR 009's oracle run, which does not place by line,
+  counts 2,923 such calls on tokio. Calls into other crates aren't scored. Neither are calls only a
   derive, a macro or an operator makes.
 - **Versions:** graphify 0.9.119, run as `graphify update . --no-cluster`,
   which makes no model calls. alidade at commit 33dc725, with rustc and
