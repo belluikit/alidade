@@ -81,8 +81,9 @@ into the entry they refine.
   path outside the tree, `file:/…#c2026bcb/Cargo.toml` or an absolute
   one, which differs by machine. Each is now at the workspace's
   `Cargo.toml`, as `the build script of dependency regdep v0.1.0 failed`,
-  with Cargo's home written `$CARGO_HOME` in what it printed. Only a
-  workspace with a build script of its own reports them (#127).
+  with Cargo's home written `$CARGO_HOME` in what it printed. A workspace
+  reports them when it has a build script of its own, declares a trait, or
+  uses `include!`; one with none of these does not (#127).
 - **Added: Rust items carry their public paths, and a Markdown mention
   written as a crate path links** (#116). A library's items and file
   modules have the attribute `paths`, the paths another crate names them

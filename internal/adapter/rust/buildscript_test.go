@@ -124,6 +124,55 @@ func TestDependencyBuildScriptFails(t *testing.T) {
 	}
 }
 
+// TestDependencyFailureWhereServerRuns pins where a dependency's failing
+// build script is reported (#127, the owner's pick of option b): in every
+// workspace a step starts rust-analyzer's server on, since its log is what
+// names the failure. A trait is enough for the implementations step to
+// start one, with no build script of the workspace's own. A workspace with
+// no trait, no include! and no build script starts none, and the failure
+// is not reported: the measured exception, documented in ADR 009 and
+// docs/usage.md, where a server would cost 17% of tokio's build for two
+// fuzz workspaces whose dependency writes no Rust.
+func TestDependencyFailureWhereServerRuns(t *testing.T) {
+	for _, tc := range []struct {
+		name, lib string
+		reported  bool
+	}{
+		{"trait", "pub trait Shape {\n    fn area(&self) -> u32;\n}\n", true},
+		{"nothing to ask", "pub fn probe() {}\n", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			base := tempDir(t)
+			root := filepath.Join(base, "ws")
+			writeTree(t, filepath.Join(base, "outside", "pathdep"), map[string]string{
+				"Cargo.toml": "[package]\nname = \"pathdep\"\nversion = \"0.1.0\"\nedition = \"2021\"\n",
+				"build.rs":   "fn main() {\n    panic!(\"pathdep fails\");\n}\n",
+				"src/lib.rs": "pub fn f() {}\n",
+			})
+			writeTree(t, root, map[string]string{
+				"Cargo.toml": "[package]\nname = \"probe\"\nversion = \"0.1.0\"\nedition = \"2021\"\n\n[dependencies]\npathdep = { path = \"../outside/pathdep\" }\n",
+				"src/lib.rs": tc.lib,
+			})
+			if why := toolchainMissing(root); why != "" {
+				t.Skip(why)
+			}
+			_, rep := extract(t, root)
+			var got []string
+			for _, s := range rep.Skipped {
+				got = append(got, s.File+": "+s.Reason)
+			}
+			want := 0
+			if tc.reported {
+				want = 1
+			}
+			if rep.BuildScriptsFailed != want || len(got) != want ||
+				(tc.reported && !strings.HasPrefix(got[0], "Cargo.toml: the build script of dependency pathdep v0.1.0 (../outside/pathdep) failed")) {
+				t.Errorf("BuildScriptsFailed %d, skipped %q; want %d entries naming pathdep", rep.BuildScriptsFailed, got, want)
+			}
+		})
+	}
+}
+
 // writeTree writes files, by slash-separated path, under dir.
 func writeTree(t *testing.T, dir string, files map[string]string) {
 	t.Helper()

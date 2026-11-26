@@ -322,8 +322,9 @@ an operator makes (`==`, `+`, `?`) is not an edge.
 skipped, at its package's `Cargo.toml`: how it exited and the last lines it
 printed (`Error: protobuf sources are not checked out`). The code it would
 have written has no nodes. The other packages are read as usual. A
-dependency's failing script is listed at the workspace's `Cargo.toml`, but only
-in a workspace that has a build script of its own (#127).
+dependency's failing script is listed at the workspace's `Cargo.toml` when the
+workspace has a build script of its own, declares a trait, or uses `include!`.
+In a workspace with none of these, such as a small fuzz crate, it is not (#127).
 
 **Code a build script writes** (prost-build's, in Cargo's `target/`) has a node
 for every item, marked generated, identified where it is included: `include!`

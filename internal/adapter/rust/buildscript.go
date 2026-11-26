@@ -20,7 +20,11 @@ import (
 // fails is reported (#85, the owner's decision): the index says nothing
 // when one does, and the code it would have written is simply missing.
 // A server costs about 3.4 s on prost-reflect; this pays it only where no
-// other step has started one.
+// other step has started one. A dependency's failure is reported by any
+// server a step started (a workspace with a trait or an include! has one),
+// and in a workspace with none of those and no build script of its own it
+// is not (#127, the owner's pick of option b: a server there cost tokio
+// 17% of its build for two fuzz crates).
 // What the servers said is read when they are closed (reportBuild).
 func (x *extractor) buildScripts() error {
 	for _, ws := range x.indexed {
