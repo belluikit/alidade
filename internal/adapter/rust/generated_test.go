@@ -489,3 +489,90 @@ func TestIncludedImplementsAmbiguous(t *testing.T) {
 		t.Errorf("implements %v, ImplementsUnplaced %d; want none, 1: two workspace traits are named Area", impl, rep.ImplementsUnplaced)
 	}
 }
+
+// TestHolderDeclaredAfter: a method whose impl block comes before its
+// type is contained by the type, as one after it is, in a crate's own
+// file and in a file an include! reads, and a method a derive writes on
+// such a type is too (#113). A member of a test type declared after its
+// impl is test code, through its holder's mark (#106).
+func TestHolderDeclaredAfter(t *testing.T) {
+	g, _ := extract(t, fixtureOf(t, "gen", map[string]string{
+		"src/lib.rs": `pub mod hand_mod {
+    include!("hand.rs");
+}
+
+pub trait Area {
+    fn area(&self) -> i32;
+}
+
+impl Late {
+    pub fn new() -> Self {
+        Late
+    }
+}
+
+impl Area for Late {
+    fn area(&self) -> i32 {
+        1
+    }
+}
+
+#[derive(Clone)]
+pub struct Late;
+
+pub fn uses() -> i32 {
+    Late::new().clone().area()
+}
+
+impl Probe {
+    fn probe(&self) {}
+}
+
+#[cfg(test)]
+struct Probe;
+`,
+		"src/hand.rs": `impl crate::Area for Hand {
+    fn area(&self) -> i32 {
+        self.n
+    }
+}
+
+impl Hand {
+    pub fn get(&self) -> i32 {
+        self.n
+    }
+}
+
+pub struct Hand {
+    pub n: i32,
+}
+`,
+	}))
+	var contains []string
+	for _, e := range edges(g, graph.KindContains) {
+		if strings.Contains(e, "#Late") || strings.Contains(e, "#Hand") || strings.Contains(e, "#Probe") {
+			contains = append(contains, e)
+		}
+	}
+	check(t, "contains", contains, []string{
+		"src/hand.rs -> src/hand.rs#Hand",
+		"src/hand.rs#Hand -> src/hand.rs#Hand.get()",
+		"src/hand.rs#Hand -> src/hand.rs#Hand.n",
+		"src/hand.rs#Hand -> src/hand.rs#Hand[Area].area()",
+		"src/lib.rs -> src/lib.rs#Late",
+		"src/lib.rs -> src/lib.rs#Probe",
+		"src/lib.rs#Late -> src/lib.rs#Late.new()",
+		"src/lib.rs#Late -> src/lib.rs#Late[Area].area()",
+		"src/lib.rs#Late -> src/lib.rs#Late[Clone].clone()",
+		"src/lib.rs#Probe -> src/lib.rs#Probe.probe()",
+	})
+	check(t, "implements", edges(g, graph.KindImplements), []string{
+		"src/hand.rs#Hand -> src/lib.rs#Area",
+		"src/lib.rs#Late -> src/lib.rs#Area",
+	})
+	for n := range g.Nodes() {
+		if n.ID == "rust://src/lib.rs#Probe.probe()" && !n.Test {
+			t.Errorf("%s is not test code; want it marked through Probe", n.ID)
+		}
+	}
+}

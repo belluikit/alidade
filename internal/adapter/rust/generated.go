@@ -480,9 +480,6 @@ const lspImpl = 19 // LSP's SymbolKind Object, which rust-analyzer gives an impl
 func (x *extractor) items(g *genFile, syms []symbol, path []string, parent graph.ID, proto []string) error {
 	for _, sy := range syms {
 		if sy.Kind == lspImpl {
-			if err := x.implItems(g, sy, path, parent); err != nil {
-				return err
-			}
 			continue
 		}
 		kind, ok := symbolKinds[sy.Kind]
@@ -505,6 +502,15 @@ func (x *extractor) items(g *genFile, syms []symbol, path []string, parent graph
 		}
 		if err := x.items(g, sy.Children, d.path, d.id, nestedProto(sy, syms, proto)); err != nil {
 			return err
+		}
+	}
+	// An impl block's items are placed after the items beside it, so its
+	// type has its node wherever the impl is written (#113).
+	for _, sy := range syms {
+		if sy.Kind == lspImpl {
+			if err := x.implItems(g, sy, path, parent); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
