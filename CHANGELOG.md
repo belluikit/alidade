@@ -26,6 +26,9 @@ tracker's. From v0.12.1 on, every number is this repository's.
   as `Engine.Failed()` does. So does a path opening with `crate::`,
   `self::` or `super::`. On tokio this adds 40 `documents` edges, all
   from `Type::method()` spans to that method, and 8 on jj.
+  from `Type::method()` spans to that method, and 8 on jj. A path
+  opening with a crate's name, `tokio_util::io::simplex`, still links
+  nothing.
 - **Fixed: a Rust `use` that spans lines inside a function no longer
   gives `references` edges** (#114). In `use crate::codec::{` with
   `parse,` and `decode,` on the next lines, each name became a
