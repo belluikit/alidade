@@ -461,3 +461,28 @@ func TestShallowest(t *testing.T) {
 		t.Errorf("shallowest(%v) = %s, want %s", in, got, want)
 	}
 }
+
+// TestTargetSourceDir: a source directory named target is read, as any
+// module's, and Cargo's output directory is left out by the CACHEDIR.TAG
+// Cargo writes into it, not by its name (ADR 003, amended for #75; #115).
+func TestTargetSourceDir(t *testing.T) {
+	dir := fixture(t, map[string]string{
+		"shapes/src/target/mod.rs":                               "pub fn triple() -> u8 {\n    3\n}\n",
+		"target/CACHEDIR.TAG":                                    "Signature: 8a477f597d28d172789f06886806bc55\n# This file is a cache directory tag created by cargo.\n",
+		"target/debug/build/shapes-0123456789abcdef/out/made.rs": "pub fn made() {}\n",
+	})
+	edit(t, filepath.Join(dir, "shapes/src/lib.rs"), "", "\npub mod target;\n\npub fn run() -> u8 {\n    target::triple()\n}\n")
+	g, _ := extract(t, dir)
+	var calls []string
+	for _, e := range edges(g, graph.KindCalls) {
+		if strings.HasPrefix(e, "shapes/src/lib.rs#run()") {
+			calls = append(calls, e)
+		}
+	}
+	check(t, "calls", calls, []string{"shapes/src/lib.rs#run() -> shapes/src/target/mod.rs#triple()"})
+	for n := range g.Nodes() {
+		if strings.HasPrefix(n.Pos.File, "target/") {
+			t.Errorf("%s has a node: Cargo's tagged output directory is read", n.ID)
+		}
+	}
+}

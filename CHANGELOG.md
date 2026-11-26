@@ -8,6 +8,12 @@ tracker's. From v0.12.1 on, every number is this repository's.
 
 ## Unreleased
 
+- **Fixed: a Rust module in a directory named `target` is read** (#115).
+  The Rust layer skipped every directory of that name, so `src/target/`
+  had no nodes and no calls, and nothing reported it. Cargo's output
+  directory is still left out, by the `CACHEDIR.TAG` Cargo writes into it,
+  as every layer leaves out a build cache (ADR 003). On tokio the graph
+  is unchanged: its three `target/` directories are all tagged.
 - **Fixed: Rust test marking in three shapes** (#112). An inline
   module whose body opens with `#![cfg(test)]` marked its whole file test,
   production functions beside it included. Now only that module is

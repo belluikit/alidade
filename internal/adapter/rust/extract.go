@@ -34,9 +34,12 @@ type Options struct {
 func DefaultOptions() Options { return Options{} }
 
 // SkipDirs are the directories the layer never enters, by name: version
-// control, Cargo's build output, and the directories every layer skips.
+// control and the directories every layer skips. Cargo's output directory
+// is left out by the CACHEDIR.TAG Cargo writes into it, as every layer
+// leaves out a build cache (ADR 003, amended for #75), not by its name: a
+// module of a crate may be a directory named target (#115).
 var SkipDirs = map[string]bool{
-	".git": true, "target": true, "node_modules": true, "vendor": true, ".tmp": true,
+	".git": true, "node_modules": true, "vendor": true, ".tmp": true,
 }
 
 // Source reports whether the layer reads a file, by name.
