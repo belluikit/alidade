@@ -175,3 +175,24 @@ func TestCompactIsLossless(t *testing.T) {
 		}
 	}
 }
+
+// TestPathsOnlyInGetNode: a Rust item's public paths (#116) are left out
+// of an answer of many nodes, the rest of its attributes kept, and shown
+// whole by get_node's rendering. The graph's own map is not changed.
+func TestPathsOnlyInGetNode(t *testing.T) {
+	attrs := map[string]string{"paths": "tokio::spawn tokio::task::spawn", "end_line": "40"}
+	n := graph.Node{ID: "rust://tokio/src/task/spawn.rs#spawn()", Kind: graph.KindFunc, Name: "spawn", Attrs: attrs}
+	if got := listedNode(n).Attrs; len(got) != 1 || got["end_line"] != "40" {
+		t.Errorf("listed attrs %v, want end_line alone", got)
+	}
+	if got := renderNode(n).Attrs["paths"]; got != "tokio::spawn tokio::task::spawn" {
+		t.Errorf("get_node's paths %q", got)
+	}
+	if attrs["paths"] == "" {
+		t.Error("the graph's attributes lost paths")
+	}
+	only := graph.Node{ID: "rust://src/lib.rs", Kind: graph.KindModule, Name: "lib.rs", Attrs: map[string]string{"paths": "probe"}}
+	if got := listedNode(only).Attrs; got != nil {
+		t.Errorf("listed attrs %v, want none", got)
+	}
+}

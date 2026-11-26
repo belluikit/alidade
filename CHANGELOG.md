@@ -17,9 +17,9 @@ tracker's. From v0.12.1 on, every number is this repository's.
   such as `tokio_util::sync::CancellationToken` or `tokio::spawn` now
   links. On tokio this adds 45 `documents` edges, each to the item or
   module the mention names; jj has no such mention. Not read: glob
-  re-exports, `[lib] name`, and macros, which have no node. MCP answers
-  over Rust library code grow by the attribute: 11% to 24% more tokens
-  in a `find_nodes` or `neighbors` answer on tokio (ADR 009).
+  re-exports, `[lib] name`, and macros, which have no node. `get_node`
+  shows the paths; answers that list nodes leave them out, which keeps
+  them at their old size (ADR 009).
 - **Fixed: a Markdown mention of a Rust function written as a call
   links** (#116). `Square::new()`, `Square::new(side)` and
   `iter::<u8>(v)` link as `Square::new` already did, as a Go call such

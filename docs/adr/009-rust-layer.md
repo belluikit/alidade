@@ -589,10 +589,11 @@ tokio, each read by hand, and removes none. An edge is one per section and item,
 a mention in a section that already links the item adds none: the CHANGELOG's
 `tokio::runtime::Runtime` sits beside `Runtime`. jj's Markdown has no such mention.
 
-The attribute is in every MCP answer that lists the node, as any attribute is.
-Measured on tokio: 11% to 24% more tokens in a `find_nodes` or `neighbors` answer
-over library code, and 4% to 9% fewer nodes in a `subgraph_for_question` answer at
-its default budget.
+`get_node` shows the attribute, and an MCP answer that lists nodes leaves it out
+(the owner's decision). Listed, it made a `find_nodes` or `neighbors` answer over
+tokio's library code 11% to 24% longer, and left 4% to 9% fewer nodes in a
+`subgraph_for_question` answer at its default budget. Left out, those answers are
+the size they were before.
 
 ## Assumptions, each with the test #72 must add
 
