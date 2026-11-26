@@ -219,12 +219,16 @@ into the entry they refine.
   shows the paths; answers that list nodes leave them out, which keeps
   them at their size (ADR 009).
 - **Added: what the Rust layer needs, and what it writes** (#72, #81,
-  #109, #115, #130). Without `cargo`, `rustc`, `rust-analyzer` or the standard
-  library's source, each Rust file says its declarations and calls are not
-  read, and what to install, and so does `graph_stats` under `skipped`. A
+  #109, #115, #130, #133). Without `cargo`, `rustc`, `rust-analyzer` or
+  the standard library's source, each Rust file says its declarations and
+  calls are not read, and what to install, and so does `graph_stats` under
+  `skipped`. A
   workspace whose `rust-toolchain.toml` pins a toolchain without the
   standard library's source, which rust-analyzer could not add (offline),
-  is not read either, and says so; the other workspaces are read. A
+  is not read either, and says so; the other workspaces are read. So is
+  one pinned to a toolchain that is not installed: every toolchain command
+  alidade runs sets `RUSTUP_AUTO_INSTALL=0`, as rust-analyzer does for its
+  own, so building the graph never has rustup download a toolchain. A
   workspace with no `Cargo.lock` gets none written into it: rust-analyzer's
   Cargo gets a temporary copy of the lock file, through Cargo's
   `CARGO_RESOLVER_LOCKFILE_PATH` (Cargo 1.97 and later). Cargo's output

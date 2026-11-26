@@ -397,6 +397,12 @@ Measured on prost-reflect, against main (25598e8):
   load standard library`. That workspace is then not read, as the root would not be:
   its files are marked `calls_unavailable`, and the report names its sysroot. The
   line is log text, not an API, pinned by `TestWorkspaceWithoutStd`.
+  The layer never has rustup install a toolchain (#133, the owner's pick of option
+  a): every command it runs sets `RUSTUP_AUTO_INSTALL=0`, as rust-analyzer does for
+  its own, unless the environment sets it. A workspace pinned to a toolchain that is
+  not installed is skipped with rustup's error (`TestPinnedToolchainNotInstalled`).
+  rust-analyzer's own `rustup component add rust-src`, above, is a component added to
+  a toolchain already there, and the setting does not stop it.
 - **`serve` waits for the index.** The first answer, and the first after a Rust edit,
   wait for SCIP to finish: 6.5 s on protowire-rust and 13.9 s on prost-reflect, for
   every workspace each time. An answer is then never stale and never partial

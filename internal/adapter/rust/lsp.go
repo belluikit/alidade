@@ -62,6 +62,7 @@ func startLSP(ws string) (*lsp, error) {
 		return nil, err
 	}
 	cmd.Env = append(cmd.Environ(), "RA_LOG=error") // a build script's failure is logged at error, whatever the user's level
+	noInstall(cmd)
 	stderr := &logBuffer{}
 	cmd.Stderr = stderr
 	in, err := cmd.StdinPipe()

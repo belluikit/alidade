@@ -222,8 +222,11 @@ Rust is read by the toolchain already on the machine ([ADR 009](adr/009-rust-lay
   pins. When that one has no standard library source, rust-analyzer adds it
   (`rustup component add rust-src`, which needs the network). When it cannot,
   that workspace is not read, its files say why and `graph_stats` lists it
-  under `skipped`; the other workspaces are read. If Homebrew's Rust comes
-  before rustup's on `PATH`, the standard library's source is usually missing.
+  under `skipped`; the other workspaces are read. A workspace pinned to a
+  toolchain that is not installed is skipped the same way, with rustup's
+  error: alidade does not let rustup install it (run `rustup toolchain
+  install` in that directory). If Homebrew's Rust comes before rustup's on
+  `PATH`, the standard library's source is usually missing.
 
 ## Leaving directories out
 

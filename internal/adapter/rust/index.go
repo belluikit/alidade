@@ -101,6 +101,7 @@ func runSCIP(ws string) (*scip.Index, error) {
 		return nil, err
 	}
 	defer done()
+	noInstall(cmd)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
