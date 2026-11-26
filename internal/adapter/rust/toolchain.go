@@ -67,7 +67,8 @@ func isDir(path string) bool {
 }
 
 // output runs a command in dir and returns its standard output, trimmed;
-// an error carries the first line of what it printed to standard error.
+// an error carries the line of what it printed to standard error that
+// says what went wrong (errorLine).
 func output(dir, name string, args ...string) (string, error) {
 	cmd := exec.Command(name, args...)
 	cmd.Dir = dir
@@ -75,7 +76,7 @@ func output(dir, name string, args ...string) (string, error) {
 	cmd.Stderr = &stderr
 	out, err := cmd.Output()
 	if err != nil {
-		if line := firstLine(stderr.String()); line != "" {
+		if line := errorLine(stderr.String()); line != "" {
 			return "", fmt.Errorf("%w: %s", err, line)
 		}
 		var nf *exec.Error
@@ -85,6 +86,20 @@ func output(dir, name string, args ...string) (string, error) {
 		return "", err
 	}
 	return strings.TrimSpace(string(out)), nil
+}
+
+// errorLine is the first line of s that starts with "error", or its first
+// line when none does. rustup's proxy prints what it is doing first: a
+// workspace pinned to a toolchain that is not installed starts with
+// `info: syncing channel updates for 1.80-…`, and the line that says why
+// it failed comes after (#130).
+func errorLine(s string) string {
+	for _, line := range strings.Split(s, "\n") {
+		if t := strings.TrimSpace(line); strings.HasPrefix(t, "error") {
+			return t
+		}
+	}
+	return firstLine(s)
 }
 
 func firstLine(s string) string {

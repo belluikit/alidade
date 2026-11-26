@@ -583,3 +583,19 @@ func TestStdLost(t *testing.T) {
 		t.Errorf("stdLost of a clean log = %q, want \"\"", got)
 	}
 }
+
+// TestErrorLine: a failing command is reported by its error, not by the
+// line rustup's proxy prints before it, as it does for a workspace pinned
+// to a toolchain that is not installed (#130).
+func TestErrorLine(t *testing.T) {
+	for _, tc := range []struct{ in, want string }{
+		{"info: syncing channel updates for 1.80-aarch64-apple-darwin\nerror: could not download file from 'https://static.rust-lang.org/dist/channel-rust-1.80.toml.sha256'\n", "error: could not download file from 'https://static.rust-lang.org/dist/channel-rust-1.80.toml.sha256'"},
+		{"  error[E0463]: can't find crate\n", "error[E0463]: can't find crate"},
+		{"warning: something\nfailed\n", "warning: something"},
+		{"", ""},
+	} {
+		if got := errorLine(tc.in); got != tc.want {
+			t.Errorf("errorLine(%q) = %q, want %q", tc.in, got, tc.want)
+		}
+	}
+}
