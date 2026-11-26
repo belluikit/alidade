@@ -53,16 +53,23 @@ func hasBuildScript(manifest string) bool {
 // names them (`failed to run custom build command for `a v0.1.0 (…)“).
 // That is log text, not an API, so when no such entry is there and the
 // server's status still says something went wrong, the status message is
-// reported alone, on the workspace. Each package's entry is at its
-// manifest, and says nothing that differs between two builds of one tree:
-// no absolute path, no build hash, no thread id, and they are in the order
-// of their packages, where the log's order varies from run to run.
+// reported alone, on the workspace. A package in the tree has its entry
+// at its manifest; a dependency from outside it, a registry's, a git
+// repository's or a path's beyond the root, at the workspace's manifest,
+// naming the dependency (#117). An entry says nothing that differs
+// between two builds of one tree, on one machine or another: no absolute
+// path, no build hash, no thread id, and they are in the order of their
+// packages, where the log's order varies from run to run.
 func (x *extractor) reportBuild(ws string, l *lsp) {
 	failed := buildFailures(l.stderr.String())
 	slices.SortFunc(failed, func(a, b buildFailure) int { return strings.Compare(a.pkg, b.pkg) })
 	for _, f := range failed {
 		x.report.BuildScriptsFailed++
-		x.skip(filepath.Join(f.dir, "Cargo.toml"), 0, errors.New(f.reason(x.root)))
+		at := filepath.Join(f.dir, "Cargo.toml")
+		if !within(x.root, f.dir) {
+			at = filepath.Join(ws, "Cargo.toml")
+		}
+		x.skip(at, 0, errors.New(f.reason(x.root, cargoHome())))
 	}
 	if len(failed) == 0 && l.health != "" && l.health != "ok" && l.status != "" {
 		x.skip(ws, 0, fmt.Errorf("rust-analyzer's server reported %s: %s", l.health, firstParagraph(l.status)))
@@ -70,8 +77,9 @@ func (x *extractor) reportBuild(ws string, l *lsp) {
 }
 
 // A buildFailure is one package whose build script failed, as the log
-// says: its name and version, its directory, how the script exited, and
-// what it printed.
+// says: its name and version, its source, how the script exited, and what
+// it printed. The source is the package's directory, a git repository's
+// URL, or nothing for a registry's package, as Cargo prints them.
 type buildFailure struct {
 	pkg, dir, exit string
 	stdout, stderr []string
@@ -80,7 +88,7 @@ type buildFailure struct {
 }
 
 var (
-	failedRE  = regexp.MustCompile("^(?:.*ERROR FetchBuildDataError: )?error: failed to run custom build command for `([^ `]+ [^ `]+) \\(([^)`]*)\\)`")
+	failedRE  = regexp.MustCompile("^(?:.*ERROR FetchBuildDataError: )?error: failed to run custom build command for `([^ `]+ [^ `]+)(?: \\(([^)`]*)\\))?`")
 	logLineRE = regexp.MustCompile(`^\d{4}-\d\d-\d\dT\S+\s+(TRACE|DEBUG|INFO|WARN|ERROR) `)
 	exitRE    = regexp.MustCompile(`didn't exit successfully: .*\((exit status: \d+|signal: [^)]*)\)`)
 	frameRE   = regexp.MustCompile(`^(\d+: |at \S+:\d+(:\d+)?$)`)
@@ -154,14 +162,28 @@ func (f *buildFailure) inTrace(t string) bool {
 // ones, where a script that panics says why.
 const maxOutput = 10
 
-// reason is the failure as a Skip's reason, root taken off its paths.
-func (f buildFailure) reason(root string) string {
+// reason is the failure as a Skip's reason, root taken off its paths
+// and Cargo's home, home, written $CARGO_HOME.
+func (f buildFailure) reason(root, home string) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "the build script of %s failed", f.pkg)
+	dependency := !within(root, f.dir)
+	if dependency {
+		fmt.Fprintf(&b, "the build script of dependency %s", f.pkg)
+		if f.dir != "" {
+			fmt.Fprintf(&b, " (%s)", f.dir)
+		}
+	} else {
+		fmt.Fprintf(&b, "the build script of %s", f.pkg)
+	}
+	b.WriteString(" failed")
 	if f.exit != "" {
 		fmt.Fprintf(&b, " (%s)", f.exit)
 	}
-	b.WriteString(", so the code it writes has no nodes")
+	if dependency {
+		b.WriteString(", so rust-analyzer reads it without the code it writes")
+	} else {
+		b.WriteString(", so the code it writes has no nodes")
+	}
 	for _, s := range []struct {
 		name  string
 		lines []string
@@ -172,8 +194,47 @@ func (f buildFailure) reason(root string) string {
 		lines := s.lines[max(0, len(s.lines)-maxOutput):]
 		fmt.Fprintf(&b, "; its %s: %s", s.name, strings.Join(lines, " / "))
 	}
-	r := strings.ReplaceAll(b.String(), root+string(filepath.Separator), "")
-	return threadRE.ReplaceAllString(r, "thread '$1'")
+	return threadRE.ReplaceAllString(f.relative(b.String(), root, home), "thread '$1'")
+}
+
+// relative takes what differs between machines off the paths in s: a
+// path dependency's directory beyond root is written from root, as
+// ../lib, root is taken off, and Cargo's home, where a registry's and a
+// git repository's packages are, is written $CARGO_HOME.
+func (f buildFailure) relative(s, root, home string) string {
+	sep := string(filepath.Separator)
+	if filepath.IsAbs(f.dir) && !within(root, f.dir) {
+		if rel, err := filepath.Rel(root, f.dir); err == nil {
+			s = strings.ReplaceAll(s, "("+f.dir+")", "("+rel+")")
+			s = strings.ReplaceAll(s, f.dir+sep, rel+sep)
+		}
+	}
+	s = strings.ReplaceAll(s, root+sep, "")
+	if home != "" {
+		s = strings.ReplaceAll(s, home+sep, "$CARGO_HOME"+sep)
+	}
+	return s
+}
+
+// within says whether dir is root or a directory under it.
+func within(root, dir string) bool {
+	if !filepath.IsAbs(dir) {
+		return false
+	}
+	rel, err := filepath.Rel(root, dir)
+	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
+}
+
+// cargoHome is where Cargo keeps what it downloads: CARGO_HOME, or
+// .cargo in the user's home directory; "" when neither is known.
+func cargoHome() string {
+	if h := os.Getenv("CARGO_HOME"); filepath.IsAbs(h) {
+		return h
+	}
+	if h, err := os.UserHomeDir(); err == nil {
+		return filepath.Join(h, ".cargo")
+	}
+	return ""
 }
 
 // firstParagraph is a message up to its first blank line, on one line.
