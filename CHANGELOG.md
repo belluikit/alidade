@@ -8,6 +8,12 @@ tracker's. From v0.12.1 on, every number is this repository's.
 
 ## Unreleased
 
+- **Fixed: a Rust module in a directory named `target` is read** (#115).
+  The Rust layer skipped every directory of that name, so `src/target/`
+  had no nodes and no calls, and nothing reported it. Cargo's output
+  directory is still left out, by the `CACHEDIR.TAG` Cargo writes into it,
+  as every layer leaves out a build cache (ADR 003). On tokio the graph
+  is unchanged: its three `target/` directories are all tagged.
 - **Docs: the README compares alidade's Rust graph with graphify's
   against rustc** (#104), on tokio, pdfcraft and prost-reflect, measured
   on this release's code. It also invites anyone to add their own
