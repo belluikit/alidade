@@ -8,6 +8,13 @@ tracker's. From v0.12.1 on, every number is this repository's.
 
 ## Unreleased
 
+- **Fixed: the MCP end-to-end check can check a Rust repository** (#110).
+  `scripts/mcp-e2e.sh` sampled only Go declarations, so on tokio it
+  stopped with "no declaration with callers to sample". The sample now
+  takes turns across the Go, TypeScript, Python and Rust layers: tokio
+  passes with 20 Rust declarations compared, and steward's sample is now
+  half Go, half TypeScript. The `search_text` probe looked for `"func "`;
+  it now looks for a sampled declaration's name in its own file.
 - **Fixed: only Cargo's configuration reruns the Rust layer** (#117). A
   `config.toml` in any directory, a Hugo site's or another tool's, reran
   the whole Rust index; now only one under `.cargo/` does. Cargo's older

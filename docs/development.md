@@ -134,7 +134,9 @@ builds it, serving real repositories over stdio.
   source. Not against a server, which the same compiler would make agree
   when both are wrong (#160).
 - Every tool's answer must parse and keep to its budget.
-- A sample of declarations' callers must match the graph.
+- A sample of declarations' callers must match the graph. The sample takes
+  turns across every layer that has calls (Go, TypeScript, Python, Rust), so
+  a Rust-only repository is checked too; the log says how many of each.
 
 `ALIDADE_E2E_BIN` and `ALIDADE_E2E_REF` check a release as shipped, against
 the source it was built from.
