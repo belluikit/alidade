@@ -320,9 +320,20 @@ Measured on prost-reflect, against main (25598e8):
     index has no symbol of an impl;
   - what holds it is test code: a function, a type, an inline module;
   - a module on its symbol's path is declared only as `#[cfg(test)] mod x;`, or
-    opens with `#![cfg(test)]`. A file two crates compile through `#[path]` is
-    test code only when every declaration of it is;
-  - or its file is below a package's `tests/` directory, an integration test.
+    opens with `#![cfg(test)]`: at the head of its file, or of an inline
+    module's body, past comments and other inner attributes; one further in
+    is an inner module's, not the file's (*#112*). A file two crates compile
+    through `#[path]` is test code only when every declaration of it is;
+  - or its file is below its package's `tests/` directory, an integration test.
+    Its package is the nearest `Cargo.toml` above it, so a package inside
+    another's `tests/` is its own (*#112*).
+
+  An item of a hand-written file an `include!` reads, whose node is at that
+  file (ADR 002 rule 16), is marked by the same rules: its attributes, its impl
+  block's, its holder's, and its file's. The file is test code when it is below
+  its package's `tests/`, or when every `include!` of it is in test code, as a
+  `#[path]` file is when every declaration of it is (*#112*). An item of
+  Cargo's output is at its `include!`, so the module holding that marks it.
 
   An item a `cfg(test)` marks is not test code when its file also declares
   that name behind `not(test)`. The two variants (`#[cfg(not(test))] const
