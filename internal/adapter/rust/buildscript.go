@@ -63,10 +63,14 @@ func hasBuildScript(manifest string) bool {
 // naming the dependency (#117). An entry says nothing that differs
 // between two builds of one tree, on one machine or another: no absolute
 // path, no build hash, no thread id, and they are in the order of their
-// packages, where the log's order varies from run to run.
+// packages, where the log's order varies from run to run. A package the
+// log names twice is reported once, as it first names it: on macOS CI the
+// server's log named one failing dependency twice, though no local run of
+// the same test did (PR #134).
 func (x *extractor) reportBuild(ws string, l *lsp) {
 	failed := buildFailures(l.stderr.String())
-	slices.SortFunc(failed, func(a, b buildFailure) int { return strings.Compare(a.pkg, b.pkg) })
+	slices.SortStableFunc(failed, func(a, b buildFailure) int { return strings.Compare(a.pkg, b.pkg) })
+	failed = slices.CompactFunc(failed, func(a, b buildFailure) bool { return a.pkg == b.pkg && a.dir == b.dir })
 	for _, f := range failed {
 		x.report.BuildScriptsFailed++
 		at := filepath.Join(f.dir, "Cargo.toml")

@@ -288,6 +288,32 @@ func TestBuildFailuresRecorded(t *testing.T) {
 	}
 }
 
+// TestBuildFailureReportedOnce: a package the server's log names twice,
+// in two entries (the server fetched the build data again) or twice in
+// one, is one Skip, with what the first entry said, and is counted once.
+func TestBuildFailureReportedOnce(t *testing.T) {
+	entry := func(at, said string) string {
+		return "2026-11-26T20:28:" + at + "-08:00 ERROR FetchBuildDataError: error: failed to run custom build command for `a v0.1.0 (/ws/a)`\n" +
+			"\nCaused by:\n  process didn't exit successfully: `/ws/target/debug/build/a-0123/build-script-build` (exit status: 101)\n  --- stderr\n  " + said + "\n"
+	}
+	for name, log := range map[string]string{
+		"two entries":  entry("40.1", "first") + entry("45.2", "second"),
+		"in one entry": entry("40.1", "first") + "error: failed to run custom build command for `a v0.1.0 (/ws/a)`\n  --- stderr\n  second\n",
+	} {
+		t.Run(name, func(t *testing.T) {
+			x := &extractor{m: graph.NewBuilder("/ws").Minter(), root: "/ws", report: &Report{}}
+			b := &logBuffer{}
+			if _, err := b.Write([]byte(log)); err != nil {
+				t.Fatal(err)
+			}
+			x.reportBuild("/ws", &lsp{stderr: b})
+			if x.report.BuildScriptsFailed != 1 || len(x.report.Skipped) != 1 || !strings.HasSuffix(x.report.Skipped[0].Reason, "its stderr: first") {
+				t.Errorf("BuildScriptsFailed %d, skipped %+v; want one entry, the first", x.report.BuildScriptsFailed, x.report.Skipped)
+			}
+		})
+	}
+}
+
 // TestBuildFailureReasonCapped: a reason quotes the last lines of a
 // stream a script printed, where a script that panics says why.
 func TestBuildFailureReasonCapped(t *testing.T) {

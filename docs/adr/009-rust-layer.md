@@ -140,7 +140,9 @@ paid only where no other step starts one. Its log, at `RA_LOG=error`, names each
 package (failed to run custom build command for `a v0.1.0 (…)`) and holds what
 the script printed. Each failed package is reported at its `Cargo.toml` with its exit
 and the last lines of its output, backtraces left out. One log entry can name
-several packages, in an order that varies between runs, so they are sorted. That
+several packages, in an order that varies between runs, so they are sorted. The
+server can run the build scripts twice, logging a package twice; it is reported once,
+as the first entry says (macOS CI, PR #134). That
 line is log text, not an API: when it is missing, the server's status message is
 reported alone. On prost-reflect: `the build script of
 prost-reflect-conformance-tests v0.0.0 failed (exit status: 1)`, with the message
