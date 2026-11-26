@@ -206,8 +206,9 @@ Rust is read by the toolchain already on the machine ([ADR 009](adr/009-rust-lay
   given a temporary copy of `Cargo.lock`, so a workspace without one does not
   get one.
 - **When it reruns.** After any change to a `.rs` file, a `Cargo.toml`, a
-  `Cargo.lock`, a toolchain file or a `.proto` file (prost-build writes Rust
-  from it), the whole workspace is indexed again:
+  `Cargo.lock`, a toolchain file, Cargo's configuration (`.cargo/config.toml`
+  or `.cargo/config`) or a `.proto` file (prost-build writes Rust from it),
+  the whole workspace is indexed again:
   6.5 s on protowire-rust's 49,000 lines. A tool call waits for it, so an
   answer is never stale.
 - **Without the toolchain,** each Rust file is still a node, with a
