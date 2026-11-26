@@ -122,7 +122,7 @@ func Extract(b *graph.Builder, root string, opts Options) (*Report, error) {
 		abs = real // rust-analyzer reports resolved paths; the walk must agree
 	}
 	x := &extractor{b: b, m: b.Minter(), root: abs, report: &Report{}, emitted: map[graph.ID]bool{},
-		docs: map[string]*doc{}, external: map[string]bool{}, included: map[string]map[graph.ID]*def{}, handSites: map[string][]pos{}, handTest: map[string]bool{}}
+		docs: map[string]*doc{}, external: map[string]bool{}, included: map[string]map[graph.ID]*def{}, handSites: map[string][]pos{}, handTest: map[string]bool{}, unread: map[string]string{}}
 	files, manifests, err := x.discover(opts)
 	if err != nil {
 		return nil, fmt.Errorf("rust: discover under %s: %w", abs, err)
@@ -210,6 +210,9 @@ type extractor struct {
 	indexed   []string
 	manifests map[string][]string
 	servers   map[string]*lsp
+	// unread says why each workspace that could not be indexed was not,
+	// by root (a package's directory when cargo could not place it).
+	unread map[string]string
 	// tests are the modules found to be test code (#106), and testIDs
 	// the test items' IDs.
 	tests   testMarks
@@ -291,6 +294,18 @@ func (x *extractor) skip(file string, line int, err error) {
 	x.report.Skipped = append(x.report.Skipped, x.m.Skip(file, line, err))
 }
 
+// unreadAt says why the workspace holding a file was not indexed, from
+// the nearest such root above it, or "" when none was left unread there.
+func (x *extractor) unreadAt(rel string) string {
+	best, why := "", ""
+	for ws, r := range x.unread {
+		if (len(ws) > len(best) || best == "") && strings.HasPrefix(filepath.Join(x.root, rel), ws+string(filepath.Separator)) {
+			best, why = ws, r
+		}
+	}
+	return why
+}
+
 // files adds a node per file; one the index did not cover says why its
 // declarations and calls are not read.
 func (x *extractor) files(files []string) error {
@@ -309,6 +324,8 @@ func (x *extractor) files(files []string) error {
 			why := "no crate rust-analyzer indexed includes the file: it is outside every Cargo workspace, or no target or module declaration names it"
 			if x.report.Unavailable != "" {
 				why = x.report.Unavailable
+			} else if r := x.unreadAt(rel); r != "" {
+				why = "its workspace was not indexed: " + r
 			}
 			attrs["calls_unavailable"] = "its declarations and calls are not read: " + why
 		}

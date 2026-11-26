@@ -20,7 +20,11 @@ import (
 // fails is reported (#85, the owner's decision): the index says nothing
 // when one does, and the code it would have written is simply missing.
 // A server costs about 3.4 s on prost-reflect; this pays it only where no
-// other step has started one.
+// other step has started one. A dependency's failure is reported by any
+// server a step started (a workspace with a trait or an include! has one),
+// and in a workspace with none of those and no build script of its own it
+// is not (#127, the owner's pick of option b: a server there cost tokio
+// 17% of its build for two fuzz crates).
 // What the servers said is read when they are closed (reportBuild).
 func (x *extractor) buildScripts() error {
 	for _, ws := range x.indexed {
@@ -59,10 +63,14 @@ func hasBuildScript(manifest string) bool {
 // naming the dependency (#117). An entry says nothing that differs
 // between two builds of one tree, on one machine or another: no absolute
 // path, no build hash, no thread id, and they are in the order of their
-// packages, where the log's order varies from run to run.
+// packages, where the log's order varies from run to run. A package the
+// log names twice is reported once, as it first names it: on macOS CI the
+// server's log named one failing dependency twice, though no local run of
+// the same test did (PR #134).
 func (x *extractor) reportBuild(ws string, l *lsp) {
 	failed := buildFailures(l.stderr.String())
-	slices.SortFunc(failed, func(a, b buildFailure) int { return strings.Compare(a.pkg, b.pkg) })
+	slices.SortStableFunc(failed, func(a, b buildFailure) int { return strings.Compare(a.pkg, b.pkg) })
+	failed = slices.CompactFunc(failed, func(a, b buildFailure) bool { return a.pkg == b.pkg && a.dir == b.dir })
 	for _, f := range failed {
 		x.report.BuildScriptsFailed++
 		at := filepath.Join(f.dir, "Cargo.toml")

@@ -217,11 +217,13 @@ Rust is read by the toolchain already on the machine ([ADR 009](adr/009-rust-lay
   `Cargo.toml`.
   Without the standard library's source, alidade reads nothing rather than a
   graph missing a quarter of its types.
-- **Which toolchain.** The one on `PATH`, as `cargo` resolves it in the
-  workspace (a `rust-toolchain.toml` counts). If Homebrew's Rust comes before
-  rustup's on `PATH`, the standard library's source is usually missing.
-  Whether the toolchain is whole is checked once, at the repository's root:
-  a workspace below it that pins another toolchain is not checked (#130).
+- **Which toolchain.** The one on `PATH`, as `cargo` resolves it in each
+  workspace: rustup gives a workspace the toolchain its `rust-toolchain.toml`
+  pins. When that one has no standard library source, rust-analyzer adds it
+  (`rustup component add rust-src`, which needs the network). When it cannot,
+  that workspace is not read, its files say why and `graph_stats` lists it
+  under `skipped`; the other workspaces are read. If Homebrew's Rust comes
+  before rustup's on `PATH`, the standard library's source is usually missing.
 
 ## Leaving directories out
 
@@ -322,8 +324,9 @@ an operator makes (`==`, `+`, `?`) is not an edge.
 skipped, at its package's `Cargo.toml`: how it exited and the last lines it
 printed (`Error: protobuf sources are not checked out`). The code it would
 have written has no nodes. The other packages are read as usual. A
-dependency's failing script is listed at the workspace's `Cargo.toml`, but only
-in a workspace that has a build script of its own (#127).
+dependency's failing script is listed at the workspace's `Cargo.toml` when the
+workspace has a build script of its own, declares a trait, or uses `include!`.
+In a workspace with none of these, such as a small fuzz crate, it is not (#127).
 
 **Code a build script writes** (prost-build's, in Cargo's `target/`) has a node
 for every item, marked generated, identified where it is included: `include!`
