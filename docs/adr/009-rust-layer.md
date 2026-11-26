@@ -390,6 +390,13 @@ Measured on prost-reflect, against main (25598e8):
   and the report names what is missing and the `rustup` command that adds it. The
   standard library's source counts: without it rust-analyzer silently loses 26% of
   expression types.
+  That check runs at the repository's root, but rustup gives each workspace the
+  toolchain its `rust-toolchain.toml` pins (#130). rust-analyzer adds `rust-src` to
+  that toolchain itself when it is missing (`rustup component add rust-src`, in the
+  workspace); when it cannot, offline, `rust-analyzer scip` exits 0 and logs `can't
+  load standard library`. That workspace is then not read, as the root would not be:
+  its files are marked `calls_unavailable`, and the report names its sysroot. The
+  line is log text, not an API, pinned by `TestWorkspaceWithoutStd`.
 - **`serve` waits for the index.** The first answer, and the first after a Rust edit,
   wait for SCIP to finish: 6.5 s on protowire-rust and 13.9 s on prost-reflect, for
   every workspace each time. An answer is then never stale and never partial
@@ -644,7 +651,8 @@ the size they were before.
   index names a use by the use, or stops sharing the package's name with tests.
 - **A missing toolchain is reported, never silent.** A test with `rust-analyzer`, and
   separately `rust-src`, absent from the path must give file nodes marked
-  `calls_unavailable`, and a report naming what is missing.
+  `calls_unavailable`, and a report naming what is missing. So must a nested
+  workspace whose toolchain has no `rust-src` (`TestWorkspaceWithoutStd`, #130).
 - **Indexing writes nothing into the repository outside `target/`** (#81, the
   owner's pick of option B). rust-analyzer 1.100's full `cargo metadata` writes a
   `Cargo.lock` when there is none, which is a Rust input, so the next build reran
