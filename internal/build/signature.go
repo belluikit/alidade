@@ -90,10 +90,17 @@ var (
 		"package.json": {{"ts", own}}, "jsconfig.json": {{"ts", own}},
 		// What cargo and rust-analyzer read to place a file in a crate and
 		// type it (ADR 009): the manifests, the lock file, the toolchain a
-		// directory pins, and cargo's configuration.
+		// directory pins, and cargo's configuration (cargoConfig).
 		"Cargo.toml": {{"rust", own}}, "Cargo.lock": {{"rust", own}},
 		"rust-toolchain": {{"rust", own}}, "rust-toolchain.toml": {{"rust", own}},
+	}
+	// cargoConfig is Cargo's configuration, which it reads from a .cargo
+	// directory only: config.toml, and config, the name before Cargo 1.39,
+	// which Cargo 1.100 still reads, and prefers when both are there
+	// (#117). A config.toml anywhere else is some other tool's.
+	cargoConfig = map[string][]read{
 		"config.toml": {{"rust", own}},
+		"config":      {{"rust", own}, {"md", presence}},
 	}
 	byExt = map[string][]read{
 		".go": {{"go", own}, {"goasm", own}, {"md", presence}},
@@ -126,8 +133,12 @@ func init() {
 	}
 }
 
-// fileReads says which layers read a file, by name.
-func fileReads(base string) []read {
+// fileReads says which layers read a file, by its name and the name of
+// the directory holding it.
+func fileReads(base, parent string) []read {
+	if rs, ok := cargoConfig[base]; ok && parent == ".cargo" {
+		return rs
+	}
 	if rs, ok := byName[base]; ok {
 		return rs
 	}
@@ -170,7 +181,7 @@ func signaturesAndGoFiles(root string, skip *scope.Dirs) (map[string]string, map
 		}
 		rel, _ := filepath.Rel(root, path)
 		rel = filepath.ToSlash(rel)
-		reads := fileReads(d.Name())
+		reads := fileReads(d.Name(), filepath.Base(filepath.Dir(rel)))
 		if d.IsDir() {
 			if walkSkip[d.Name()] || skip.SkipsDir(root, path) {
 				return filepath.SkipDir
