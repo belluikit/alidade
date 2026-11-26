@@ -413,7 +413,7 @@ func (c *textPage) add(rel string, line int, text string, src []byte) bool {
 			hit.In = i
 		} else {
 			hit.In = len(c.r.Nodes)
-			o := compact(renderNode(n))
+			o := listedNode(n)
 			newNode = &o
 		}
 	}

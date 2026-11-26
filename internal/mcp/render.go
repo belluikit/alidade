@@ -6,6 +6,7 @@ package mcp
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"sort"
 	"strings"
 
@@ -51,6 +52,23 @@ func renderNode(n graph.Node) nodeOut {
 		o.At = n.Pos.File
 		if n.Pos.Line > 0 {
 			o.At = fmt.Sprintf("%s:%d", n.Pos.File, n.Pos.Line)
+		}
+	}
+	return o
+}
+
+// listedNode is a node as an answer of many renders it: compact, and
+// without a Rust item's public paths (#116, the owner's decision), which
+// get_node shows. On tokio they made a find_nodes or neighbors answer over
+// library code 11% to 24% longer, and the Markdown layer, which they are
+// for, reads them from the graph.
+func listedNode(n graph.Node) nodeOut {
+	o := compact(renderNode(n))
+	if _, ok := o.Attrs["paths"]; ok {
+		attrs := maps.Clone(o.Attrs)
+		delete(attrs, "paths")
+		if o.Attrs = attrs; len(attrs) == 0 {
+			o.Attrs = nil
 		}
 	}
 	return o
@@ -167,7 +185,7 @@ func (p *page) addNode(n graph.Node) bool {
 	if p.seen[n.ID] {
 		return true
 	}
-	o := compact(renderNode(n))
+	o := listedNode(n)
 	if !p.fit(estimate(o)) {
 		p.omitNodes[n.ID] = true
 		return false
@@ -194,7 +212,7 @@ func (p *page) addStep(e graph.Edge, to graph.Node) bool {
 	cost := estimate(eo)
 	var no nodeOut
 	if newNode {
-		no = compact(renderNode(to))
+		no = listedNode(to)
 		if p.stubGenerated && to.Generated {
 			no = nodeOut{ID: no.ID, Kind: no.Kind, Gen: true}
 		}

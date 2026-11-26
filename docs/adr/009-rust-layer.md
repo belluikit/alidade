@@ -545,6 +545,56 @@ prost output, whose 4 written functions call no workspace code.
 prost-reflect's 7 files are compile-fail cases that `prost-reflect-derive`'s tests
 feed rustc. No crate includes them, and each says so.
 
+**Public paths** (*added 2026-11-26, #116, the owner's decision*). A library's
+items and file modules carry the attribute `paths`: the paths code outside the
+crate names them by, shortest first, at most 8, space-separated.
+`tokio/src/task/spawn.rs#spawn()` has `tokio::spawn tokio::task::spawn`. The
+Markdown layer links a mention written as a crate path by them
+(`tokio_util::sync::CancellationToken`). It reads only the graph, so they are on
+the node, not handed over beside it: a rebuild that reruns only the Markdown layer
+still has them.
+- **An item's path is its parent's and its name.** A crate root's path is the
+  crate's name, the package's with `-` as `_`. A module's parent is the module
+  holding it, and a module has a path only when it is declared `pub mod`. A
+  method's parent is its impl block's type: the type of that name in the impl's
+  module, else the library's one type of that name. rust-analyzer names a method by
+  the impl block's module, which need not be its type's.
+- **Every `pub use` adds the name it exports**, `as` renames read, at each path of
+  the module holding it. rust-analyzer resolves the name to the item's definition,
+  through any uses on the way: `pub use task::spawn` in `lib.rs` names
+  `task/spawn/spawn()`. `pub(crate) use` adds nothing.
+- **Only the library has paths:** a file below the package's `src/`, other than
+  `src/main.rs` and `src/bin/`. The package's tests, benches, examples, binaries and
+  build script share its symbols (ADR 002 rule 16), and no other crate names what
+  they define. Measured: without this rule, the CHANGELOG's `tokio::run`, tokio
+  0.1's removed function, resolved to a helper in `tokio/tests/`.
+- **A module's body is read from the text**, its braces matched from its name, and
+  a `pub use` inside a function body is not told apart. rust-analyzer gives an item
+  that a macro writes with an attribute on it the macro call's whole range: in
+  tokio's `cfg_sync! { pub mod futures { … } … pub use mutex::Mutex; }` the
+  range of `futures` holds the use, and so does a function's in `cfg_rt!`.
+
+Not read: a glob, `pub use inner::*`, which adds no path; an item's own
+visibility, so a `pub(crate)` function in a public module has a path; `[lib] name`
+in `Cargo.toml`, so a crate renamed there is named by its package; a library whose
+root is not below `src/`; the items a macro writes, and Cargo's generated files.
+A macro has no node, so `tokio::select!` links nothing.
+
+Measured on tokio at 854013a, before building, from the index alone: of the 66 code
+spans in its Markdown that open with one of its crates' names, 49 resolve to the
+item or module they name, against 28 with defining paths alone. The rest name
+removed, private or `tokio_unstable` items (11), a macro (3), or one of several
+cfg variants (`tokio::main`, 3). Built, the layer adds 45 `documents` edges on
+tokio, each read by hand, and removes none. An edge is one per section and item, so
+a mention in a section that already links the item adds none: the CHANGELOG's
+`tokio::runtime::Runtime` sits beside `Runtime`. jj's Markdown has no such mention.
+
+`get_node` shows the attribute, and an MCP answer that lists nodes leaves it out
+(the owner's decision). Listed, it made a `find_nodes` or `neighbors` answer over
+tokio's library code 11% to 24% longer, and left 4% to 9% fewer nodes in a
+`subgraph_for_question` answer at its default budget. Left out, those answers are
+the size they were before.
+
 ## Assumptions, each with the test #72 must add
 
 - **rust-analyzer leaves generated files out of its SCIP index, and LSP's definition
@@ -561,6 +611,13 @@ feed rustc. No crate includes them, and each says so.
   naming it with a turbofish as a value must give two `calls` edges and two
   `references` edges. `TestCallShaped` pins the turbofish's own shapes: nested
   arguments, `->` inside one, and one spanning lines.
+- **rust-analyzer resolves a `pub use` to the definition, and names a test
+  crate's items by the package** (#116). `TestPublicPaths` pins each path rule on
+  the fixture: renamed and multi-line uses, a private module's re-exported items, a
+  method through an aliased type and from an impl block in another module, a use
+  beside a module and a function a macro writes, `pub(crate) use`, a glob, and no
+  paths for the package's tests, binary and build script. It fails the day the
+  index names a use by the use, or stops sharing the package's name with tests.
 - **A missing toolchain is reported, never silent.** A test with `rust-analyzer`, and
   separately `rust-src`, absent from the path must give file nodes marked
   `calls_unavailable`, and a report naming what is missing.

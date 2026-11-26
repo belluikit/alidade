@@ -258,7 +258,21 @@ func (x *extractor) relPath(abs string) (string, bool) {
 // nearest Cargo.toml above it, so a package below another's tests/ is its
 // own (#112).
 func (t testMarks) integration(rel string) bool {
-	own, found := "", false
+	own, found := t.packageOf(rel)
+	return found && strings.HasPrefix(rel, own+"tests/")
+}
+
+// library says whether a file is its package's library's: below the
+// package's src/, and neither src/main.rs nor below src/bin/, where Cargo
+// finds binaries (#116).
+func (t testMarks) library(rel string) bool {
+	own, found := t.packageOf(rel)
+	return found && strings.HasPrefix(rel, own+"src/") && rel != own+"src/main.rs" && !strings.HasPrefix(rel, own+"src/bin/")
+}
+
+// packageOf is the directory, with a trailing "/" unless it is the root's
+// "", of the package of the nearest Cargo.toml above a file.
+func (t testMarks) packageOf(rel string) (own string, found bool) {
 	for _, p := range t.pkgs {
 		dir := ""
 		if p != "" && p != "." {
@@ -268,7 +282,7 @@ func (t testMarks) integration(rel string) bool {
 			own, found = dir, true
 		}
 	}
-	return found && strings.HasPrefix(rel, own+"tests/")
+	return own, found
 }
 
 // markTest is isTest, or its owner's mark (a field of a test struct, a

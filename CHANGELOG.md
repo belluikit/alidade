@@ -8,11 +8,24 @@ tracker's. From v0.12.1 on, every number is this repository's.
 
 ## Unreleased
 
+- **Added: Rust items carry their public paths, and a Markdown mention
+  written as a crate path links** (#116). A library's items and file
+  modules have the attribute `paths`, the paths another crate names them
+  by: `tokio/src/task/spawn.rs#spawn()` has `tokio::spawn
+  tokio::task::spawn`. They come from the item's module path and every
+  `pub use` that re-exports it, as rust-analyzer resolves it. A mention
+  such as `tokio_util::sync::CancellationToken` or `tokio::spawn` now
+  links. On tokio this adds 45 `documents` edges, each to the item or
+  module the mention names; jj has no such mention. Not read: glob
+  re-exports, `[lib] name`, and macros, which have no node. `get_node`
+  shows the paths; answers that list nodes leave them out, which keeps
+  them at their old size (ADR 009).
 - **Fixed: a Markdown mention of a Rust function written as a call
   links** (#116). `Square::new()`, `Square::new(side)` and
   `iter::<u8>(v)` link as `Square::new` already did, as a Go call such
   as `Engine.Failed()` does. So does a path opening with `crate::`,
   `self::` or `super::`. On tokio this adds 40 `documents` edges, all
+  from `Type::method()` spans to that method, and 8 on jj.
   from `Type::method()` spans to that method, and 8 on jj. A path
   opening with a crate's name, `tokio_util::io::simplex`, still links
   nothing.

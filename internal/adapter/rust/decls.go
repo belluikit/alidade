@@ -113,13 +113,20 @@ func span(r []int32) (start, end pos, ok bool) {
 func (x *extractor) declarations() error {
 	x.bySym, x.funcs, x.defsOf = map[string][]*def{}, map[*doc][]*def{}, map[*doc][]*def{}
 	x.markTests()
-	for _, rel := range slices.Sorted(maps.Keys(x.docs)) {
-		var defs []*def
+	rels := slices.Sorted(maps.Keys(x.docs))
+	byDoc := map[string][]*def{}
+	for _, rel := range rels {
 		for _, d := range x.defs(x.docs[rel]) {
 			if x.register(d) {
-				defs = append(defs, d)
+				byDoc[rel] = append(byDoc[rel], d)
 			}
 		}
+	}
+	// Every file's items are registered before any node is added: an
+	// item's public paths come from uses in other files (#116).
+	x.publicPaths()
+	for _, rel := range rels {
+		defs := byDoc[rel]
 		slices.SortStableFunc(defs, func(a, b *def) int { return cmp.Compare(len(a.path), len(b.path)) })
 		for _, d := range defs {
 			if err := x.declare(d); err != nil {
@@ -437,6 +444,9 @@ func (x *extractor) declare(d *def) error {
 	attrs := map[string]string{}
 	if d.encl {
 		attrs["end_line"] = strconv.Itoa(int(d.end.line) + 1)
+	}
+	if p := x.pubPaths[id]; len(p) > 0 {
+		attrs["paths"] = strings.Join(p, " ")
 	}
 	owner := x.owner(d.doc.rel, d.path[:len(d.path)-1])
 	if err := x.b.AddNode(graph.Node{ID: id, Kind: kinds[d.kind], Name: strings.TrimSuffix(d.path[len(d.path)-1], "()"),
