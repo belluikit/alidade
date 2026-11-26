@@ -146,6 +146,10 @@ func (x *extractor) read(files, manifests []string) error {
 	if len(manifests) > 0 {
 		if x.report.Unavailable = toolchainMissing(x.root); x.report.Unavailable == "" {
 			x.index(manifests)
+		} else {
+			// The build's report says so too, not only each file node: it
+			// is what graph_stats shows (#109).
+			x.skip(shallowest(manifests), 0, fmt.Errorf("no Rust file's declarations or calls are read: %s", x.report.Unavailable))
 		}
 	}
 	defer x.closeServers()
@@ -155,6 +159,18 @@ func (x *extractor) read(files, manifests []string) error {
 		}
 	}
 	return x.files(files) // last: which files an include! reads is known only then
+}
+
+// shallowest returns the manifest nearest the root, the first of those as
+// near in sorted order: the workspace's own, in a repository that is one.
+func shallowest(manifests []string) string {
+	best := manifests[0]
+	for _, m := range manifests[1:] {
+		if strings.Count(m, string(filepath.Separator)) < strings.Count(best, string(filepath.Separator)) {
+			best = m
+		}
+	}
+	return best
 }
 
 type extractor struct {

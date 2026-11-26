@@ -401,8 +401,9 @@ func fakeTools(t *testing.T, sysroot string) {
 }
 
 // TestToolchainMissing: without cargo, rust-analyzer, or the standard
-// library's source, every file is a node saying its declarations and
-// calls are not read, and why, and nothing else is read (ADR 009).
+// library's source, every file is a node saying
+// its declarations and calls are not read, and why, the report says it
+// once, and nothing else is read (ADR 009).
 func TestToolchainMissing(t *testing.T) {
 	for _, tc := range []struct {
 		name  string
@@ -419,17 +420,39 @@ func TestToolchainMissing(t *testing.T) {
 			}
 			tc.setup(t)
 			g, rep := extract(t, dir)
-			if !strings.Contains(rep.Unavailable, tc.want) {
-				t.Errorf("Unavailable %q, want it to say %q", rep.Unavailable, tc.want)
-			}
-			if rep.Files != 8 || rep.Unanalyzed != 8 || rep.Declarations != 0 || len(rep.Workspaces) != 0 {
-				t.Errorf("Files %d, Unanalyzed %d, Declarations %d, Workspaces %v; want 8, 8, 0, none", rep.Files, rep.Unanalyzed, rep.Declarations, rep.Workspaces)
-			}
-			for n := range g.Nodes() {
-				if !strings.Contains(n.Attrs["calls_unavailable"], tc.want) {
-					t.Errorf("%s calls_unavailable %q, want it to say %q", n.ID, n.Attrs["calls_unavailable"], tc.want)
-				}
-			}
+			checkUnavailable(t, g, rep, tc.want)
 		})
+	}
+}
+
+// checkUnavailable checks a build of testdata/ws that read nothing says
+// why, want, in its report, once in Skipped and on every node.
+func checkUnavailable(t *testing.T, g *graph.Graph, rep *Report, want string) {
+	t.Helper()
+	if !strings.Contains(rep.Unavailable, want) {
+		t.Errorf("Unavailable %q, want it to say %q", rep.Unavailable, want)
+	}
+	if rep.Files != 8 || rep.Unanalyzed != 8 || rep.Declarations != 0 || len(rep.Workspaces) != 0 {
+		t.Errorf("Files %d, Unanalyzed %d, Declarations %d, Workspaces %v; want 8, 8, 0, none", rep.Files, rep.Unanalyzed, rep.Declarations, rep.Workspaces)
+	}
+	// Skipped says it too, once, at the workspace's manifest: graph_stats
+	// shows Skipped, not node attributes (#109).
+	if len(rep.Skipped) != 1 || rep.Skipped[0].File != "Cargo.toml" || !strings.HasPrefix(rep.Skipped[0].Reason, "no Rust file's declarations or calls are read: ") || !strings.Contains(rep.Skipped[0].Reason, want) {
+		t.Errorf("Skipped %+v, want one entry at Cargo.toml saying no file is read and %q", rep.Skipped, want)
+	}
+	for n := range g.Nodes() {
+		if !strings.Contains(n.Attrs["calls_unavailable"], want) {
+			t.Errorf("%s calls_unavailable %q, want it to say %q", n.ID, n.Attrs["calls_unavailable"], want)
+		}
+	}
+}
+
+// TestShallowest: the toolchain's absence is reported at the manifest
+// nearest the root, though a directory named before it sorts first (#109).
+func TestShallowest(t *testing.T) {
+	sep := string(filepath.Separator)
+	in := []string{sep + filepath.Join("r", "Bench", "Cargo.toml"), sep + filepath.Join("r", "Cargo.toml"), sep + filepath.Join("r", "a", "Cargo.toml")}
+	if got, want := shallowest(in), in[1]; got != want {
+		t.Errorf("shallowest(%v) = %s, want %s", in, got, want)
 	}
 }

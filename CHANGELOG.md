@@ -134,7 +134,7 @@ tracker's. From v0.12.1 on, every number is this repository's.
   own rust-analyzer reads each Cargo workspace, which runs its build scripts
   first. Without `cargo`, `rust-analyzer` or the standard library's source,
   each Rust file says its declarations and calls are not read, and what to
-  install. Markdown links to Rust files and mentions such as `Square::new`
+  install, and so does `graph_stats` under `skipped` (#109). Markdown links to Rust files and mentions such as `Square::new`
   reach their nodes. Compared with rustc's own calls on protowire-pb and
   prost-reflect's library, 864 edges agreed and every difference had a cause
   other than a wrong edge: a call through a generic trait bound goes to the

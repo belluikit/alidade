@@ -212,6 +212,8 @@ Rust is read by the toolchain already on the machine ([ADR 009](adr/009-rust-lay
   answer is never stale.
 - **Without the toolchain,** each Rust file is still a node, with a
   `calls_unavailable` attribute saying what is missing and how to add it.
+  `graph_stats` says it once, under `skipped`, at the workspace's
+  `Cargo.toml`.
   Without the standard library's source, alidade reads nothing rather than a
   graph missing a quarter of its types.
 - **Which toolchain.** The one on `PATH`, as `cargo` resolves it in the
