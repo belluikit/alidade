@@ -5,7 +5,9 @@ package rust
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -54,6 +56,85 @@ func TestBuildScriptFails(t *testing.T) {
 	}
 	if !slices.Contains(nodes(g), "a/src/lib.rs#a() func") {
 		t.Errorf("nodes %v; want a's own a(), read though its build script failed", nodes(g))
+	}
+}
+
+// TestDependencyBuildScriptFails: a dependency from outside the tree
+// whose build script fails is reported at the workspace's manifest, by
+// package and version, in each of the three shapes Cargo names a package:
+// a path's beyond the root, by its directory, written from the root; a
+// git repository's, by its URL, its checkout written from $CARGO_HOME;
+// and a registry's, by nothing. A directory source stands in for
+// crates.io, as `cargo vendor` sets one up (#117).
+func TestDependencyBuildScriptFails(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git is not on the PATH")
+	}
+	base := tempDir(t)
+	root := filepath.Join(base, "ws")
+	failing := func(name string) map[string]string {
+		return map[string]string{
+			"Cargo.toml": "[package]\nname = \"" + name + "\"\nversion = \"0.1.0\"\nedition = \"2021\"\n",
+			"build.rs":   "fn main() {\n    panic!(\"" + name + " fails\");\n}\n",
+			"src/lib.rs": "pub fn f() {}\n",
+		}
+	}
+	writeTree(t, filepath.Join(base, "outside", "pathdep"), failing("pathdep"))
+	writeTree(t, filepath.Join(base, "gitdep"), failing("gitdep"))
+	git := exec.Command("sh", "-c", "git init -q && git add . && git -c user.name=t -c user.email=t@t commit -qm init")
+	git.Dir = filepath.Join(base, "gitdep")
+	if out, err := git.CombinedOutput(); err != nil {
+		t.Fatalf("git: %v: %s", err, out)
+	}
+	writeTree(t, filepath.Join(root, "vendor", "regdep"), failing("regdep"))
+	writeTree(t, root, map[string]string{
+		"Cargo.toml": "[package]\nname = \"probe\"\nversion = \"0.1.0\"\nedition = \"2021\"\n\n[dependencies]\n" +
+			"pathdep = { path = \"../outside/pathdep\" }\ngitdep = { git = \"file://" + filepath.ToSlash(base) + "/gitdep\" }\nregdep = \"0.1.0\"\n",
+		"build.rs":                           "fn main() {}\n", // so that the server is asked
+		"src/lib.rs":                         "pub fn probe() {}\n",
+		"vendor/regdep/.cargo-checksum.json": `{"files":{},"package":null}`,
+		".cargo/config.toml":                 "[source.crates-io]\nreplace-with = \"vendored\"\n\n[source.vendored]\ndirectory = \"vendor\"\n",
+	})
+	if why := toolchainMissing(root); why != "" {
+		t.Skip(why)
+	}
+	t.Setenv("CARGO_HOME", filepath.Join(base, "cargo-home"))
+	_, rep := extract(t, root)
+	if rep.BuildScriptsFailed != 3 {
+		t.Errorf("BuildScriptsFailed %d; want 3", rep.BuildScriptsFailed)
+	}
+	var got []string
+	for _, s := range rep.Skipped {
+		got = append(got, s.File+": "+strings.ReplaceAll(s.Reason, "file://"+filepath.ToSlash(base), "file://BASE"))
+	}
+	tail := " failed (exit status: 101), so rust-analyzer reads it without the code it writes; its stderr: thread 'main' panicked at "
+	want := []*regexp.Regexp{
+		regexp.MustCompile(`^Cargo\.toml: the build script of dependency gitdep v0\.1\.0 \(file://BASE/gitdep#[0-9a-f]{8}\)` + regexp.QuoteMeta(tail) +
+			`\$CARGO_HOME/git/checkouts/gitdep-[0-9a-f]+/[0-9a-f]+/build\.rs:2:5: / gitdep fails$`),
+		regexp.MustCompile("^" + regexp.QuoteMeta("Cargo.toml: the build script of dependency pathdep v0.1.0 (../outside/pathdep)"+tail+"../outside/pathdep/build.rs:2:5: / pathdep fails") + "$"),
+		regexp.MustCompile("^" + regexp.QuoteMeta("Cargo.toml: the build script of dependency regdep v0.1.0"+tail+"vendor/regdep/build.rs:2:5: / regdep fails") + "$"),
+	}
+	if len(got) != len(want) {
+		t.Fatalf("skipped\n%s\nwant %d entries", strings.Join(got, "\n"), len(want))
+	}
+	for i, re := range want {
+		if !re.MatchString(got[i]) {
+			t.Errorf("skipped[%d]\n%s\nwant it to match\n%s", i, got[i], re)
+		}
+	}
+}
+
+// writeTree writes files, by slash-separated path, under dir.
+func writeTree(t *testing.T, dir string, files map[string]string) {
+	t.Helper()
+	for rel, text := range files {
+		p := filepath.Join(dir, filepath.FromSlash(rel))
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(text), 0o644); err != nil {
+			t.Fatal(err)
+		}
 	}
 }
 
@@ -161,13 +242,13 @@ func TestBuildFailuresRecorded(t *testing.T) {
 // TestBuildFailureReasonCapped: a reason quotes the last lines of a
 // stream a script printed, where a script that panics says why.
 func TestBuildFailureReasonCapped(t *testing.T) {
-	f := buildFailure{pkg: "a v0.1.0", exit: "exit status: 1"}
+	f := buildFailure{pkg: "a v0.1.0", dir: "/ws/a", exit: "exit status: 1"}
 	for i := range 12 {
 		f.stdout = append(f.stdout, "line"+strconv.Itoa(i))
 	}
 	want := "the build script of a v0.1.0 failed (exit status: 1), so the code it writes has no nodes; its stdout: " +
 		"line2 / line3 / line4 / line5 / line6 / line7 / line8 / line9 / line10 / line11"
-	if got := f.reason("/ws"); got != want {
+	if got := f.reason("/ws", ""); got != want {
 		t.Errorf("got  %q\nwant %q", got, want)
 	}
 }
@@ -202,7 +283,7 @@ func TestBuildFailuresAnyhow(t *testing.T) {
 	}
 	want := "the build script of prost-reflect-conformance-tests v0.0.0 failed (exit status: 1), so the code it writes has no nodes; " +
 		"its stderr: Error: protobuf sources are not checked out; Try `git submodule update --init --recursive`"
-	if r := got[0].reason("/ws"); r != want {
+	if r := got[0].reason("/ws", ""); r != want {
 		t.Errorf("got  %q\nwant %q", r, want)
 	}
 }
