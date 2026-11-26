@@ -194,8 +194,16 @@ func nextIsParen(lines [][]byte, l, i int) bool {
 // the declaration holding the reference, whatever comes before it: a
 // visibility, `pub(in crate::a) use`, or the "{" opening the body.
 func inUse(lines [][]byte, start pos) bool {
+	in, _ := useAt(lines, start)
+	return in
+}
+
+// useAt is inUse, and whether the use is public: `pub use`, pub on the
+// keyword's line (#116). `pub(crate) use` is not: the walk stops at its
+// ")", with nothing before use.
+func useAt(lines [][]byte, start pos) (in, public bool) {
 	if int(start.line) >= len(lines) {
-		return false
+		return false, false
 	}
 	for l := int(start.line); l >= 0; l-- {
 		line := lines[l]
@@ -206,28 +214,34 @@ func inUse(lines [][]byte, start pos) bool {
 		i := len(line) - 1
 		for ; i >= 0 && inUseTree(line[i]); i-- {
 		}
-		if holdsUse(line[i+1:]) {
-			return true
+		if j := useWord(line[i+1:]); j >= 0 {
+			return true, pubBefore(line[i+1 : i+1+j])
 		}
 		if i >= 0 {
-			return false // the run ends on this line
+			return false, false // the run ends on this line
 		}
 	}
-	return false
+	return false, false
 }
 
-// holdsUse says whether a line's part of the run holds the word use.
-func holdsUse(s []byte) bool {
+// useWord is where a line's part of the run holds the word use, or -1.
+func useWord(s []byte) int {
 	for i := 0; ; i += 3 {
 		j := bytes.Index(s[i:], []byte("use"))
 		if j < 0 {
-			return false
+			return -1
 		}
 		i += j
 		if (i == 0 || !isWord(s[i-1])) && (i+3 == len(s) || !isWord(s[i+3])) {
-			return true
+			return i
 		}
 	}
+}
+
+// pubBefore says whether what comes before use ends with the word pub.
+func pubBefore(s []byte) bool {
+	t := bytes.TrimRight(s, " \t")
+	return bytes.HasSuffix(t, []byte("pub")) && (len(t) == 3 || !isWord(t[len(t)-4]))
 }
 
 // isWord says whether a byte can be part of a word, a raw name's "#"

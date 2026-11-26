@@ -219,6 +219,9 @@ type extractor struct {
 	// items, added once that is known (#112).
 	handTest map[string]bool
 	pending  []pendingItem
+	// pubPaths are the public paths of the library's items and file
+	// modules, by node (#116).
+	pubPaths map[graph.ID][]string
 }
 
 // discover walks the tree for the files the layer reads and the Cargo
@@ -308,6 +311,9 @@ func (x *extractor) files(files []string) error {
 				why = x.report.Unavailable
 			}
 			attrs["calls_unavailable"] = "its declarations and calls are not read: " + why
+		}
+		if p := x.pubPaths[id]; len(p) > 0 {
+			attrs["paths"] = strings.Join(p, " ")
 		}
 		if err := x.b.AddNode(graph.Node{ID: id, Kind: graph.KindModule, Name: filepath.Base(rel), Pos: graph.Position{File: rel}, Attrs: attrs,
 			Test: x.fileTest(rel)}); err != nil {
