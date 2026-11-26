@@ -72,6 +72,7 @@ func isDir(path string) bool {
 func output(dir, name string, args ...string) (string, error) {
 	cmd := exec.Command(name, args...)
 	cmd.Dir = dir
+	noInstall(cmd)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	out, err := cmd.Output()
@@ -100,6 +101,24 @@ func errorLine(s string) string {
 		}
 	}
 	return firstLine(s)
+}
+
+// noInstall keeps rustup from installing a toolchain for a command the
+// layer runs (#133, the owner's pick of option a). rustup's proxy installs
+// the toolchain a directory's rust-toolchain.toml pins when it is missing:
+// 1.1 GB for 1.80, inside the first build, which a tool call waits on.
+// With RUSTUP_AUTO_INSTALL=0 the command fails at once, `error: toolchain
+// '1.80-…' is not installed`, and that workspace is skipped saying so, as
+// rust-analyzer does for the commands it runs. A value the environment
+// already sets is the user's choice, and is left as it is.
+func noInstall(cmd *exec.Cmd) {
+	if _, set := os.LookupEnv("RUSTUP_AUTO_INSTALL"); set {
+		return
+	}
+	if cmd.Env == nil {
+		cmd.Env = os.Environ()
+	}
+	cmd.Env = append(cmd.Env, "RUSTUP_AUTO_INSTALL=0")
 }
 
 func firstLine(s string) string {

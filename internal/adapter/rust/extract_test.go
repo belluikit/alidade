@@ -599,3 +599,40 @@ func TestErrorLine(t *testing.T) {
 		}
 	}
 }
+
+// TestPinnedToolchainNotInstalled: a workspace whose rust-toolchain.toml
+// pins a toolchain that is not installed is skipped, saying so, and
+// rustup is not let install it (#133); the root's workspace is read. It
+// needs rustup's proxy as cargo, which a machine with Homebrew's Rust
+// first on the PATH has not, and skips there. The dist server is a closed
+// port, so a regression fails on rustup's download error, not by
+// downloading a toolchain.
+func TestPinnedToolchainNotInstalled(t *testing.T) {
+	t.Setenv("RUSTUP_DIST_SERVER", "http://127.0.0.1:9")
+	dir := fixture(t, map[string]string{
+		"pinned/Cargo.toml":          "[package]\nname = \"pinned\"\nversion = \"0.1.0\"\nedition = \"2021\"\n\n[workspace]\n",
+		"pinned/rust-toolchain.toml": "[toolchain]\nchannel = \"1.42.0\"\n",
+		"pinned/src/lib.rs":          "pub fn pinned() {}\n",
+	})
+	probe := exec.Command("cargo", "+1.42.0", "--version")
+	probe.Env = append(os.Environ(), "RUSTUP_AUTO_INSTALL=0")
+	if out, _ := probe.CombinedOutput(); !strings.Contains(string(out), "is not installed") {
+		t.Skipf("cargo on the PATH is not rustup's proxy, or 1.42.0 is installed: %s", out)
+	}
+	g, rep := extract(t, dir)
+	var reasons []string
+	for _, s := range rep.Skipped {
+		if s.File == "pinned/Cargo.toml" {
+			reasons = append(reasons, s.Reason)
+		}
+	}
+	if len(reasons) != 1 || !strings.Contains(reasons[0], "error: toolchain '1.42.0") || !strings.Contains(reasons[0], "is not installed") {
+		t.Errorf("pinned/Cargo.toml skipped for %q, want once, for rustup's toolchain-not-installed error", reasons)
+	}
+	if !slices.Equal(rep.Workspaces, []string{"."}) {
+		t.Errorf("Workspaces %v, want only the root's", rep.Workspaces)
+	}
+	if _, ok := g.Node("rust://pinned/src/lib.rs#pinned()"); ok {
+		t.Error("pinned() has a node: the pinned workspace was read")
+	}
+}
