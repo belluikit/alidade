@@ -37,3 +37,54 @@ func TestCallShaped(t *testing.T) {
 		}
 	}
 }
+
+// TestInUse: a reference inside a use declaration's tree names a function,
+// it neither calls nor refers to it, on the line opening the use or on one
+// the tree continues to (#114), after any visibility, a path in it
+// included.
+func TestInUse(t *testing.T) {
+	for _, c := range []struct {
+		text string // the reference starts at the "@", which is cut
+		want bool
+	}{
+		{"use crate::codec::@parse;", true},
+		{"    use crate::codec::{\n        @parse,\n        decode,\n    };", true},
+		{"    use crate::codec::{\n        parse,\n        @decode,\n    };", true},
+		{"use crate::{\n    codec::{\n        @parse, // the parser\n    },\n};", true},
+		{"use crate::codec::{\n    // the parser:\n    @parse,\n};", true},
+		{"pub use crate::codec::@parse;", true},
+		{"pub(crate) use crate::codec::@parse;", true},
+		{"pub(super) use super::@parse;", true},
+		{"pub(in crate::codec) use crate::codec::@parse;", true},
+		{"pub(in crate::codec)\nuse crate::codec::{\n    @parse,\n};", true},
+		{"use crate::codec::{parse as p, @decode};", true},
+		{"use crate::r#fn::@parse;", true},
+		// The walk runs on past the use, through the "{" opening the body.
+		{"pub fn run() {\n    use crate::codec::{\n        @parse,\n    };", true},
+		{"pub fn run() {\n    pub(in crate) use crate::codec::@parse;", true},
+		{"if x {\n} else {\n    use crate::codec::{\n        @parse,\n    };", true},
+		{"pub fn run() {\n    use crate::codec::parse;\n    @parse();", false},
+		{"pub fn run() {\n    r#use::@parse();", false},
+		{"pub fn run() {\n    use_it {\n        @parse,\n    };", false},
+		{"use crate::codec::*; @parse(1)", false},
+		{"let f = @parse;", false},
+		{"@parse(1);", false},
+		{"// use this\n@parse(1);", false},
+		{"let user = 1;\n@parse(1);", false},
+		{"loop {\n    @parse(1);\n}", false},
+		{"fn reuse() {\n    @parse(1);\n}", false},
+		{"let v = [\n    @parse,\n];", false},
+		{"usefoo::@parse(1);", false},
+		{"let x = reuse::@parse(1);", false},
+	} {
+		text := []byte(c.text)
+		at := bytes.IndexByte(text, '@')
+		text = append(text[:at:at], text[at+1:]...)
+		line := bytes.Count(text[:at], []byte("\n"))
+		col := at - (bytes.LastIndexByte(text[:at], '\n') + 1)
+		lines := bytes.Split(text, []byte("\n"))
+		if got := inUse(lines, pos{line: int32(line), col: int32(col)}); got != c.want {
+			t.Errorf("inUse(%q) = %v; want %v", c.text, got, c.want)
+		}
+	}
+}
