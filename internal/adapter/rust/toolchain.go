@@ -17,7 +17,7 @@ import (
 // 009): cargo, which rust-analyzer asks for the workspace and has run the
 // build scripts, rust-analyzer itself, and rustc for the standard
 // library's source, which rust-analyzer needs to type anything that
-// touches std.
+// touches std: in the sysroot, or where RUST_SRC_PATH says.
 var tools = []struct{ name, fix string }{
 	{"cargo", "install Rust with rustup (https://rustup.rs)"},
 	{"rustc", "install Rust with rustup (https://rustup.rs)"},
@@ -35,15 +35,35 @@ func toolchainMissing(dir string) string {
 			return fmt.Sprintf("%s does not run (%v): %s", t.name, err, t.fix)
 		}
 	}
+	if srcPath() != "" {
+		return ""
+	}
 	sysroot, err := output(dir, "rustc", "--print", "sysroot")
 	if err != nil {
 		return fmt.Sprintf("rustc --print sysroot fails (%v)", err)
 	}
-	library := filepath.Join(sysroot, "lib", "rustlib", "src", "rust", "library")
-	if st, err := os.Stat(library); err != nil || !st.IsDir() {
+	if !isDir(filepath.Join(sysroot, "lib", "rustlib", "src", "rust", "library")) {
 		return fmt.Sprintf("the standard library's source is not in %s, and without it rust-analyzer loses the type of a quarter of all expressions: run `rustup component add rust-src`", sysroot)
 	}
 	return ""
+}
+
+// srcPath is the standard library's source as RUST_SRC_PATH names it, or
+// "" when it names none. rust-analyzer takes the variable before the
+// sysroot when it is an absolute path to a directory holding core, and
+// otherwise passes over it (measured on rust-analyzer 1.100, #117): Nix
+// and some distributions' packages put the source there.
+func srcPath() string {
+	p := os.Getenv("RUST_SRC_PATH")
+	if !filepath.IsAbs(p) || !isDir(filepath.Join(p, "core")) {
+		return ""
+	}
+	return p
+}
+
+func isDir(path string) bool {
+	st, err := os.Stat(path)
+	return err == nil && st.IsDir()
 }
 
 // output runs a command in dir and returns its standard output, trimmed;
