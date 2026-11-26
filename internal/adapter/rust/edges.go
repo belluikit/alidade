@@ -184,20 +184,69 @@ func nextIsParen(lines [][]byte, l, i int) bool {
 	return false
 }
 
-// inUse says whether a reference starting at start is on a line holding a
-// use declaration.
+// inUse says whether a reference starting at start is inside a use
+// declaration's tree, which may span lines (#114): `use crate::codec::{`
+// on one line and `parse,` on the next. It walks back from the reference,
+// past // comments, over what a use tree holds (names, paths, braces,
+// commas, globs and spaces) to the first byte that is none of those, and
+// asks whether the run holds the word use. use is a keyword, and the ";"
+// ending an earlier use declaration stops the walk, so a use in the run is
+// the declaration holding the reference, whatever comes before it: a
+// visibility, `pub(in crate::a) use`, or the "{" opening the body.
 func inUse(lines [][]byte, start pos) bool {
 	if int(start.line) >= len(lines) {
 		return false
 	}
-	t := bytes.TrimSpace(lines[start.line])
-	for _, p := range []string{"use ", "pub use ", "pub(crate) use ", "pub(super) use "} {
-		if bytes.HasPrefix(t, []byte(p)) {
+	for l := int(start.line); l >= 0; l-- {
+		line := lines[l]
+		if l == int(start.line) {
+			line = line[:min(int(start.col), len(line))]
+		}
+		line = stripComment(line)
+		i := len(line) - 1
+		for ; i >= 0 && inUseTree(line[i]); i-- {
+		}
+		if holdsUse(line[i+1:]) {
 			return true
+		}
+		if i >= 0 {
+			return false // the run ends on this line
 		}
 	}
 	return false
 }
+
+// holdsUse says whether a line's part of the run holds the word use.
+func holdsUse(s []byte) bool {
+	for i := 0; ; i += 3 {
+		j := bytes.Index(s[i:], []byte("use"))
+		if j < 0 {
+			return false
+		}
+		i += j
+		if (i == 0 || !isWord(s[i-1])) && (i+3 == len(s) || !isWord(s[i+3])) {
+			return true
+		}
+	}
+}
+
+// isWord says whether a byte can be part of a word, a raw name's "#"
+// included: r#use is a name, not the keyword.
+func isWord(c byte) bool { return isIdent(c) || c == '#' }
+
+// inUseTree says whether a byte can be part of a use tree: a name (a raw
+// one, r#fn, included), "::", braces, a comma, a glob or a space.
+func inUseTree(c byte) bool {
+	return isIdent(c) || isSpace(c) || c == ':' || c == ',' || c == '{' || c == '}' || c == '*' || c == '#'
+}
+
+// isIdent says whether a byte can be part of a name; one past ASCII is
+// taken as part of a non-ASCII name.
+func isIdent(c byte) bool {
+	return c == '_' || '0' <= c && c <= '9' || 'a' <= c && c <= 'z' || 'A' <= c && c <= 'Z' || c >= 0x80
+}
+
+func isSpace(c byte) bool { return c == ' ' || c == '\t' || c == '\r' || c == '\n' }
 
 // namesFunc says whether a symbol names a function or a method: its last
 // descriptor is one, "name().".
