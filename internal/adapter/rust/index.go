@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 
@@ -40,6 +41,7 @@ func (x *extractor) index(manifests []string) {
 		idx, err := runSCIP(ws)
 		if err != nil {
 			x.skip(ws, 0, err)
+			x.unread[ws] = err.Error()
 			continue
 		}
 		rel, _ := filepath.Rel(x.root, ws)
@@ -62,7 +64,9 @@ func (x *extractor) workspaces(manifests []string) []string {
 	for _, m := range manifests {
 		path, err := output(filepath.Dir(m), "cargo", "locate-project", "--workspace", "--message-format", "plain", "--manifest-path", m)
 		if err != nil {
-			x.skip(m, 0, fmt.Errorf("cargo cannot place it in a workspace: %w", err))
+			err = fmt.Errorf("cargo cannot place it in a workspace: %w", err)
+			x.skip(m, 0, err)
+			x.unread[filepath.Dir(m)] = err.Error()
 			continue
 		}
 		ws := filepath.Dir(path)
@@ -102,6 +106,9 @@ func runSCIP(ws string) (*scip.Index, error) {
 	if err := cmd.Run(); err != nil {
 		return nil, fmt.Errorf("rust-analyzer scip: %w: %s", err, lastLines(stderr.String(), 5))
 	}
+	if lost := stdLost(stderr.String()); lost != "" {
+		return nil, errors.New(lost)
+	}
 	b, err := os.ReadFile(out)
 	if err != nil {
 		return nil, err
@@ -111,6 +118,32 @@ func runSCIP(ws string) (*scip.Index, error) {
 		return nil, fmt.Errorf("rust-analyzer scip: reading its index: %w", err)
 	}
 	return &idx, nil
+}
+
+var stdLostRE = regexp.MustCompile("(?m)ERROR can't load standard library, try installing `rust-src`(?: sysroot_path=(\\S+))?")
+
+// stdLost says why a workspace is not read when rust-analyzer indexed it
+// without the standard library's source, or "" when it had it. The check
+// before indexing looks at the toolchain of the repository's root, but
+// rustup gives each workspace the toolchain its rust-toolchain.toml pins
+// (#130). rust-analyzer adds rust-src itself to a rustup toolchain that
+// lacks it (`rustup component add rust-src`, in the workspace), so this is
+// the case where that failed: offline, or a toolchain rustup does not
+// manage. The index is then whole in shape and wrong in substance, a call
+// through a std type left out, and `rust-analyzer scip` still exits 0; its
+// standard error is the only place that says so (measured on
+// rust-analyzer 1.100). That is log text, not an API: the day it changes,
+// TestWorkspaceWithoutStd fails.
+func stdLost(stderr string) string {
+	m := stdLostRE.FindStringSubmatch(stderr)
+	if m == nil {
+		return ""
+	}
+	where := "its toolchain"
+	if m[1] != "" {
+		where = m[1]
+	}
+	return fmt.Sprintf("rust-analyzer could not load the standard library's source from %s, and without it loses the type of a quarter of all expressions, so the workspace is not read: run `rustup component add rust-src` in it, where rustup picks the toolchain its rust-toolchain.toml pins", where)
 }
 
 // add records an index's documents of the files the layer reads, and the

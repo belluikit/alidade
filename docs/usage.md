@@ -217,11 +217,13 @@ Rust is read by the toolchain already on the machine ([ADR 009](adr/009-rust-lay
   `Cargo.toml`.
   Without the standard library's source, alidade reads nothing rather than a
   graph missing a quarter of its types.
-- **Which toolchain.** The one on `PATH`, as `cargo` resolves it in the
-  workspace (a `rust-toolchain.toml` counts). If Homebrew's Rust comes before
-  rustup's on `PATH`, the standard library's source is usually missing.
-  Whether the toolchain is whole is checked once, at the repository's root:
-  a workspace below it that pins another toolchain is not checked (#130).
+- **Which toolchain.** The one on `PATH`, as `cargo` resolves it in each
+  workspace: rustup gives a workspace the toolchain its `rust-toolchain.toml`
+  pins. When that one has no standard library source, rust-analyzer adds it
+  (`rustup component add rust-src`, which needs the network). When it cannot,
+  that workspace is not read, its files say why and `graph_stats` lists it
+  under `skipped`; the other workspaces are read. If Homebrew's Rust comes
+  before rustup's on `PATH`, the standard library's source is usually missing.
 
 ## Leaving directories out
 

@@ -5,6 +5,7 @@ package rust
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -517,5 +518,68 @@ func TestTargetSourceDir(t *testing.T) {
 		if strings.HasPrefix(n.Pos.File, "target/") {
 			t.Errorf("%s has a node: Cargo's tagged output directory is read", n.ID)
 		}
+	}
+}
+
+// TestWorkspaceWithoutStd: a workspace rust-analyzer indexes without the
+// standard library's source is not read, though the root's toolchain has
+// it, and its files and the report say why; the root's workspace is read
+// (#130). rustup would give the nested workspace the toolchain its
+// rust-toolchain.toml pins; here a rustc that prints a sysroot without the
+// source there, and is the real one everywhere else, stands in for one,
+// through RUSTC, which rust-analyzer asks before the PATH. Before #130
+// the nested workspace was read and lost the call through Option, silently.
+func TestWorkspaceWithoutStd(t *testing.T) {
+	dir := fixture(t, map[string]string{
+		"nested/Cargo.toml": "[package]\nname = \"nested\"\nversion = \"0.1.0\"\nedition = \"2021\"\n\n[workspace]\n",
+		"nested/src/lib.rs": "pub struct Square(pub u32);\n\nimpl Square {\n    pub fn area(&self) -> u32 {\n        self.0 * self.0\n    }\n}\n\npub fn through_std() -> u32 {\n    Some(Square(2)).unwrap().area()\n}\n",
+	})
+	real, err := exec.LookPath("rustc")
+	if err != nil {
+		t.Fatal(err)
+	}
+	bare, bin := t.TempDir(), t.TempDir()
+	nested := filepath.Join(dir, "nested")
+	script := "#!/bin/sh\ncase \"$PWD\" in " + nested + "*) if [ \"$1 $2\" = \"--print sysroot\" ]; then echo " + bare + "; exit 0; fi;; esac\nexec " + real + " \"$@\"\n"
+	if err := os.WriteFile(filepath.Join(bin, "rustc"), []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("RUSTC", filepath.Join(bin, "rustc"))
+	g, rep := extract(t, dir)
+
+	if !slices.Equal(rep.Workspaces, []string{"."}) {
+		t.Errorf("Workspaces %v, want only the root's", rep.Workspaces)
+	}
+	const want = "rust-analyzer could not load the standard library's source from " // + the sysroot
+	var at []string
+	for _, s := range rep.Skipped {
+		if strings.HasPrefix(s.Reason, want) && strings.Contains(s.Reason, bare) {
+			at = append(at, s.File)
+		}
+	}
+	if !slices.Equal(at, []string{"nested"}) {
+		t.Errorf("Skipped %+v, want one entry at nested naming the sysroot %s", rep.Skipped, bare)
+	}
+	n, ok := g.Node("rust://nested/src/lib.rs")
+	if !ok || !strings.Contains(n.Attrs["calls_unavailable"], "its workspace was not indexed: "+want) {
+		t.Errorf("nested/src/lib.rs: %+v, want a node saying its workspace was not indexed and why", n)
+	}
+	if _, ok := g.Node("rust://nested/src/lib.rs#through_std()"); ok {
+		t.Error("through_std() has a node: the workspace read without std is in the graph")
+	}
+	if _, ok := g.Node("rust://shapes/src/lib.rs#Square"); !ok {
+		t.Error("shapes/src/lib.rs#Square has no node: the root's workspace was not read")
+	}
+}
+
+// TestStdLost: the line rust-analyzer 1.100 logs when it cannot load the
+// standard library, and only it, says the workspace is not read.
+func TestStdLost(t *testing.T) {
+	log := "Generating SCIP start...\nrust-analyzer: Loading discovering sysroot\n2026-11-26T11:36:22.354249-08:00 ERROR can't load standard library, try installing `rust-src` sysroot_path=/home/u/.rustup/toolchains/1.85-aarch64-apple-darwin\nGenerating SCIP finished 471.478334ms\n"
+	if got := stdLost(log); !strings.Contains(got, "from /home/u/.rustup/toolchains/1.85-aarch64-apple-darwin,") {
+		t.Errorf("stdLost = %q, want it to name the sysroot", got)
+	}
+	if got := stdLost("Generating SCIP start...\nGenerating SCIP finished 4s\n"); got != "" {
+		t.Errorf("stdLost of a clean log = %q, want \"\"", got)
 	}
 }
