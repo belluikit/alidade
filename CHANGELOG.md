@@ -8,6 +8,13 @@ tracker's. From v0.12.1 on, every number is this repository's.
 
 ## Unreleased
 
+- **Fixed: a Rust method whose `impl` block comes before its type is
+  contained by the type** (#113). It was contained by its file, and it
+  did not inherit a test type's mark. The same held in a file an
+  `include!` reads, where such an impl block also had no `implements`
+  edge. On tokio, 3 methods move to their types (`DirEntry.ino()`,
+  `TaskHooks.spawn()`, `TaskHooks.from_config()`); every other edge is
+  unchanged.
 - **Docs: the README compares alidade's Rust graph with graphify's
   against rustc** (#104), on tokio, pdfcraft and prost-reflect, measured
   on this release's code. It also invites anyone to add their own
