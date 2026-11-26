@@ -4,6 +4,7 @@
 package markdown
 
 import (
+	"fmt"
 	"maps"
 	"os"
 	"path/filepath"
@@ -648,6 +649,64 @@ func TestRustDeclarations(t *testing.T) {
 	}
 }
 
+// TestRustMentionForms: a Rust function is mentioned as a call as often
+// as by its path, and its path may open with crate::, self:: or super::
+// (#116). Each spelling below is its own section's one mention. A path
+// opening with a crate's name links nothing yet: the graph holds no
+// crate names (#116), and a std path must not reach the workspace's
+// function of the same last name.
+func TestRustMentionForms(t *testing.T) {
+	b := graph.NewBuilder(t.TempDir())
+	m := b.Minter()
+	for _, n := range []graph.Node{
+		{ID: "rust://src/lib.rs", Kind: graph.KindModule, Name: "lib.rs"},
+		{ID: "rust://src/lib.rs#Square", Kind: graph.KindType, Name: "Square"},
+		{ID: "rust://src/lib.rs#Square.new()", Kind: graph.KindMethod, Name: "new"},
+		{ID: "rust://src/lib.rs#swap()", Kind: graph.KindFunc, Name: "swap"},
+	} {
+		if err := b.AddNode(n); err != nil {
+			t.Fatal(err)
+		}
+	}
+	const square = "rust://src/lib.rs#Square.new()"
+	want := map[string]string{
+		"Square::new":                    square,
+		"Square::new()":                  square,
+		"Square::new(x)":                 square,
+		"Square::new::<u8>(x)":           square,
+		"crate::Square::new":             square,
+		"crate::Square::new()":           square,
+		"self::Square::new":              square,
+		"super::super::Square::new":      square,
+		"probe::Square::new":             "", // a crate's name: the graph has none
+		"std::mem::swap(&mut a, &mut b)": "",
+		"crate::mem::swap":               "",
+	}
+	rep := &Report{Words: map[graph.ID]map[string]bool{}}
+	secs := map[graph.ID]string{}
+	for i, text := range slices.Sorted(maps.Keys(want)) {
+		sec, _ := m.MarkdownID("docs/a.md", fmt.Sprintf("S%d", i))
+		if err := b.AddNode(graph.Node{ID: sec, Kind: graph.KindSection, Name: fmt.Sprintf("S%d", i)}); err != nil {
+			t.Fatal(err)
+		}
+		secs[sec] = text
+		rep.Mentions = append(rep.Mentions, Mention{Section: sec, Text: text})
+	}
+	Link(b, b.Build(), rep)
+	g := b.Build()
+	for sec, text := range secs {
+		got := ""
+		for _, e := range g.Out(sec) {
+			if e.Kind == graph.KindDocuments {
+				got = string(e.To)
+			}
+		}
+		if got != want[text] {
+			t.Errorf("%q links %q, want %q", text, got, want[text])
+		}
+	}
+}
+
 // TestLinkSpanForms: the forms the redrawn recall sample found unanswered
 // (#7) — a call or a signature, a method reached through a value or a
 // receiver, a package by the end of its import path, a command by its
@@ -733,6 +792,11 @@ func TestCalleeOf(t *testing.T) {
 		"Engine.Failed":                    "",
 		"go test ./...":                    "",
 		"if err != nil { return err }":     "",
+		"Square::new()":                    "Square::new",
+		"Square::new(side)":                "Square::new",
+		"iter::<u8>(v)":                    "iter",
+		"crate::Square::new(2)":            "crate::Square::new",
+		"Square::new":                      "",
 	} {
 		if got := calleeOf(text); got != want {
 			t.Errorf("calleeOf(%q) = %q, want %q", text, got, want)
