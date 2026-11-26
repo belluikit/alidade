@@ -386,12 +386,16 @@ func TestImplementsInUTF16(t *testing.T) {
 	}
 }
 
-// fakeTools puts scripts named like the toolchain's on the PATH: each
-// answers --version, and rustc --print sysroot prints sysroot.
-func fakeTools(t *testing.T, sysroot string) {
+// fakeTools puts scripts named like the toolchain's on the PATH, only
+// names when it is given: each answers --version, and rustc --print
+// sysroot prints sysroot.
+func fakeTools(t *testing.T, sysroot string, names ...string) {
 	t.Helper()
+	if len(names) == 0 {
+		names = []string{"cargo", "rustc", "rust-analyzer"}
+	}
 	bin := t.TempDir()
-	for _, name := range []string{"cargo", "rustc", "rust-analyzer"} {
+	for _, name := range names {
 		script := "#!/bin/sh\nif [ \"$1\" = --print ]; then echo " + sysroot + "; else echo " + name + " 1.0; fi\n"
 		if err := os.WriteFile(filepath.Join(bin, name), []byte(script), 0o755); err != nil {
 			t.Fatal(err)
@@ -401,7 +405,7 @@ func fakeTools(t *testing.T, sysroot string) {
 }
 
 // TestToolchainMissing: without cargo, rust-analyzer, or the standard
-// library's source, every file is a node saying
+// library's source, each tested on its own, every file is a node saying
 // its declarations and calls are not read, and why, the report says it
 // once, and nothing else is read (ADR 009).
 func TestToolchainMissing(t *testing.T) {
@@ -411,6 +415,7 @@ func TestToolchainMissing(t *testing.T) {
 		want  string
 	}{
 		{"no cargo", func(t *testing.T) { t.Setenv("PATH", t.TempDir()) }, "cargo is not on the PATH"},
+		{"no rust-analyzer", func(t *testing.T) { fakeTools(t, t.TempDir(), "cargo", "rustc") }, "rust-analyzer does not run (rust-analyzer is not on the PATH): run `rustup component add rust-analyzer`"},
 		{"no rust-src", func(t *testing.T) { fakeTools(t, t.TempDir()) }, "rustup component add rust-src"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
