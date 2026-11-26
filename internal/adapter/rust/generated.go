@@ -76,7 +76,7 @@ func (x *extractor) generated() error {
 		}
 	}
 	x.registerGenerated(all)
-	return nil
+	return x.addIncluded()
 }
 
 // throughSymbols finds the generated files the workspace includes through
@@ -392,6 +392,7 @@ func (x *extractor) placeFile(l *lsp, s *site, out string) error {
 // file still.
 func (x *extractor) placeHand(l *lsp, s *site, out, rel string) error {
 	x.handSites[s.dc.rel] = append(x.handSites[s.dc.rel], s.at)
+	x.includedTest(s, rel)
 	if items := x.included[rel]; items != nil {
 		s.out, s.hand, s.items = out, rel, items
 		x.report.IncludedAgain++
@@ -442,12 +443,13 @@ func prostOutput(lines [][]byte) bool {
 // (macroWritten) is at the file too. prost says such a file is
 // prost-build's output, checked in (#89).
 type genFile struct {
-	s     *site
-	l     *lsp
-	lines [][]byte
-	pkg   string
-	hand  *doc
-	prost bool
+	s       *site
+	l       *lsp
+	lines   [][]byte
+	pkg     string
+	hand    *doc
+	prost   bool
+	notTest map[string]bool // the names it declares behind not(test), once read
 }
 
 // at is where an item of a hand-written file is, its name's start and the
@@ -491,7 +493,7 @@ func (x *extractor) items(g *genFile, syms []symbol, path []string, parent graph
 		if isFunc(kind) {
 			name += "()"
 		}
-		d, err := x.declareItem(g, sy, append(slices.Clone(path), name), kind, parent)
+		d, err := x.declareItem(g, sy, append(slices.Clone(path), name), kind, parent, false)
 		if err != nil {
 			return err
 		}
@@ -522,6 +524,7 @@ func (x *extractor) implItems(g *genFile, sy symbol, path []string, parent graph
 	}
 	owner := parent
 	file, _ := g.s.anchor()
+	held := g.ownTest(sy) // #[cfg(test)] impl Held { … }
 	if id, err := x.m.RustID(file, append(slices.Clone(path), ty)...); err == nil && x.emitted[id] {
 		owner = id
 		if g.hand != nil && trait != "" {
@@ -537,7 +540,7 @@ func (x *extractor) implItems(g *genFile, sy symbol, path []string, parent graph
 		if kind == scip.SymbolInformation_Function || kind == scip.SymbolInformation_Method {
 			kind, name = scip.SymbolInformation_Method, name+"()"
 		}
-		if _, err := x.declareItem(g, c, append(slices.Clone(path), seg, name), kind, owner); err != nil {
+		if _, err := x.declareItem(g, c, append(slices.Clone(path), seg, name), kind, owner, held); err != nil {
 			return err
 		}
 	}
@@ -573,7 +576,7 @@ func implName(name string) (ty, trait string) {
 // a hand-written one where it is. nil when its ID cannot be minted or
 // another item already has it (two included files declaring one name in
 // one module).
-func (x *extractor) declareItem(g *genFile, sy symbol, path []string, kind scip.SymbolInformation_Kind, parent graph.ID) (*def, error) {
+func (x *extractor) declareItem(g *genFile, sy symbol, path []string, kind scip.SymbolInformation_Kind, parent graph.ID, held bool) (*def, error) {
 	s := g.s
 	file, _ := s.anchor()
 	id, err := x.m.RustID(file, path...)
@@ -604,10 +607,8 @@ func (x *extractor) declareItem(g *genFile, sy symbol, path []string, kind scip.
 	} else {
 		x.report.Declarations++
 	}
-	if err := x.b.AddNode(n); err != nil {
-		return nil, err
-	}
-	return d, x.b.AddEdge(graph.Edge{From: parent, To: id, Kind: graph.KindContains, Derivation: graph.Extracted})
+	x.pending = append(x.pending, pendingItem{n: n, parent: parent, own: held || g.ownTest(sy)})
+	return d, nil
 }
 
 // registerGenerated makes each generated node the definition of the index's

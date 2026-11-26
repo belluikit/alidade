@@ -126,11 +126,12 @@ func (x *extractor) markTests() {
 		// An integration test is found by its path. Every crate root of a
 		// package shares one module symbol, the library's among them, so
 		// a crate root's is never marked.
-		if innerTestAttr(dc.text) {
+		if headTestAttr(dc.text) {
 			if m := fileModule(dc); m != "" && !crateRootSym(m) {
 				x.tests.mods[m] = true
 			}
 		}
+		x.inlineTestMods(dc)
 		modDecls(dc, decls)
 	}
 	for sym, test := range decls {
@@ -171,7 +172,7 @@ func (x *extractor) fileTest(rel string) bool {
 	}
 	dc := x.docs[rel]
 	if dc == nil {
-		return false
+		return x.handTest[rel]
 	}
 	return x.tests.mods[fileModule(dc)]
 }
@@ -252,19 +253,22 @@ func (x *extractor) relPath(abs string) (string, bool) {
 	return filepath.ToSlash(rel), true
 }
 
-// integration says whether a file is below a package's tests/ directory,
-// where Cargo finds integration tests.
+// integration says whether a file is below its package's tests/
+// directory, where Cargo finds integration tests: the package of the
+// nearest Cargo.toml above it, so a package below another's tests/ is its
+// own (#112).
 func (t testMarks) integration(rel string) bool {
+	own, found := "", false
 	for _, p := range t.pkgs {
-		dir := "tests/"
+		dir := ""
 		if p != "" && p != "." {
-			dir = p + "/tests/"
+			dir = p + "/"
 		}
-		if strings.HasPrefix(rel, dir) {
-			return true
+		if strings.HasPrefix(rel, dir) && (!found || len(dir) > len(own)) {
+			own, found = dir, true
 		}
 	}
-	return false
+	return found && strings.HasPrefix(rel, own+"tests/")
 }
 
 // markTest is isTest, or its owner's mark (a field of a test struct, a
@@ -365,18 +369,62 @@ func modDecl(lines [][]byte, p pos) bool {
 	return modDeclRE.Match(line[:p.col]) && bytes.HasPrefix(bytes.TrimLeft(line[p.col:], "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_ \t"), []byte(";"))
 }
 
-var innerCfgRE = regexp.MustCompile(`(?m)^\s*#!\[\s*cfg\s*\(`)
-
-// innerTestAttr says whether a file opens with an inner attribute that
-// requires cfg(test), `#![cfg(test)]`, which makes its whole module test
-// code.
-func innerTestAttr(text []byte) bool {
-	for _, m := range innerCfgRE.FindAllIndex(text, -1) {
-		if s := attrAt(string(text[m[0]:])); s != "" && requiresTest(s) {
-			return true
+// headTestAttr says whether the inner attributes at the head of a
+// module, a file's text or an inline module's body after its "{", require
+// cfg(test): `#![cfg(test)]`, past comments, a shebang and other inner
+// attributes. One anywhere else is an inline module's, not the file's
+// (#112).
+func headTestAttr(text []byte) bool {
+	s := string(text)
+	for {
+		s = strings.TrimLeft(s, " \t\r\n")
+		switch {
+		case strings.HasPrefix(s, "#!["):
+			attr := attrAt(s[2:])
+			if attr == "" {
+				return false
+			}
+			if requiresTest("#!" + attr) {
+				return true
+			}
+			s = s[2+len(attr):]
+		case strings.HasPrefix(s, "//"), strings.HasPrefix(s, "#!"): // a shebang, a file's first line
+			i := strings.IndexByte(s, '\n')
+			if i < 0 {
+				return false
+			}
+			s = s[i+1:]
+		case strings.HasPrefix(s, "/*"):
+			i := strings.Index(s, "*/")
+			if i < 0 {
+				return false
+			}
+			s = s[i+2:]
+		default:
+			return false
 		}
 	}
-	return false
+}
+
+// inlineTestMods marks the inline modules of a document whose body opens
+// with an inner attribute requiring cfg(test): `mod tests {
+// #![cfg(test)] … }`.
+func (x *extractor) inlineTestMods(dc *doc) {
+	lines := dc.lines()
+	for _, o := range dc.d.GetOccurrences() {
+		sym := o.GetSymbol()
+		if !strings.HasSuffix(sym, "/") || o.GetSymbolRoles()&int32(scip.SymbolRole_Definition) == 0 {
+			continue
+		}
+		_, end, ok := occRange(o)
+		if !ok || end == (pos{}) || int(end.line) >= len(lines) || int(end.col) > len(lines[end.line]) {
+			continue
+		}
+		rest := bytes.TrimLeft(bytes.Join(append([][]byte{lines[end.line][end.col:]}, lines[end.line+1:]...), []byte("\n")), " \t\r\n")
+		if body, ok := bytes.CutPrefix(rest, []byte("{")); ok && headTestAttr(body) {
+			x.tests.mods[sym] = true
+		}
+	}
 }
 
 // attrAt is the attribute that s starts with, through its closing "]".
@@ -470,4 +518,60 @@ func needsTest(pred string) bool {
 		return n > 0
 	}
 	return false
+}
+
+// A pendingItem is the node of an item of an included file, added once
+// every include! of the file is known: whether the file is test code
+// depends on all of them (addIncluded). own says its attributes, or its
+// impl block's, make it test code.
+type pendingItem struct {
+	n      graph.Node
+	parent graph.ID
+	own    bool
+}
+
+// includedTest records whether one include! of a hand-written file is in
+// test code. The file is test code when every include! of it is, as a
+// file two crates compile is (#112).
+func (x *extractor) includedTest(s *site, rel string) {
+	t := x.testIDs[x.owner(s.dc.rel, s.path)] || x.fileTest(s.dc.rel)
+	if prev, ok := x.handTest[rel]; ok {
+		t = t && prev
+	}
+	x.handTest[rel] = t
+}
+
+// addIncluded adds the nodes of the included files' items, each test code
+// by its own attributes, its holder or its file, holders first, in the
+// order they were read.
+func (x *extractor) addIncluded() error {
+	for _, p := range x.pending {
+		p.n.Test = p.own || x.testIDs[p.parent] || x.fileTest(p.n.Pos.File)
+		if p.n.Test {
+			x.testIDs[p.n.ID] = true
+		}
+		if err := x.b.AddNode(p.n); err != nil {
+			return err
+		}
+		if err := x.b.AddEdge(graph.Edge{From: p.parent, To: p.n.ID, Kind: graph.KindContains, Derivation: graph.Extracted}); err != nil {
+			return err
+		}
+	}
+	x.pending = nil
+	return nil
+}
+
+// ownTest says whether an included item's attributes make it test code,
+// and not a not(test) twin of its name: an outline item's Range starts at
+// its attributes.
+func (g *genFile) ownTest(sy symbol) bool {
+	from := pos{sy.Range.Start.Line, 0}
+	to := pos{sy.SelectionRange.Start.Line, sy.SelectionRange.Start.Character}
+	if !requiresTest(attrText(g.lines, from, to)) {
+		return false
+	}
+	if g.notTest == nil {
+		g.notTest = notTestNames(g.lines)
+	}
+	return !g.notTest[unraw(sy.Name)]
 }
