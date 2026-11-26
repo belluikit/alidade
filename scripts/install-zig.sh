@@ -21,7 +21,11 @@ esac
 archive=zig-$platform-$version.tar.xz
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
-curl -sSfL -o "$tmp/$archive" "https://ziglang.org/download/$version/$archive"
+# A stalled connection fails and is retried rather than hanging the job
+# (#122): a transfer below 10 KB/s for 60 s is stalled, a slow live one is
+# not cut off.
+curl -sSfL --connect-timeout 30 --speed-limit 10240 --speed-time 60 --retry 3 --retry-all-errors \
+  -o "$tmp/$archive" "https://ziglang.org/download/$version/$archive"
 echo "$sum  $tmp/$archive" | shasum -a 256 -c - >/dev/null || { echo "install-zig: $archive does not match its checksum" >&2; exit 1; }
 mkdir -p "$dir"
 tar -xJf "$tmp/$archive" -C "$dir" --strip-components=1
