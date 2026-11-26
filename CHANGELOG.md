@@ -57,6 +57,111 @@ into the entry they refine.
   each of the 22 proto messages and enums in the included packages has its
   edge, and 42 calls into generated code are edges. A `.proto` edit reruns
   the Rust layer, since that is when build scripts run.
+- **Fixed: the MCP end-to-end check can check a Rust repository** (#110).
+  `scripts/mcp-e2e.sh` sampled only Go declarations, so on tokio it
+  stopped with "no declaration with callers to sample". The sample now
+  takes turns across the Go, TypeScript, Python and Rust layers: tokio
+  passes with 20 Rust declarations compared, and steward's sample is now
+  half Go, half TypeScript. The `search_text` probe looked for `"func "`;
+  it now looks for a sampled declaration's name in its own file.
+- **Fixed: only Cargo's configuration reruns the Rust layer** (#117). A
+  `config.toml` in any directory, a Hugo site's or another tool's, reran
+  the whole Rust index; now only one under `.cargo/` does. Cargo's older
+  name, `.cargo/config`, which Cargo 1.100 still reads, reran nothing and
+  now does too.
+- **Fixed: the standard library's source counts where `RUST_SRC_PATH`
+  names it** (#117). rust-analyzer reads the source from there before the
+  sysroot, as Nix and some distributions' packages arrange, but the layer
+  looked only in the sysroot, so it read nothing and reported rust-src
+  missing.
+- **Fixed: a dependency's failing build script is reported by name**
+  (#117). One from crates.io was not reported at all: Cargo names it
+  without a source, which the layer did not read. One from a git
+  repository, or from a path beyond the repository, was reported at a
+  path outside the tree, `file:/…#c2026bcb/Cargo.toml` or an absolute
+  one, which differs by machine. Each is now at the workspace's
+  `Cargo.toml`, as `the build script of dependency regdep v0.1.0 failed`,
+  with Cargo's home written `$CARGO_HOME` in what it printed. Only a
+  workspace with a build script of its own reports them (#127).
+- **Added: Rust items carry their public paths, and a Markdown mention
+  written as a crate path links** (#116). A library's items and file
+  modules have the attribute `paths`, the paths another crate names them
+  by: `tokio/src/task/spawn.rs#spawn()` has `tokio::spawn
+  tokio::task::spawn`. They come from the item's module path and every
+  `pub use` that re-exports it, as rust-analyzer resolves it. A mention
+  such as `tokio_util::sync::CancellationToken` or `tokio::spawn` now
+  links. On tokio this adds 45 `documents` edges, each to the item or
+  module the mention names; jj has no such mention. Not read: glob
+  re-exports, `[lib] name`, and macros, which have no node. `get_node`
+  shows the paths; answers that list nodes leave them out, which keeps
+  them at their old size (ADR 009).
+- **Fixed: a Markdown mention of a Rust function written as a call
+  links** (#116). `Square::new()`, `Square::new(side)` and
+  `iter::<u8>(v)` link as `Square::new` already did, as a Go call such
+  as `Engine.Failed()` does. So does a path opening with `crate::`,
+  `self::` or `super::`. On tokio this adds 40 `documents` edges, all
+  from `Type::method()` spans to that method, and 8 on jj.
+  from `Type::method()` spans to that method, and 8 on jj. A path
+  opening with a crate's name, `tokio_util::io::simplex`, still links
+  nothing.
+- **Fixed: a Rust `use` that spans lines inside a function no longer
+  gives `references` edges** (#114). In `use crate::codec::{` with
+  `parse,` and `decode,` on the next lines, each name became a
+  `references` edge from the function to what it imports. The same held
+  for a `use` after a visibility with a path, `pub(in crate) use`. Only
+  a `use` on one line, after `pub`, `pub(crate)` or `pub(super)`, was
+  recognised. Neither tokio's graph nor jj's changes, since neither has
+  this shape.
+- **Fixed: a Rust module in a directory named `target` is read** (#115).
+  The Rust layer skipped every directory of that name, so `src/target/`
+  had no nodes and no calls, and nothing reported it. Cargo's output
+  directory is still left out, by the `CACHEDIR.TAG` Cargo writes into it,
+  as every layer leaves out a build cache (ADR 003). On tokio the graph
+  is unchanged: its three `target/` directories are all tagged.
+- **Fixed: Rust test marking in three shapes** (#112). An inline
+  module whose body opens with `#![cfg(test)]` marked its whole file test,
+  production functions beside it included. Now only that module is
+  marked. The items of a hand-written file an `include!` reads were never
+  test, even below `tests/`. They are now marked as the file is, and the
+  file is test code when every `include!` of it is in test code. Cargo's
+  output included in a test module is marked too. A package inside
+  another package's `tests/` was all test, and now only its own `tests/`
+  holds integration tests. Neither tokio nor jj has a mark that changes.
+- **Fixed: a Rust method whose `impl` block comes before its type is
+  contained by the type** (#113). It was contained by its file, and it
+  did not inherit a test type's mark. The same held in a file an
+  `include!` reads, where such an impl block also had no `implements`
+  edge. On tokio, 3 methods move to their types (`DirEntry.ino()`,
+  `TaskHooks.spawn()`, `TaskHooks.from_config()`); every other edge is
+  unchanged.
+- **Docs: the README compares alidade's Rust graph with graphify's
+  against rustc** (#104), on tokio, pdfcraft and prost-reflect, measured
+  on this release's code. It also invites anyone to add their own
+  results, from either benchmark, as a pull request. CONTRIBUTING says
+  what such a pull request has to carry so that it can be run again.
+- **Fixed: a Rust function named as a value with a turbofish is a
+  reference, not a call** (#100). `drop_arc_raw::<W>` in a waker's vtable
+  passes the function and calls nothing, and it was a `calls` edge because
+  the rule read any reference followed by `::<` as one. A turbofish is a
+  call only with `(` after it. On tokio, 11 edges become `references`, all
+  of them vtable entries.
+- **Added: Rust test code is marked** (#106, #99). Integration tests,
+  `#[cfg(test)]` items, impl blocks and modules, and `#[test]` functions
+  carry the test mark, and so does every edge touching them, so
+  `exclude_tests` now gives Rust's production graph. Until now no Rust node
+  was marked test: on tokio, 8,199 of the 13,601 calls are test edges. It
+  also fixes production code shown calling a test mock. rust-analyzer reads
+  the test build, so tokio's `File::poll_write` reaches
+  `fs::mocks::spawn_mandatory_blocking`. That is 19 edges on tokio and 22
+  on pdfcraft, and they are test edges now. The call the library build
+  makes instead is not read: ADR 009 states the limit.
+- **Added: calls and implementations written in a file an `include!`
+  reads** (#88). rust-analyzer's index has no document for such a file, so
+  the calls its functions make come from the server's call hierarchy, each
+  named as the index would name it, and its impl blocks give `implements`
+  edges to the one workspace trait of their name. A call of a method of an
+  impl block the file itself writes is not read: the server does not
+  report it. None of the measured repositories has a case yet.
 - **Added: checked-in prost-build output is joined to its `.proto`
   messages** (#89). A file of the repository that an `include!` reads, and
   whose header says `@generated by prost-build`, has its items marked

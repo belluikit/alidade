@@ -321,7 +321,9 @@ an operator makes (`==`, `+`, `?`) is not an edge.
 **A build script that fails** is listed by `graph_stats` among what the build
 skipped, at its package's `Cargo.toml`: how it exited and the last lines it
 printed (`Error: protobuf sources are not checked out`). The code it would
-have written has no nodes. The other packages are read as usual.
+have written has no nodes. The other packages are read as usual. A
+dependency's failing script is listed at the workspace's `Cargo.toml`, but only
+in a workspace that has a build script of its own (#127).
 
 **Code a build script writes** (prost-build's, in Cargo's `target/`) has a node
 for every item, marked generated, identified where it is included: `include!`

@@ -416,7 +416,7 @@ func TestToolchainMissing(t *testing.T) {
 	}{
 		{"no cargo", func(t *testing.T) { t.Setenv("PATH", t.TempDir()) }, "cargo is not on the PATH"},
 		{"no rust-analyzer", func(t *testing.T) { fakeTools(t, t.TempDir(), "cargo", "rustc") }, "rust-analyzer does not run (rust-analyzer is not on the PATH): run `rustup component add rust-analyzer`"},
-		{"no rust-src", func(t *testing.T) { fakeTools(t, t.TempDir()) }, "rustup component add rust-src"},
+		{"no rust-src", func(t *testing.T) { fakeTools(t, t.TempDir()); t.Setenv("RUST_SRC_PATH", "") }, "rustup component add rust-src"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			dir := tempDir(t)
@@ -426,6 +426,39 @@ func TestToolchainMissing(t *testing.T) {
 			tc.setup(t)
 			g, rep := extract(t, dir)
 			checkUnavailable(t, g, rep, tc.want)
+		})
+	}
+}
+
+// TestRustSrcPath: the standard library's source counts where
+// RUST_SRC_PATH names it, as rust-analyzer reads the variable: an
+// absolute path to a directory holding core, and nothing else (#117).
+func TestRustSrcPath(t *testing.T) {
+	base := t.TempDir()
+	src := filepath.Join(base, "library")
+	if err := os.MkdirAll(filepath.Join(src, "core"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		name, path string
+		found      bool
+	}{
+		{"source", src, true},
+		{"no core", t.TempDir(), false},
+		{"relative", "library", false}, // though it is there from the working directory
+		{"unset", "", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Chdir(base)
+			fakeTools(t, t.TempDir()) // a sysroot without the source
+			t.Setenv("RUST_SRC_PATH", tc.path)
+			why := toolchainMissing(t.TempDir())
+			if tc.found && why != "" {
+				t.Errorf("RUST_SRC_PATH=%s: %q, want the toolchain whole", tc.path, why)
+			}
+			if !tc.found && !strings.Contains(why, "rustup component add rust-src") {
+				t.Errorf("RUST_SRC_PATH=%s: %q, want rust-src missing", tc.path, why)
+			}
 		})
 	}
 }

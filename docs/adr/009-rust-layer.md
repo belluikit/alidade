@@ -145,6 +145,11 @@ line is log text, not an API: when it is missing, the server's status message is
 reported alone. On prost-reflect: `the build script of
 prost-reflect-conformance-tests v0.0.0 failed (exit status: 1)`, with the message
 above.
+A dependency from outside the repository has no `Cargo.toml` in the tree, so its
+failure is reported at the workspace's, naming it (#117): `the build script of
+dependency regdep v0.1.0 failed`. Cargo's home is written `$CARGO_HOME` in what it
+printed. The server is started only for a workspace's own build scripts, so a
+dependency's failure is reported only there (#127).
 
 ### Trait implementations come from LSP and SCIP together
 
