@@ -4,6 +4,7 @@
 package e2e
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"go/ast"
@@ -17,6 +18,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"unicode"
 
 	"github.com/mark3labs/mcp-go/client"
 	mcpsdk "github.com/mark3labs/mcp-go/mcp"
@@ -250,17 +252,12 @@ func checkAnswers(t *testing.T, c *client.Client, g *graph.Graph) {
 		t.Errorf("graph_stats nodes %v, the build has %d", stats["nodes"], g.NodeCount())
 	}
 	call(t, c, "graph_issues", nil)
-	if listed(t, c, "search_text") { // since #178; a release before it has none
-		text := call(t, c, "search_text", map[string]any{"pattern": "func ", "exclude_tests": true, "files_only": true})
-		if total, _ := text["total"].(float64); total == 0 {
-			t.Error("search_text found no \"func \" in a Go repository")
-		}
-	}
 	sample := callees(g, 20)
 	if len(sample) == 0 {
 		t.Fatal("no declaration with callers to sample: nothing compared")
 	}
-	t.Logf("comparing %d declarations' callers, every tool called", len(sample))
+	t.Logf("comparing %d declarations' callers (%s), every tool called", len(sample), bySchemes(sample))
+	checkSearchText(t, c, g, sample)
 	for _, id := range sample {
 		n, _ := g.Node(id)
 		found := call(t, c, "find_nodes", map[string]any{"query": string(id)})
@@ -287,40 +284,116 @@ func checkAnswers(t *testing.T, c *client.Client, g *graph.Graph) {
 	}
 }
 
-// callees picks up to n of the repository's Go declarations with 1 to 15
-// production callers,
-// in a stable order of their IDs' hashes, so a neighbors answer is never
-// cut and the sample is the same every run.
-func callees(g *graph.Graph, n int) []graph.ID {
-	var ids []graph.ID
-	for node := range g.Nodes() {
-		// The repository's own declarations: an external package node is
-		// where calls leave the module, and a question does not seed on it.
-		if !strings.HasPrefix(string(node.ID), "go://") || node.Test || node.Pos.File == "" || node.Attrs["external"] == "true" {
+// checkSearchText looks for the name of the first sampled declaration
+// in the file that declares it, which holds it in any language (#110):
+// not generated code, and not a node named for its file, as a Svelte
+// component is, whose name need not be in its text. A release before
+// #178 has no search_text.
+func checkSearchText(t *testing.T, c *client.Client, g *graph.Graph, sample []graph.ID) {
+	if !listed(t, c, "search_text") {
+		return
+	}
+	for _, id := range sample {
+		n, _ := g.Node(id)
+		name := ident(n.Name)
+		if n.Generated || name == "" || n.Name == filepath.Base(n.Pos.File) {
 			continue
 		}
-		callers := 0
-		for _, e := range g.In(node.ID) {
-			if e.Kind == graph.KindCalls {
-				callers++
-			}
+		text := call(t, c, "search_text", map[string]any{"pattern": name, "path": n.Pos.File, "files_only": true})
+		matches, _ := text["matches"].([]any)
+		if len(matches) == 0 || matches[0].(map[string]any)["file"] != n.Pos.File {
+			t.Errorf("search_text %q in %s: matches %v, want that file: %s is declared there", name, n.Pos.File, matches, id)
 		}
-		if callers >= 1 && callers <= 15 {
-			ids = append(ids, node.ID)
+		t.Logf("search_text looked for %q in %s, which declares %s", name, n.Pos.File, id)
+		return
+	}
+}
+
+// ident is the last identifier in a display name: block_on in
+// Runtime.block_on, Push in List[T].Push.
+func ident(name string) string {
+	parts := strings.FieldsFunc(name, func(r rune) bool {
+		return r != '_' && r != '$' && !unicode.IsLetter(r) && !unicode.IsDigit(r)
+	})
+	if len(parts) == 0 {
+		return ""
+	}
+	return parts[len(parts)-1]
+}
+
+// callSchemes are the layers whose declarations have callers.
+var callSchemes = []string{"go", "py", "rust", "ts"}
+
+// callees picks up to n of the repository's declarations with 1 to 15
+// production callers, from every layer that has calls in turn, so that
+// each is sampled (#110), and within a layer in a stable order of their
+// IDs' hashes, so a neighbors answer is never cut and the sample is the
+// same every run.
+func callees(g *graph.Graph, n int) []graph.ID {
+	layers := map[string][]graph.ID{}
+	for node := range g.Nodes() {
+		if scheme, ok := sampled(g, node); ok {
+			layers[scheme] = append(layers[scheme], node.ID)
 		}
 	}
-	hash := func(id graph.ID) uint64 { h := fnv.New64a(); h.Write([]byte(id)); return h.Sum64() }
-	slices.SortFunc(ids, func(a, b graph.ID) int {
-		ha, hb := hash(a), hash(b)
-		switch {
-		case ha < hb:
-			return -1
-		case ha > hb:
-			return 1
+	for _, ids := range layers {
+		slices.SortFunc(ids, byHash)
+	}
+	var out []graph.ID
+	for i := 0; len(out) < n; i++ {
+		added := false
+		for _, scheme := range callSchemes {
+			if ids := layers[scheme]; i < len(ids) && len(out) < n {
+				out, added = append(out, ids[i]), true
+			}
 		}
-		return strings.Compare(string(a), string(b))
-	})
-	return ids[:min(n, len(ids))]
+		if !added {
+			break
+		}
+	}
+	return out
+}
+
+// sampled says whether a node may be sampled, and its layer: one of the
+// repository's own declarations, not a test's, with 1 to 15 callers. An
+// external package node is where calls leave the module, and a question
+// does not seed on it.
+func sampled(g *graph.Graph, node graph.Node) (string, bool) {
+	scheme, _, _ := strings.Cut(string(node.ID), "://")
+	if !slices.Contains(callSchemes, scheme) || node.Test || node.Pos.File == "" || node.Attrs["external"] == "true" {
+		return "", false
+	}
+	callers := 0
+	for _, e := range g.In(node.ID) {
+		if e.Kind == graph.KindCalls {
+			callers++
+		}
+	}
+	return scheme, callers >= 1 && callers <= 15
+}
+
+func byHash(a, b graph.ID) int {
+	hash := func(id graph.ID) uint64 { h := fnv.New64a(); h.Write([]byte(id)); return h.Sum64() }
+	if c := cmp.Compare(hash(a), hash(b)); c != 0 {
+		return c
+	}
+	return strings.Compare(string(a), string(b))
+}
+
+// bySchemes counts a sample's IDs by layer, for the log: "go 12, ts 8".
+func bySchemes(ids []graph.ID) string {
+	counts := map[string]int{}
+	for _, id := range ids {
+		scheme, _, _ := strings.Cut(string(id), "://")
+		counts[scheme]++
+	}
+	var parts []string
+	for _, scheme := range callSchemes {
+		if counts[scheme] > 0 {
+			parts = append(parts, scheme+" "+strconv.Itoa(counts[scheme]))
+		}
+	}
+	return strings.Join(parts, ", ")
 }
 
 func listed(t *testing.T, c *client.Client, name string) bool {
