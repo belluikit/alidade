@@ -5,9 +5,12 @@ is read, which engine reads it, how alidade reaches that engine, and that Cargo'
 build runs. Then, on #72, the same day: the layer's IDs, its call rule, where trait
 implementations come from (revising #71's answer after a measurement), a machine
 without the toolchain, when `serve` answers, and the oracle ("The layer" below).
-Built so far (#72): file nodes, declarations, calls, references and
-implementations, a machine without the toolchain, and the code Cargo's build
-generates, joined to its `.proto` messages.
+Built so far: file nodes, declarations, calls, references and implementations,
+a machine without the toolchain, and the code Cargo's build generates, joined to
+its `.proto` messages (#72, #109); the items, calls and implementations of a
+hand-written file an `include!` reads (#84, #88); checked-in prost-build output
+joined to its messages (#89); failing build scripts reported (#85); test code
+marked (#106, #112); and the public paths of a library's items (#116).
 **Date:** 2026-11-24
 **Relates to:** [000](000-composition-boundary.md), [002](002-node-identity.md),
 [003](003-corpus-scope.md), [004](004-generated-code.md),
@@ -184,7 +187,7 @@ per trait (5 on protowire-rust). That gives the exact trait, including
 macro-generated implementations. SCIP's names then add the implementations LSP
 missed, those inside a function body, and only those: elsewhere LSP has every
 implementation. Such an implementation's trait is the one its header names, read
-from the index's reference there (amended below): `impl fmt::Display for Shown`
+from the index's reference there (amended above): `impl fmt::Display for Shown`
 inside a body is fmt::Display, not a workspace trait named Display that declares
 `fmt` too, which a join by name would take. Together the two cover all 55. The 55
 were reconciled two ways:
@@ -374,8 +377,11 @@ Measured on prost-reflect, against main (25598e8):
   expression types.
 - **`serve` waits for the index.** The first answer, and the first after a Rust edit,
   wait for SCIP to finish: 6.5 s on protowire-rust and 13.9 s on prost-reflect, for
-  the whole workspace each time. An answer is then never stale and never partial
-  (ADR 005).
+  every workspace each time. An answer is then never stale and never partial
+  (ADR 005). Since the layer also asks rust-analyzer's server (implementations,
+  included files, build scripts), the wait is the whole graph's: 10.7 s on
+  protowire-rust and 17.9 s on prost-reflect (both above), and 34 s on tokio
+  @854013a's 192,000 lines (measured 2026-11-26, twice: 34.5 s and 34.3 s).
 - **The oracle is rustc.** Each crate is compiled to LLVM IR at opt-level 0, whose
   direct calls are rustc's own resolution, and compared with the layer's call
   edges. rustc is an engine independent of rust-analyzer.
@@ -535,7 +541,10 @@ On the repositories measured, neither adds an edge: protowire-rust and
 prost-reflect include no hand-written file, and jj's included files are its
 prost output, whose 4 written functions call no workspace code.
 
-**Measured on the built layer** (`alidade graph`, the whole graph, all layers):
+**Measured on the built layer** (`alidade graph`, the whole graph, all layers),
+when the layer was first built: before implementations, the methods a macro
+writes and the code a build script writes. With implementations the times became
+10.7 s and 17.5 s, and with generated code prost-reflect's 17.9 s (above):
 
 | repository | Rust nodes | files not read | calls | references | time | peak memory |
 |---|---|---|---|---|---|---|
