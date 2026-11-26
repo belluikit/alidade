@@ -386,12 +386,16 @@ func TestImplementsInUTF16(t *testing.T) {
 	}
 }
 
-// fakeTools puts scripts named like the toolchain's on the PATH: each
-// answers --version, and rustc --print sysroot prints sysroot.
-func fakeTools(t *testing.T, sysroot string) {
+// fakeTools puts scripts named like the toolchain's on the PATH, only
+// names when it is given: each answers --version, and rustc --print
+// sysroot prints sysroot.
+func fakeTools(t *testing.T, sysroot string, names ...string) {
 	t.Helper()
+	if len(names) == 0 {
+		names = []string{"cargo", "rustc", "rust-analyzer"}
+	}
 	bin := t.TempDir()
-	for _, name := range []string{"cargo", "rustc", "rust-analyzer"} {
+	for _, name := range names {
 		script := "#!/bin/sh\nif [ \"$1\" = --print ]; then echo " + sysroot + "; else echo " + name + " 1.0; fi\n"
 		if err := os.WriteFile(filepath.Join(bin, name), []byte(script), 0o755); err != nil {
 			t.Fatal(err)
@@ -401,8 +405,9 @@ func fakeTools(t *testing.T, sysroot string) {
 }
 
 // TestToolchainMissing: without cargo, rust-analyzer, or the standard
-// library's source, every file is a node saying its declarations and
-// calls are not read, and why, and nothing else is read (ADR 009).
+// library's source, each tested on its own, every file is a node saying
+// its declarations and calls are not read, and why, the report says it
+// once, and nothing else is read (ADR 009).
 func TestToolchainMissing(t *testing.T) {
 	for _, tc := range []struct {
 		name  string
@@ -410,6 +415,7 @@ func TestToolchainMissing(t *testing.T) {
 		want  string
 	}{
 		{"no cargo", func(t *testing.T) { t.Setenv("PATH", t.TempDir()) }, "cargo is not on the PATH"},
+		{"no rust-analyzer", func(t *testing.T) { fakeTools(t, t.TempDir(), "cargo", "rustc") }, "rust-analyzer does not run (rust-analyzer is not on the PATH): run `rustup component add rust-analyzer`"},
 		{"no rust-src", func(t *testing.T) { fakeTools(t, t.TempDir()) }, "rustup component add rust-src"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -419,17 +425,39 @@ func TestToolchainMissing(t *testing.T) {
 			}
 			tc.setup(t)
 			g, rep := extract(t, dir)
-			if !strings.Contains(rep.Unavailable, tc.want) {
-				t.Errorf("Unavailable %q, want it to say %q", rep.Unavailable, tc.want)
-			}
-			if rep.Files != 8 || rep.Unanalyzed != 8 || rep.Declarations != 0 || len(rep.Workspaces) != 0 {
-				t.Errorf("Files %d, Unanalyzed %d, Declarations %d, Workspaces %v; want 8, 8, 0, none", rep.Files, rep.Unanalyzed, rep.Declarations, rep.Workspaces)
-			}
-			for n := range g.Nodes() {
-				if !strings.Contains(n.Attrs["calls_unavailable"], tc.want) {
-					t.Errorf("%s calls_unavailable %q, want it to say %q", n.ID, n.Attrs["calls_unavailable"], tc.want)
-				}
-			}
+			checkUnavailable(t, g, rep, tc.want)
 		})
+	}
+}
+
+// checkUnavailable checks a build of testdata/ws that read nothing says
+// why, want, in its report, once in Skipped and on every node.
+func checkUnavailable(t *testing.T, g *graph.Graph, rep *Report, want string) {
+	t.Helper()
+	if !strings.Contains(rep.Unavailable, want) {
+		t.Errorf("Unavailable %q, want it to say %q", rep.Unavailable, want)
+	}
+	if rep.Files != 8 || rep.Unanalyzed != 8 || rep.Declarations != 0 || len(rep.Workspaces) != 0 {
+		t.Errorf("Files %d, Unanalyzed %d, Declarations %d, Workspaces %v; want 8, 8, 0, none", rep.Files, rep.Unanalyzed, rep.Declarations, rep.Workspaces)
+	}
+	// Skipped says it too, once, at the workspace's manifest: graph_stats
+	// shows Skipped, not node attributes (#109).
+	if len(rep.Skipped) != 1 || rep.Skipped[0].File != "Cargo.toml" || !strings.HasPrefix(rep.Skipped[0].Reason, "no Rust file's declarations or calls are read: ") || !strings.Contains(rep.Skipped[0].Reason, want) {
+		t.Errorf("Skipped %+v, want one entry at Cargo.toml saying no file is read and %q", rep.Skipped, want)
+	}
+	for n := range g.Nodes() {
+		if !strings.Contains(n.Attrs["calls_unavailable"], want) {
+			t.Errorf("%s calls_unavailable %q, want it to say %q", n.ID, n.Attrs["calls_unavailable"], want)
+		}
+	}
+}
+
+// TestShallowest: the toolchain's absence is reported at the manifest
+// nearest the root, though a directory named before it sorts first (#109).
+func TestShallowest(t *testing.T) {
+	sep := string(filepath.Separator)
+	in := []string{sep + filepath.Join("r", "Bench", "Cargo.toml"), sep + filepath.Join("r", "Cargo.toml"), sep + filepath.Join("r", "a", "Cargo.toml")}
+	if got, want := shallowest(in), in[1]; got != want {
+		t.Errorf("shallowest(%v) = %s, want %s", in, got, want)
 	}
 }
