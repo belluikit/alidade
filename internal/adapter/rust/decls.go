@@ -4,6 +4,7 @@
 package rust
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"maps"
@@ -105,12 +106,21 @@ func span(r []int32) (start, end pos, ok bool) {
 
 // declarations adds a node per item of every document, contained by the
 // item holding it or by its file. Two of one ID in one file are one node,
-// at the first (ADR 002 rule 16).
+// at the first (ADR 002 rule 16). A file's items are registered in source
+// order, and their nodes added holders first, by the length of their
+// paths: an impl block may come before its type, and its methods are
+// still the type's, marked test through it (#113).
 func (x *extractor) declarations() error {
 	x.bySym, x.funcs, x.defsOf = map[string][]*def{}, map[*doc][]*def{}, map[*doc][]*def{}
 	x.markTests()
 	for _, rel := range slices.Sorted(maps.Keys(x.docs)) {
-		defs := x.defs(x.docs[rel])
+		var defs []*def
+		for _, d := range x.defs(x.docs[rel]) {
+			if x.register(d) {
+				defs = append(defs, d)
+			}
+		}
+		slices.SortStableFunc(defs, func(a, b *def) int { return cmp.Compare(len(a.path), len(b.path)) })
 		for _, d := range defs {
 			if err := x.declare(d); err != nil {
 				return err
@@ -397,12 +407,14 @@ func splitTop(s string, sep byte) []string {
 	return append(out, s[from:])
 }
 
-// declare adds an item's node and the edge from what contains it.
-func (x *extractor) declare(d *def) error {
+// register gives an item its ID and records it as its symbol's definition
+// and as one of its file's items; false when its path has no ID, which is
+// reported.
+func (x *extractor) register(d *def) bool {
 	id, err := x.m.RustID(d.doc.rel, d.path...)
 	if err != nil {
 		x.skip(d.doc.abs, int(d.start.line)+1, err)
-		return nil
+		return false
 	}
 	d.id = id
 	x.bySym[d.sym] = append(x.bySym[d.sym], d)
@@ -410,6 +422,13 @@ func (x *extractor) declare(d *def) error {
 	if isFunc(d.kind) {
 		x.funcs[d.doc] = append(x.funcs[d.doc], d)
 	}
+	return true
+}
+
+// declare adds a registered item's node and the edge from what contains
+// it, which is declared before it.
+func (x *extractor) declare(d *def) error {
+	id := d.id
 	if x.emitted[id] {
 		return nil
 	}

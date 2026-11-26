@@ -34,9 +34,12 @@ type Options struct {
 func DefaultOptions() Options { return Options{} }
 
 // SkipDirs are the directories the layer never enters, by name: version
-// control, Cargo's build output, and the directories every layer skips.
+// control and the directories every layer skips. Cargo's output directory
+// is left out by the CACHEDIR.TAG Cargo writes into it, as every layer
+// leaves out a build cache (ADR 003, amended for #75), not by its name: a
+// module of a crate may be a directory named target (#115).
 var SkipDirs = map[string]bool{
-	".git": true, "target": true, "node_modules": true, "vendor": true, ".tmp": true,
+	".git": true, "node_modules": true, "vendor": true, ".tmp": true,
 }
 
 // Source reports whether the layer reads a file, by name.
@@ -119,7 +122,7 @@ func Extract(b *graph.Builder, root string, opts Options) (*Report, error) {
 		abs = real // rust-analyzer reports resolved paths; the walk must agree
 	}
 	x := &extractor{b: b, m: b.Minter(), root: abs, report: &Report{}, emitted: map[graph.ID]bool{},
-		docs: map[string]*doc{}, external: map[string]bool{}, included: map[string]map[graph.ID]*def{}, handSites: map[string][]pos{}}
+		docs: map[string]*doc{}, external: map[string]bool{}, included: map[string]map[graph.ID]*def{}, handSites: map[string][]pos{}, handTest: map[string]bool{}}
 	files, manifests, err := x.discover(opts)
 	if err != nil {
 		return nil, fmt.Errorf("rust: discover under %s: %w", abs, err)
@@ -211,6 +214,11 @@ type extractor struct {
 	// the test items' IDs.
 	tests   testMarks
 	testIDs map[graph.ID]bool
+	// handTest says, by repo-relative path, whether every include! of a
+	// hand-written file is in test code; pending are the included files'
+	// items, added once that is known (#112).
+	handTest map[string]bool
+	pending  []pendingItem
 }
 
 // discover walks the tree for the files the layer reads and the Cargo

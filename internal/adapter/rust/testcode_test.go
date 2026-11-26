@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/belluikit/alidade/internal/graph"
@@ -270,4 +271,97 @@ func testMarksOf(g *graph.Graph) map[string]bool {
 		}
 	}
 	return out
+}
+
+// TestTestCodeShapes pins the three shapes #112 found. An inner
+// #![cfg(test)] marks the module whose head it is in, an inline module's
+// as much as a file's, and not the file around an inline one. The items
+// of a hand-written file an include! reads are test code as the file is:
+// below a package's tests/, or included only by test code; by their own
+// attributes; and through their holder. A package below another's tests/
+// is its own, and only its own tests/ holds integration tests. Cargo's
+// output is at its include!, marked by the module holding it.
+func TestTestCodeShapes(t *testing.T) {
+	dir := fixture(t, map[string]string{
+		"shapes/src/codec.rs":               "pub fn parse() {}\n\npub fn decode() {}\n\nmod tests {\n    #![cfg(test)]\n\n    fn inner_test() {}\n}\n",
+		"shapes/src/late.rs":                "//! Opened by comments and another inner attribute.\n\n// A comment.\n#![allow(unused)]\n#![cfg(test)]\n\npub fn late_helper() {}\n",
+		"shapes/tests/common/helpers.rs":    "pub fn setup() {}\n\npub struct Fixture {\n    pub n: u8,\n}\n\nimpl Fixture {\n    pub fn get(&self) -> u8 {\n        self.n\n    }\n}\n",
+		"shapes/src/inc.rs":                 "pub fn inc_helper() {}\n",
+		"shapes/src/both.rs":                "pub fn both_helper() {}\n",
+		"shapes/src/prod_inc.rs":            "pub fn prod_inc() {}\n\n#[cfg(test)]\npub fn prod_inc_test() {}\n\npub struct Held;\n\n#[cfg(test)]\nimpl Held {\n    fn held_test(&self) {}\n}\n",
+		"shapes/tests/harness/Cargo.toml":   "[package]\nname = \"harness\"\nversion = \"0.1.0\"\nedition = \"2021\"\n",
+		"shapes/tests/harness/src/lib.rs":   "pub fn harness_fn() {}\n\npub fn use_it() {\n    harness_fn();\n}\n",
+		"shapes/tests/harness/tests/own.rs": "#[test]\nfn own_test() {\n    harness::use_it();\n}\n",
+	})
+	edit(t, filepath.Join(dir, "shapes/src/lib.rs"), "", `
+mod codec;
+mod late;
+#[cfg(test)]
+mod inc_mod {
+    include!("inc.rs");
+}
+#[cfg(test)]
+mod both_test {
+    include!("both.rs");
+}
+pub mod both_prod {
+    include!("both.rs");
+}
+pub mod prod_mod {
+    include!("prod_inc.rs");
+}
+#[cfg(test)]
+mod made_test {
+    include!(concat!(env!("OUT_DIR"), "/made.rs"));
+}
+`)
+	edit(t, filepath.Join(dir, "shapes/tests/first.rs"), "", "\nmod helpers {\n    include!(\"common/helpers.rs\");\n}\n")
+	manifest := filepath.Join(dir, "Cargo.toml")
+	text, err := os.ReadFile(manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(manifest, []byte(strings.Replace(string(text), `"tool"]`, `"tool", "shapes/tests/harness"]`, 1)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	test := testMarksOf(extractGraph(t, dir))
+	for id, want := range map[string]bool{
+		"shapes/src/codec.rs#parse()":                  false, // the file around an inline #![cfg(test)]
+		"shapes/src/codec.rs#decode()":                 false,
+		"shapes/src/codec.rs":                          false,
+		"shapes/src/codec.rs#tests":                    true, // its head is #![cfg(test)]
+		"shapes/src/codec.rs#tests.inner_test()":       true,
+		"shapes/src/late.rs":                           true, // past comments and an inner attribute
+		"shapes/src/late.rs#late_helper()":             true,
+		"shapes/tests/common/helpers.rs":               true, // below tests/, included
+		"shapes/tests/common/helpers.rs#setup()":       true,
+		"shapes/tests/common/helpers.rs#Fixture":       true,
+		"shapes/tests/common/helpers.rs#Fixture.n":     true,
+		"shapes/tests/common/helpers.rs#Fixture.get()": true,
+		"shapes/src/inc.rs":                            true, // included by test code only
+		"shapes/src/inc.rs#inc_helper()":               true,
+		"shapes/src/both.rs#both_helper()":             false, // included by production code too
+		"shapes/src/prod_inc.rs#prod_inc()":            false,
+		"shapes/src/prod_inc.rs#prod_inc_test()":       true, // its own #[cfg(test)]
+		"shapes/src/prod_inc.rs#Held":                  false,
+		"shapes/src/prod_inc.rs#Held.held_test()":      true,  // its impl block's
+		"shapes/tests/harness/src/lib.rs#harness_fn()": false, // a package of its own
+		"shapes/tests/harness/src/lib.rs#use_it()":     false,
+		"shapes/tests/harness/tests/own.rs#own_test()": true, // its own integration test
+		"shapes/src/lib.rs#made_test.Made.new()":       true, // Cargo's output, at an include! in test code
+		"shapes/src/lib.rs#made.Made.new()":            false,
+	} {
+		got, ok := test[id]
+		if !ok {
+			t.Errorf("%s: no node", id)
+		} else if got != want {
+			t.Errorf("%s: test %v; want %v", id, got, want)
+		}
+	}
+}
+
+func extractGraph(t *testing.T, dir string) *graph.Graph {
+	t.Helper()
+	g, _ := extract(t, dir)
+	return g
 }
