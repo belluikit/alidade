@@ -219,9 +219,12 @@ into the entry they refine.
   shows the paths; answers that list nodes leave them out, which keeps
   them at their size (ADR 009).
 - **Added: what the Rust layer needs, and what it writes** (#72, #81,
-  #109, #115). Without `cargo`, `rustc`, `rust-analyzer` or the standard
+  #109, #115, #130). Without `cargo`, `rustc`, `rust-analyzer` or the standard
   library's source, each Rust file says its declarations and calls are not
   read, and what to install, and so does `graph_stats` under `skipped`. A
+  workspace whose `rust-toolchain.toml` pins a toolchain without the
+  standard library's source, which rust-analyzer could not add (offline),
+  is not read either, and says so; the other workspaces are read. A
   workspace with no `Cargo.lock` gets none written into it: rust-analyzer's
   Cargo gets a temporary copy of the lock file, through Cargo's
   `CARGO_RESOLVER_LOCKFILE_PATH` (Cargo 1.97 and later). Cargo's output
