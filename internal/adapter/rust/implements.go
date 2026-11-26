@@ -17,16 +17,19 @@ import (
 // implementations adds an implements edge from each type to each
 // workspace trait it implements (ADR 009, ADR 006 rule 9), from two
 // sources, since neither has all of them (measured on protowire-pb's
-// Message, 55 implementations):
+// Message, 55 implementations), and a third for included files:
 //   - rust-analyzer's server, asked for each workspace trait's
 //     implementations: the exact trait, and the ones a macro_rules! macro
 //     writes, which the index has no symbols for (15 of the 55). It misses
 //     the ones written inside a function body (5).
-//   - the index's symbols for the methods of those (impl#[Holder][Message]),
-//     joined to the workspace trait of that name only when there is
-//     exactly one. Only inside a function body: elsewhere the server has
-//     the implementation, and a trait of another crate that shares a
-//     workspace trait's name (prost's Message) would be joined to it.
+//   - for those, the index's symbols for their methods
+//     (impl#[Holder][Message]), with the trait the impl's header names,
+//     read from the index's reference on it (inBodies). Only inside a
+//     function body: elsewhere the server has the implementation.
+//   - in a hand-written file an include! reads, which the index has no
+//     document for, the impl blocks of the server's outline, joined to the
+//     workspace trait of that name when exactly one has it (fromOutlines,
+//     #88).
 func (x *extractor) implementations() error {
 	seen := map[[2]graph.ID]bool{}
 	add := func(from, to graph.ID) error {

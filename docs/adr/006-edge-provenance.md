@@ -139,7 +139,9 @@ Rules:
    (2026-11-24, #72, the owner's decision; ADR 009). rust-analyzer resolves the
    callee and the implemented trait, and the layer reads its answers.
    - **A call:** a reference to a workspace function inside a function body,
-     followed by `(` or `::<`, is a call. Another reference to a function, a
+     followed by `(`, or by a turbofish and then `(`, is a call (amended
+     2026-11-25, #100, as ADR 009 records: "followed by `::<`" made a function
+     named as a value with a turbofish a call). Another reference to a function, a
      function used as a value, is a `references` edge, `RESOLVED` as well.
      That one token, and an impl's header inside a function body (below), are
      the only source text the layer reads to decide an edge. The header is

@@ -248,7 +248,7 @@ var pythonNote = func() string {
 // rust-analyzer resolves it, so a machine without one has the files only,
 // each saying why.
 const rustNote = "Rust is resolved by the machine's own rust-analyzer, a Rust file's node saying so when its toolchain is missing: " +
-	"a function reference followed by ( or ::< is a call, one named as a value a references edge, a function's ID ends in () (Reader.limits() beside the field Reader.limits), a trait implementation's method is Type[Trait].method(), a method a derive or a macro writes is a node under its type, a type's implements edges reach the workspace traits it implements, " +
+	"a function reference followed by ( is a call, as is one followed by a turbofish and then (, one named as a value a references edge, a function's ID ends in () (Reader.limits() beside the field Reader.limits), a trait implementation's method is Type[Trait].method(), a method a derive or a macro writes is a node under its type when something calls it, a type's implements edges reach the workspace traits it implements, " +
 	"and code a build script writes (prost-build's) has generated nodes where it is included, a .proto message's generates edge (DECLARED, via=prost) reaching the struct written for it"
 
 // instructions load with the server even when an agent defers the tool

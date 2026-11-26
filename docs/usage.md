@@ -194,7 +194,7 @@ repository alidade can read.
 ## The Rust toolchain
 
 Rust is read by the toolchain already on the machine ([ADR 009](adr/009-rust-layer.md)):
-`cargo`, `rust-analyzer` and the standard library's source. With rustup:
+`cargo`, `rustc`, `rust-analyzer` and the standard library's source. With rustup:
 
     rustup component add rust-analyzer rust-src
 
@@ -206,11 +206,11 @@ Rust is read by the toolchain already on the machine ([ADR 009](adr/009-rust-lay
   given a temporary copy of `Cargo.lock`, so a workspace without one does not
   get one.
 - **When it reruns.** After any change to a `.rs` file, a `Cargo.toml`, a
-  `Cargo.lock`, a toolchain file, Cargo's configuration (`.cargo/config.toml`
-  or `.cargo/config`) or a `.proto` file (prost-build writes Rust from it),
-  the whole workspace is indexed again:
-  6.5 s on protowire-rust's 49,000 lines. A tool call waits for it, so an
-  answer is never stale.
+  `Cargo.lock`, a toolchain file or a `.proto` file (prost-build writes Rust
+  from it), every workspace is indexed again, and rust-analyzer's server
+  loads each one for what the index leaves out: the whole graph takes 34 s
+  on tokio's 192,000 lines. A tool call waits for it, so an answer is never
+  stale.
 - **Without the toolchain,** each Rust file is still a node, with a
   `calls_unavailable` attribute saying what is missing and how to add it.
   `graph_stats` says it once, under `skipped`, at the workspace's
@@ -220,6 +220,8 @@ Rust is read by the toolchain already on the machine ([ADR 009](adr/009-rust-lay
 - **Which toolchain.** The one on `PATH`, as `cargo` resolves it in the
   workspace (a `rust-toolchain.toml` counts). If Homebrew's Rust comes before
   rustup's on `PATH`, the standard library's source is usually missing.
+  Whether the toolchain is whole is checked once, at the repository's root:
+  a workspace below it that pins another toolchain is not checked (#130).
 
 ## Leaving directories out
 
@@ -301,8 +303,9 @@ package-level initializer, and of a dependency's constants and variables,
 are not edges.
 
 **`calls` and `references` in Rust** join functions of the workspace. A
-reference followed by `(` or `::<` is a call; a function named without being
-called (`.map(area_of)`) is a reference. A call through a trait's method, as
+reference followed by `(` is a call, and so is one followed by a turbofish
+and then `(`, `parse::<u8>(s)`; a function named without being called
+(`.map(area_of)`, or `drop_raw::<W>` in a vtable) is a reference. A call through a trait's method, as
 in a generic function bounded by the trait, goes to the trait's method, not
 to each implementation. A function's ID ends in `()`, so a field and a method
 of one name are two nodes: `Reader.limits` and `Reader.limits()`. A method of a
@@ -345,6 +348,14 @@ that set it count as one (#190). A span naming one of several same-named
 declarations gets no edge: `SettleMarket` on two types, say, or a proto
 message and its generated Go type (#190). `search_text` finds every doc
 that writes the name, and the reader tells which declaration it means.
+
+A Rust declaration is named as its crate names it, `Square::new` or
+`crate::codec::decode` (`self::` and `super::` too), or as a call,
+`Square::new()` or `iter::<u8>(v)`. A library's item is also named by the
+paths another crate uses for it, `tokio::spawn` or
+`tokio_util::sync::CancellationToken`: those are the item's `paths`
+attribute, which `get_node` shows and the answers that list nodes leave out
+(ADR 009).
 
 **Struct fields** are nodes (`go://pkg#Type.field`), contained by their
 type and referencing the types they hold. The functions that read or write
